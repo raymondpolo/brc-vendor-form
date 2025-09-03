@@ -1,0 +1,22 @@
+Environment variables
+.env
+*.env
+
+Python
+pycache/
+*.py[cod]
+*$py.class
+
+IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+Instance folder (contains the database)
+/instance/
+
+Uploads folder
+/app/uploads/
+
+Virtual environment
+venv/

@@ -1,0 +1,349 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Left Column: Main Details and Actions -->
+    <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+        <div class="flex justify-between items-center border-b pb-4 mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">Request Details</h3>
+            {% set is_author = current_user.id == work_order.user_id %}
+            {% set is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+            {% set is_property_manager_on_request = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager %}
+            {% set is_closed = work_order.status in ['Closed', 'Cancelled'] %}
+            {% if (is_author and not is_closed) or is_admin_staff %}
+            <a href="{{ url_for('main.edit_request', request_id=work_order.id) }}" class="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700">
+                Edit Request
+            </a>
+            {% endif %}
+        </div>
+        <div class="space-y-4 text-sm text-gray-600">
+            <div class="grid grid-cols-3 gap-4">
+                <span class="font-medium text-gray-900">Request ID:</span><span class="col-span-2">#{{ work_order.id }}</span>
+                <span class="font-medium text-gray-900">Work Order #:</span><span class="col-span-2">{{ work_order.wo_number }}</span>
+                <span class="font-medium text-gray-900">Status:</span>
+                <span class="col-span-2">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                        {% if work_order.status in ['New', 'Open'] %} bg-blue-100 text-blue-800
+                        {% elif work_order.status in ['Closed'] %} bg-gray-100 text-gray-800
+                        {% elif work_order.status in ['Cancelled'] %} bg-red-100 text-red-800
+                        {% else %} bg-yellow-100 text-yellow-800 {% endif %}">
+                        {{ work_order.status }}
+                    </span>
+                </span>
+                <span class="font-medium text-gray-900">Tags:</span>
+                <span class="col-span-2 flex flex-wrap gap-2 items-center">
+                    {% if work_order.tag %}
+                        {% for t in work_order.tag.split(',') %}
+                            {% if t %}
+                            <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline-flex items-center m-0">
+                                <input type="hidden" name="action" value="remove_tag">
+                                <input type="hidden" name="tag_to_remove" value="{{ t }}">
+                                <span class="pl-2 pr-1 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
+                                    {% if t in ['Approved', 'Completed'] %} bg-green-100 text-green-800
+                                    {% elif t in ['Declined'] %} bg-red-100 text-red-800
+                                    {% elif t in ['Go-back'] %} bg-blue-100 text-blue-800
+                                    {% elif t == 'Waiting Approval' %} bg-yellow-100 text-yellow-800
+                                    {% else %} bg-purple-100 text-purple-800 {% endif %}">
+                                    {{ t }}
+                                    {% if is_admin_staff %}
+                                        <button type="submit" class="ml-1.5 -mr-0.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gray-500 hover:text-white hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                            <span class="sr-only">Remove tag</span>
+                                            <svg class="h-2 w-2" stroke="currentColor" fill="none" viewBox="0 0 8 8">
+                                                <path stroke-linecap="round" stroke-width="1.5" d="M1 1l6 6m0-6L1 7" />
+                                            </svg>
+                                        </button>
+                                    {% endif %}
+                                </span>
+                            </form>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-gray-500">None</span>
+                    {% endif %}
+                </span>
+                <span class="font-medium text-gray-900">Date Submitted:</span><span class="col-span-2">{{ work_order.date_created.strftime('%Y-%m-%d %H:%M') }}</span>
+                <span class="font-medium text-gray-900">Requester:</span><span class="col-span-2">{{ work_order.requester_name }}</span>
+                <span class="font-medium text-gray-900">Property:</span><span class="col-span-2">{{ work_order.property }} - Unit {{ work_order.unit }}</span>
+                <span class="font-medium text-gray-900">Address:</span><span class="col-span-2">{{ work_order.address }}</span>
+                <span class="font-medium text-gray-900">Property Manager:</span><span class="col-span-2">{{ work_order.property_manager or 'N/A' }}</span>
+                <span class="font-medium text-gray-900">Assigned Vendor:</span><span class="col-span-2">{{ work_order.vendor_assigned or 'N/A' }}</span>
+                <span class="font-medium text-gray-900">Description:</span><p class="col-span-2 whitespace-pre-wrap">{{ work_order.description }}</p>
+                <span class="font-medium text-gray-900">Preferred Dates:</span>
+                <div class="col-span-2"><ul class="list-disc list-inside">
+                    <li>{{ work_order.preferred_date_1.strftime('%Y-%m-%d') }}</li>
+                    <li>{{ work_order.preferred_date_2.strftime('%Y-%m-%d') }}</li>
+                    <li>{{ work_order.preferred_date_3.strftime('%Y-%m-%d') }}</li>
+                </ul></div>
+            </div>
+        </div>
+        
+        <div class="mt-6 border-t pt-6">
+            <h4 class="text-md font-semibold text-gray-800 mb-4">Actions</h4>
+            <div class="flex items-center flex-wrap gap-2">
+                {% if is_property_manager_on_request %}
+                    {% if request.status == 'Quote Sent' or (work_order.tag and 'Waiting Approval' in work_order.tag.split(',')) %}
+                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                        <input type="hidden" name="tag" value="Approved">
+                        <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Approve Quote</button>
+                    </form>
+                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                        <input type="hidden" name="tag" value="Declined">
+                        <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Decline Quote</button>
+                    </form>
+                    {% endif %}
+                {% endif %}
+
+                {% if is_property_manager_on_request or is_admin_staff %}
+                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                        <input type="hidden" name="tag" value="Waiting Approval">
+                        <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-yellow-500 rounded-md hover:bg-yellow-600">Awaiting Approval</button>
+                    </form>
+                {% endif %}
+
+                {% if is_admin_staff %}
+                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                    <input type="hidden" name="tag" value="Follow-up needed">
+                    <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700">Follow-up Needed</button>
+                </form>
+                {% endif %}
+
+                {% if (is_author or is_property_manager_on_request or is_admin_staff) and not (work_order.tag and 'Completed' in work_order.tag.split(',')) %}
+                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                    <input type="hidden" name="tag" value="Completed">
+                    <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800">Mark as Completed</button>
+                </form>
+                {% endif %}
+
+                {% if (is_property_manager_on_request or is_admin_staff or is_author) and work_order.status == 'Closed' %}
+                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                    <input type="hidden" name="tag" value="Go-back">
+                    <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Reopen Request</button>
+                </form>
+                {% endif %}
+
+                {% if (is_author or is_property_manager_on_request) and not is_closed %}
+                <form action="{{ url_for('main.cancel_request', request_id=work_order.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to cancel this request?');">
+                    <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Cancel Request</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if is_admin_staff %}
+        <div class="mt-6 border-t pt-6">
+            <h4 class="text-md font-semibold text-gray-800 mb-4">Assign Vendor</h4>
+            <form action="{{ url_for('main.assign_vendor', request_id=work_order.id) }}" method="POST" class="flex items-center space-x-4">
+                {{ assign_vendor_form.hidden_tag() }}
+                {{ assign_vendor_form.vendor_assigned(class="block w-full rounded-md border-gray-300 shadow-sm", placeholder="Enter vendor name...") }}
+                {{ assign_vendor_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600") }}
+            </form>
+        </div>
+        <div class="mt-6 border-t pt-6" x-data="{ status: '{{ work_order.status }}' }">
+            <h4 class="text-md font-semibold text-gray-800 mb-4">Update Status</h4>
+            <form action="{{ url_for('main.change_status', request_id=work_order.id) }}" method="POST" class="flex items-center space-x-4">
+                {{ status_form.hidden_tag() }}
+                {{ status_form.status(class="block w-full rounded-md border-gray-300 shadow-sm", **{'x-model': 'status'}) }}
+                <div x-show="status === 'Scheduled'" class="w-full">
+                    {{ status_form.scheduled_date(class="block w-full rounded-md border-gray-300 shadow-sm") }}
+                </div>
+                {{ status_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600") }}
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column -->
+    <div class="space-y-8">
+        {% if work_order.status == 'Quote Sent' or (work_order.attachments|selectattr('file_type', 'equalto', 'Quote')|list)|length > 0 %}
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-800 border-b pb-4 mb-4">Quotes</h3>
+            <div class="space-y-3">
+                {% set quotes = work_order.attachments|selectattr('file_type', 'equalto', 'Quote')|list %}
+                {% if quotes %}{% for attachment in quotes %}
+                <div class="flex justify-between items-center text-sm">
+                    <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-indigo-600 hover:underline">{{ attachment.filename }}</a>
+                    {% if current_user.id == attachment.user_id or is_admin_staff %}
+                    <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700">&times;</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}{% else %}<p class="text-sm text-gray-500">No quotes uploaded yet.</p>{% endif %}
+            </div>
+            {% if work_order.status == 'Quote Sent' %}
+            <div class="mt-6">
+                <form action="{{ url_for('main.upload_attachment', request_id=work_order.id) }}" method="POST" enctype="multipart/form-data">
+                    {{ attachment_form.hidden_tag() }}
+                    <input type="hidden" name="file_type" value="Quote">
+                    {{ attachment_form.file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+                    {{ attachment_form.submit(value="Upload Quote", class="mt-2 w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if (work_order.tag and 'Completed' in work_order.tag.split(',')) or (work_order.attachments|selectattr('file_type', 'equalto', 'Invoice')|list)|length > 0 %}
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-800 border-b pb-4 mb-4">Invoices</h3>
+            <div class="space-y-3">
+                {% set invoices = work_order.attachments|selectattr('file_type', 'equalto', 'Invoice')|list %}
+                {% if invoices %}{% for attachment in invoices %}
+                <div class="flex justify-between items-center text-sm">
+                    <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-indigo-600 hover:underline">{{ attachment.filename }}</a>
+                    {% if current_user.id == attachment.user_id or is_admin_staff %}
+                    <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700">&times;</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}{% else %}<p class="text-sm text-gray-500">No invoices uploaded yet.</p>{% endif %}
+            </div>
+            {% if work_order.tag and 'Completed' in work_order.tag.split(',') %}
+            <div class="mt-6">
+                <form action="{{ url_for('main.upload_attachment', request_id=work_order.id) }}" method="POST" enctype="multipart/form-data">
+                    {{ attachment_form.hidden_tag() }}
+                    <input type="hidden" name="file_type" value="Invoice">
+                    {{ attachment_form.file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+                    {{ attachment_form.submit(value="Upload Invoice", class="mt-2 w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-800 border-b pb-4 mb-4">General Attachments</h3>
+            <div class="space-y-3">
+                {% set attachments = work_order.attachments|selectattr('file_type', 'equalto', 'Attachment')|list %}
+                {% if attachments %}{% for attachment in attachments %}
+                <div class="flex justify-between items-center text-sm">
+                    <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-indigo-600 hover:underline">{{ attachment.filename }}</a>
+                    {% if current_user.id == attachment.user_id or is_admin_staff %}
+                    <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700">&times;</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}{% else %}<p class="text-sm text-gray-500">No general attachments yet.</p>{% endif %}
+            </div>
+            <div class="mt-6">
+                <form action="{{ url_for('main.upload_attachment', request_id=work_order.id) }}" method="POST" enctype="multipart/form-data">
+                    {{ attachment_form.hidden_tag() }}
+                    <input type="hidden" name="file_type" value="Attachment">
+                    {{ attachment_form.file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+                    {{ attachment_form.submit(value="Upload Attachment", class="mt-2 w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </form>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-800 border-b pb-4 mb-4">Notes</h3>
+            <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                {% for note in notes %}
+                <div class="flex items-start space-x-3">
+                    <img class="h-8 w-8 rounded-full object-cover" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ note.author.name[0].upper() }}" alt="User">
+                    <div class="flex-1">
+                        <div class="bg-gray-100 rounded-lg p-3">
+                            <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ note.text }}</p>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            {{ note.author.name }} &middot; {{ note.date_posted.strftime('%b %d, %Y %I:%M %p') }}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-500">No notes have been added yet.</p>
+                {% endfor %}
+            </div>
+            <div class="mt-6 relative" id="note-form-wrapper">
+                <form method="POST" action="">
+                    <input type="hidden" name="post_note" value="1">
+                    {{ note_form.hidden_tag() }}
+                    {{ note_form.text(class="block w-full rounded-md border-gray-300 shadow-sm", rows="3", placeholder="Add a new note... Tag users with @name") }}
+                    <div class="mt-2">
+                        <button type="submit" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Post Note</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-800 border-b pb-4 mb-4">Audit Log</h3>
+            <div class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                {% for log in audit_logs %}
+                <div class="flex items-center space-x-3 text-xs">
+                    <span class="font-semibold text-gray-800">{{ log.user.name }}</span>
+                    <span class="text-gray-600">{{ log.text }}</span>
+                    <span class="text-gray-400 ml-auto">{{ log.timestamp.strftime('%b %d, %I:%M %p') }}</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-500">No audit history.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const noteWrapper = document.getElementById('note-form-wrapper');
+    if (!noteWrapper) return;
+    const noteTextarea = noteWrapper.querySelector('textarea[name="text"]');
+    const userNames = {{ user_names | tojson | safe }};
+    let suggestionBox = null;
+    const createSuggestionBox = () => {
+        if (suggestionBox) return;
+        suggestionBox = document.createElement('div');
+        suggestionBox.className = 'absolute bottom-full mb-1 w-full bg-white border rounded-md shadow-lg z-10 max-h-40 overflow-y-auto';
+        noteWrapper.appendChild(suggestionBox);
+    };
+    const removeSuggestionBox = () => {
+        if (suggestionBox) {
+            suggestionBox.remove();
+            suggestionBox = null;
+        }
+    };
+    const updateSuggestions = (query) => {
+        createSuggestionBox();
+        suggestionBox.innerHTML = '';
+        const filtered = userNames.filter(name => name.toLowerCase().includes(query.toLowerCase()));
+        if (!filtered.length) {
+            removeSuggestionBox();
+            return;
+        }
+        filtered.forEach(name => {
+            const item = document.createElement('div');
+            item.className = 'px-4 py-2 text-sm cursor-pointer hover:bg-gray-100';
+            item.textContent = name;
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const text = noteTextarea.value;
+                const atIndex = text.lastIndexOf('@');
+                noteTextarea.value = text.substring(0, atIndex + 1) + name + ' ';
+                removeSuggestionBox();
+                noteTextarea.focus();
+            });
+            suggestionBox.appendChild(item);
+        });
+    };
+    noteTextarea.addEventListener('keyup', (e) => {
+        const text = e.target.value;
+        const cursorPos = e.target.selectionStart;
+        const atIndex = text.lastIndexOf('@', cursorPos - 1);
+        if (atIndex === -1) {
+            removeSuggestionBox();
+            return;
+        }
+        const query = text.substring(atIndex + 1, cursorPos);
+        if (/\s/.test(query)) {
+            removeSuggestionBox();
+            return;
+        }
+        updateSuggestions(query);
+    });
+    noteTextarea.addEventListener('blur', () => {
+        setTimeout(removeSuggestionBox, 150);
+    });
+});
+</script>
+{% endblock content %}
+

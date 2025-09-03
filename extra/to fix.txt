@@ -1,0 +1,40 @@
+1. When the page initially loads the message "Please login to access this page." is displaying 3 times
+
+2. attachment option should already be available when submitting request
+
+3. the @ function for tagging is not working
+
+4. The dashboard charts are missing
+
+5. when scheduled status is selected there should be a calendar date picker that shows up
+
+6. BRC Logo is not displayed properly
+
+7. filter by request type is not included
+
+
+1. When a request is submitted the scheduler and admin should be notified
+
+2. The dates the requester chosen when submitting a request should appear in request details as preferred dates
+
+
+1. Contact person field is missing
+as well as 3 date picker is missing when submitting new requests
+
+2. my property list CSV has 3 columns:
+ Property Name, Address, Property Manager
+
+3. When submitting a request once the property name is selected, it should autofill the address field and property manager field
+
+4. when submitting a request, add field for tenant and beside that there should be a field for phone number, contact person field should also have a phone number field beside it
+
+
+1. still no date picker showing up when scheduled status is selected
+
+2. Calendar should also be visible to the requester but the requester only see his scheduled requests
+
+
+
+1. should be able to select property when editing the request. Also, it should still auto fill the address and property manager.
+
+2. put red * on the required field when submitting and editing requests
