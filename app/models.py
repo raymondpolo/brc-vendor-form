@@ -137,14 +137,3 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=True)
-```
-
-### Step 2: Push the Change to GitHub
-
-Save the corrected `app/models.py` file and push it to your GitHub repository.
-
-```bash
-git add app/models.py
-git commit -m "FIX: Increase password hash length to 256"
-git push origin main
-
