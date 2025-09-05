@@ -1,6 +1,9 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, SelectField, TextAreaField, DateField, MultipleFileField
+from wtforms import (StringField, PasswordField, SubmitField, BooleanField, 
+                     SelectField, TextAreaField, DateField, MultipleFileField,
+                     RadioField)
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional
+from wtforms.widgets import HiddenInput
 from flask_wtf.file import FileField, FileAllowed, FileRequired
 from flask_login import current_user
 from app.models import User
@@ -10,7 +13,6 @@ class ReportForm(FlaskForm):
         ('date_created', 'Creation Date'),
         ('date_completed', 'Completion Date')
     ], validators=[DataRequired()])
-    
     date_range = SelectField('Date Range', choices=[
         ('all', 'All Time'),
         ('today', 'Today'),
@@ -22,11 +24,18 @@ class ReportForm(FlaskForm):
         ('this_year', 'This Year'),
         ('last_year', 'Last Year'),
         ('custom_date', 'Custom Date'),
-        ('custom_range', 'Custom Date Range')
+        ('custom_range', 'Custom Range')
     ], default='all', validators=[DataRequired()])
-
     start_date = DateField('Start Date', validators=[Optional()])
     end_date = DateField('End Date', validators=[Optional()])
+
+class MessageForm(FlaskForm):
+    recipient = StringField('To', validators=[DataRequired(), Email()])
+    sender_choice = SelectField('Send From', validators=[DataRequired()])
+    subject = StringField('Subject', validators=[DataRequired()])
+    body = TextAreaField('Message', validators=[DataRequired()])
+    work_order_id = StringField('Work Order ID', widget=HiddenInput(), validators=[Optional()])
+    submit = SubmitField('Send Message')
 
 class InviteUserForm(FlaskForm):
     name = StringField('Full Name', validators=[DataRequired(), Length(min=2, max=100)])
@@ -65,12 +74,6 @@ class LoginForm(FlaskForm):
 class PropertyUploadForm(FlaskForm):
     csv_file = FileField('Properties CSV File', validators=[FileAllowed(['csv'])])
     submit = SubmitField('Upload')
-
-class PropertyForm(FlaskForm):
-    name = StringField('Property Name', validators=[DataRequired()])
-    address = StringField('Address', validators=[DataRequired()])
-    property_manager = SelectField('Property Manager', choices=[], validators=[Optional()])
-    submit = SubmitField('Save Property')
 
 class UpdateAccountForm(FlaskForm):
     name = StringField('Full Name', validators=[DataRequired(), Length(min=2, max=100)])
@@ -159,4 +162,10 @@ class NewRequestForm(FlaskForm):
     date_2 = DateField('Preferred Date 2', validators=[DataRequired()])
     date_3 = DateField('Preferred Date 3', validators=[DataRequired()])
     submit = SubmitField('Submit Request')
+    
+class PropertyForm(FlaskForm):
+    name = StringField('Property Name', validators=[DataRequired()])
+    address = StringField('Address', validators=[DataRequired()])
+    property_manager = SelectField('Property Manager', validators=[Optional()])
+    submit = SubmitField('Save Property')
 

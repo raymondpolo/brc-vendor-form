@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-4 border-b pb-4">
+        <h3 class="text-lg font-semibold text-gray-800">View Message</h3>
+        <div>
+            <a href="{{ url_for('main.messages') }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                &larr; Back to Inbox
+            </a>
+            <a href="{{ url_for('main.compose_message', recipient_email=message.sender_email, work_order_id=message.work_order_id, subject='Re: ' + message.subject) }}" class="ml-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                Reply
+            </a>
+        </div>
+    </div>
+
+    <div class="space-y-4 text-sm">
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">From:</span>
+            <span class="text-gray-800">{{ message.author.name }} ({{ message.sender_email }})</span>
+        </div>
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">To:</span>
+            <span class="text-gray-800">
+                {% if message.recipient %}
+                    {{ message.recipient.name }} ({{ message.recipient_email }})
+                {% else %}
+                    {{ message.recipient_email }}
+                {% endif %}
+            </span>
+        </div>
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">Date:</span>
+            <span class="text-gray-800">{{ message.timestamp.strftime('%b %d, %Y at %I:%M %p') }}</span>
+        </div>
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">Subject:</span>
+            <span class="text-gray-800 font-semibold">{{ message.subject }}</span>
+        </div>
+        {% if message.work_order %}
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">Related To:</span>
+            <a href="{{ url_for('main.view_request', request_id=message.work_order.id) }}" class="text-indigo-600 hover:underline">
+                Request #{{ message.work_order.id }}
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="mt-6 border-t pt-6">
+        <p class="text-gray-800 whitespace-pre-wrap">{{ message.body }}</p>
+    </div>
+</div>
+{% endblock content %}
+

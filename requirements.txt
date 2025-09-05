@@ -3,10 +3,11 @@ Flask
 Flask-SQLAlchemy
 Flask-Login
 Flask-WTF
-Flask-Mail
 Werkzeug
-itsdangerous
 email_validator
+Flask-Mail
+itsdangerous
 python-dotenv
 gunicorn
 psycopg2-binary
+boto3

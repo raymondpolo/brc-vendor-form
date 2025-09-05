@@ -7,22 +7,26 @@ import uuid
 from functools import wraps
 from collections import Counter
 from datetime import datetime, time, timedelta
+from smtplib import SMTPDataError
 
 from flask import (render_template, request, redirect, url_for, flash,
                    abort, send_from_directory, jsonify, current_app, Response)
 from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
 from itsdangerous import URLSafeTimedSerializer
+from flask_wtf.csrf import CSRFProtect
 
 from app import db
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
-                        AuditLog, Attachment)
+                        AuditLog, Attachment, Message)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
                        PropertyUploadForm, AdminUpdateUserForm,
-                       AdminResetPasswordForm, UpdateAccountForm, ChangePasswordForm, InviteUserForm, AddUserForm, AssignVendorForm, PropertyForm, ReportForm)
+                       AdminResetPasswordForm, UpdateAccountForm, ChangePasswordForm, InviteUserForm, AddUserForm, AssignVendorForm, PropertyForm, ReportForm, MessageForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
+
+csrf = CSRFProtect()
 
 def admin_required(f):
     @wraps(f)
@@ -252,11 +256,16 @@ def view_request(request_id):
         db.session.commit()
         flash('Your note has been added.', 'success')
         return redirect(url_for('main.view_request', request_id=work_order.id))
+    
+    pm = None
+    if work_order.property_manager:
+        pm = User.query.filter_by(name=work_order.property_manager, role='Property Manager').first()
+        
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.asc()).all()
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
-                           attachment_form=attachment_form, assign_vendor_form=assign_vendor_form, user_names=user_names)
+                           attachment_form=attachment_form, assign_vendor_form=assign_vendor_form, user_names=user_names, pm=pm)
 
 @main.route('/change_status/<int:request_id>', methods=['POST'])
 @login_required
@@ -269,20 +278,17 @@ def change_status(request_id):
         form.status.choices = [c for c in form.status.choices if c[0] not in ['Approved', 'Quote Declined']]
     if form.validate_on_submit():
         old_status, new_status = work_order.status, form.status.data
-        current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
-
         if old_status == new_status:
             return redirect(url_for('main.view_request', request_id=request_id))
-
         work_order.status = new_status
         log_text = f'Changed status from {old_status} to {new_status}.'
-
         if new_status == 'Scheduled' and form.scheduled_date.data:
             work_order.scheduled_date = form.scheduled_date.data
             log_text += f' for {work_order.scheduled_date.strftime("%Y-%m-%d")}'
         else:
             work_order.scheduled_date = None
         
+        current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
         if new_status == 'Closed':
             current_tags.add('Completed')
             work_order.date_completed = datetime.utcnow()
@@ -290,7 +296,7 @@ def change_status(request_id):
         
         if old_status == 'Closed' and new_status != 'Closed':
             current_tags.discard('Completed')
-
+        
         work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
 
@@ -450,6 +456,170 @@ def mark_notification_read(notification_id):
     notification.is_read = True
     db.session.commit()
     return redirect(notification.link)
+
+@main.route('/messages/')
+@main.route('/messages/<box>')
+@login_required
+def messages(box='inbox'):
+    shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
+    if box == 'sent':
+        query = Message.query.filter_by(sender_id=current_user.id)
+        if current_user.role in ['Admin', 'Scheduler', 'Super User'] and shared_email:
+            query = Message.query.filter(or_(Message.sender_id == current_user.id, Message.sender_email == shared_email))
+    else:
+        box = 'inbox'
+        query = Message.query.filter_by(recipient_id=current_user.id)
+        if current_user.role in ['Admin', 'Scheduler', 'Super User'] and shared_email:
+            query = Message.query.filter(or_(Message.recipient_id == current_user.id, Message.recipient_email == shared_email))
+            
+    messages = query.order_by(Message.timestamp.desc()).all()
+    return render_template('messages/inbox.html', title='Messages', messages=messages, box=box)
+
+@main.route('/messages/compose', methods=['GET', 'POST'])
+@login_required
+def compose_message():
+    form = MessageForm()
+    
+    sender_choices = [(current_user.email, f"{current_user.name} ({current_user.email})")]
+    if current_user.role in ['Admin', 'Scheduler', 'Super User']:
+        shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
+        if shared_email:
+            sender_choices.append((shared_email, f"Shared Account ({shared_email})"))
+    form.sender_choice.choices = sender_choices
+
+    recipient_email = request.args.get('recipient_email')
+    work_order_id = request.args.get('work_order_id', type=int)
+    subject = request.args.get('subject')
+
+    if form.validate_on_submit():
+        recipient = User.query.filter_by(email=form.recipient.data).first()
+        sender_email = form.sender_choice.data
+        
+        msg = Message(sender_id=current_user.id,
+                      sender_email=sender_email,
+                      recipient_email=form.recipient.data,
+                      subject=form.subject.data,
+                      body=form.body.data)
+        if recipient:
+            msg.recipient_id = recipient.id
+
+        if form.work_order_id.data:
+            msg.work_order_id = int(form.work_order_id.data)
+        
+        link = url_for('main.view_request', request_id=msg.work_order_id, _external=True) if msg.work_order_id else None
+
+        text_body = f"""{msg.body}
+
+--
+Sent from the BRC Vendor Request Portal.
+You can reply directly to this email.
+"""
+        if link:
+            text_body += f"\nRelated to Request #{msg.work_order_id}: {link}"
+
+        html_body = f"""
+        <p>{msg.body.replace(chr(10), '<br>')}</p>
+        <br>
+        --
+        <p style="font-size: 0.9em; color: #6c757d;">
+            Sent from the BRC Vendor Request Portal.<br>
+            You can reply directly to this email.<br>
+            {'Related to <a href="' + link + '">Request #' + str(msg.work_order_id) + '</a>' if link else ''}
+        </p>
+        """
+        
+        try:
+            send_notification_email(
+                subject=f"[BRC Request #{msg.work_order_id or 'N/A'}] {msg.subject}",
+                recipients=[msg.recipient_email],
+                text_body=text_body,
+                html_body=html_body,
+                sender=sender_email
+            )
+            db.session.add(msg)
+            db.session.commit()
+            flash('Your message has been sent.', 'success')
+            return redirect(url_for('main.messages'))
+        except SMTPDataError:
+            flash('Email failed to send. The authenticated user does not have "Send As" permission for the selected sender email. Please check your email server settings.', 'danger')
+            return redirect(url_for('main.compose_message'))
+
+    elif request.method == 'GET':
+        if recipient_email:
+            form.recipient.data = recipient_email
+        if work_order_id:
+            form.work_order_id.data = work_order_id
+            if not subject:
+                form.subject.data = f'Regarding Work Request #{work_order_id}'
+        if subject:
+            form.subject.data = subject
+
+    return render_template('messages/compose_message.html', title='Compose Message', form=form)
+
+@main.route('/messages/<int:message_id>')
+@login_required
+def view_message(message_id):
+    message = Message.query.get_or_404(message_id)
+    is_recipient = message.recipient == current_user
+    is_sender = message.author == current_user
+
+    can_view_shared = False
+    if current_user.role in ['Admin', 'Scheduler', 'Super User']:
+        shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
+        if shared_email and (message.recipient_email == shared_email or message.sender_email == shared_email):
+            can_view_shared = True
+
+    if not (is_recipient or is_sender or can_view_shared):
+        abort(403)
+             
+    if message.recipient == current_user and not message.is_read:
+        message.is_read = True
+        db.session.commit()
+    return render_template('messages/view_message.html', title='View Message', message=message)
+
+@main.route('/email-webhook', methods=['POST'])
+@csrf.exempt
+def email_webhook():
+    data = request.json
+    if not data:
+        return 'Invalid data', 400
+
+    sender_info = data.get('sender', {})
+    sender = sender_info.get('email')
+    
+    to_list = data.get('to', [{}])
+    recipient = to_list[0].get('email') if to_list else None
+
+    subject = data.get('subject')
+    body_plain = data.get('text')
+
+    if not all([sender, recipient, subject, body_plain]):
+        return 'Missing data', 406
+
+    author = User.query.filter_by(email=sender).first()
+    sender_id = author.id if author else None
+
+    recipient_user = User.query.filter_by(email=recipient).first()
+    recipient_id = recipient_user.id if recipient_user else None
+
+    work_order_id = None
+    match = re.search(r'\[BRC Request #(\d+)\]', subject)
+    if match:
+        work_order_id = int(match.group(1))
+
+    msg = Message(
+        sender_id=sender_id,
+        sender_email=sender,
+        recipient_id=recipient_id,
+        recipient_email=recipient,
+        subject=subject,
+        body=body_plain,
+        work_order_id=work_order_id
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    return 'OK', 200
 
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required

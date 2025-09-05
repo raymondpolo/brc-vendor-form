@@ -1,17 +1,12 @@
-# app/email.py
-from threading import Thread
-from flask import current_app
 from flask_mail import Message
 from app import mail
+from flask import current_app
 
-def send_async_email(app, msg):
-    with app.app_context():
-        mail.send(msg)
-
-def send_notification_email(subject, recipients, html_body):
-    app = current_app._get_current_object()
-    msg = Message(subject, sender=app.config['MAIL_DEFAULT_SENDER'], recipients=recipients)
+def send_notification_email(subject, recipients, html_body, text_body=None, sender=None):
+    if sender is None:
+        sender = current_app.config['ADMINS'][0]
+    msg = Message(subject, sender=sender, recipients=recipients)
+    msg.body = text_body or 'This is an HTML email. Please use an email client that supports HTML.'
     msg.html = html_body
-    thr = Thread(target=send_async_email, args=[app, msg])
-    thr.start()
-    return thr
+    mail.send(msg)
+

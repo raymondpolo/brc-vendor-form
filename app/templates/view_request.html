@@ -80,12 +80,12 @@
             <h4 class="text-md font-semibold text-gray-800 mb-4">Actions</h4>
             <div class="flex items-center flex-wrap gap-2">
                 {% if is_property_manager_on_request %}
-                    {% if request.status == 'Quote Sent' or (work_order.tag and 'Waiting Approval' in work_order.tag.split(',')) %}
-                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                    {% if work_order.status == 'Quote Sent' or (work_order.tag and 'Waiting Approval' in work_order.tag.split(',')) %}
+                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline">
                         <input type="hidden" name="tag" value="Approved">
                         <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Approve Quote</button>
                     </form>
-                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline">
                         <input type="hidden" name="tag" value="Declined">
                         <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Decline Quote</button>
                     </form>
@@ -93,37 +93,47 @@
                 {% endif %}
 
                 {% if is_property_manager_on_request or is_admin_staff %}
-                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                    <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline">
                         <input type="hidden" name="tag" value="Waiting Approval">
                         <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-yellow-500 rounded-md hover:bg-yellow-600">Awaiting Approval</button>
                     </form>
                 {% endif %}
 
                 {% if is_admin_staff %}
-                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline">
                     <input type="hidden" name="tag" value="Follow-up needed">
                     <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700">Follow-up Needed</button>
                 </form>
                 {% endif %}
 
                 {% if (is_author or is_property_manager_on_request or is_admin_staff) and not (work_order.tag and 'Completed' in work_order.tag.split(',')) %}
-                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline">
                     <input type="hidden" name="tag" value="Completed">
                     <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800">Mark as Completed</button>
                 </form>
                 {% endif %}
 
                 {% if (is_property_manager_on_request or is_admin_staff or is_author) and work_order.status == 'Closed' %}
-                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST">
+                <form action="{{ url_for('main.tag_request', request_id=work_order.id) }}" method="POST" class="inline">
                     <input type="hidden" name="tag" value="Go-back">
                     <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Reopen Request</button>
                 </form>
                 {% endif %}
 
                 {% if (is_author or is_property_manager_on_request) and not is_closed %}
-                <form action="{{ url_for('main.cancel_request', request_id=work_order.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to cancel this request?');">
+                <form action="{{ url_for('main.cancel_request', request_id=work_order.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to cancel this request?');" class="inline">
                     <button type="submit" class="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Cancel Request</button>
                 </form>
+                {% endif %}
+                
+                <!-- Send Message Button Logic -->
+                {% if current_user.role != 'Requester' and work_order.author != current_user %}
+                    <a href="{{ url_for('main.compose_message', recipient_email=work_order.author.email, work_order_id=work_order.id) }}" class="px-3 py-1 text-sm font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700">Message Requester</a>
+                {% endif %}
+                {% if is_admin_staff and work_order.property_manager and current_user.name != work_order.property_manager %}
+                    {% if pm %}
+                        <a href="{{ url_for('main.compose_message', recipient_email=pm.email, work_order_id=work_order.id) }}" class="px-3 py-1 text-sm font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700">Message PM</a>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
