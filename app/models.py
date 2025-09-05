@@ -16,20 +16,20 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128))
+    password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), nullable=False, default='Requester')
     is_active = db.Column(db.Boolean, default=False, nullable=False)
-    last_message_read_time = db.Column(db.DateTime, default=datetime.utcnow)
+    last_message_read_time = db.Column(db.DateTime)
     
     requests = db.relationship('WorkOrder', backref='author', lazy=True)
     notes = db.relationship('Note', backref='author', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy='dynamic')
-    messages_sent = db.relationship('Message', foreign_keys='Message.sender_id', backref='author', lazy='dynamic')
-    messages_received = db.relationship('Message', foreign_keys='Message.recipient_id', backref='recipient', lazy='dynamic')
-
-    def new_messages(self):
-        last_read = self.last_message_read_time or datetime(1900, 1, 1)
-        return Message.query.filter_by(recipient=self).filter(Message.timestamp > last_read).count()
+    messages_sent = db.relationship('Message',
+                                    foreign_keys='Message.sender_id',
+                                    backref='author', lazy='dynamic')
+    messages_received = db.relationship('Message',
+                                        foreign_keys='Message.recipient_id',
+                                        backref='recipient', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -38,6 +38,11 @@ class User(db.Model, UserMixin):
         if self.password_hash:
             return check_password_hash(self.password_hash, password)
         return False
+
+    def new_messages(self):
+        last_read_time = self.last_message_read_time or datetime(1900, 1, 1)
+        return Message.query.filter_by(recipient=self).filter(
+            Message.timestamp > last_read_time).count()
 
     @staticmethod
     def create_default_superuser():
@@ -80,7 +85,7 @@ class WorkOrder(db.Model):
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='work_order', lazy=True, cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='work_order', lazy=True, cascade="all, delete-orphan")
-    messages = db.relationship('Message', backref='work_order', lazy=True, cascade="all, delete-orphan")
+    messages = db.relationship('Message', backref='work_order', lazy=True)
     viewers = db.relationship('User', secondary=work_order_viewers, lazy='subquery',
                               backref=db.backref('viewable_orders', lazy=True))
 
@@ -123,13 +128,13 @@ class Attachment(db.Model):
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    sender_email = db.Column(db.String(120), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     recipient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    recipient_email = db.Column(db.String(120), nullable=False)
-    subject = db.Column(db.String(150))
+    sender_email = db.Column(db.String(120))
+    recipient_email = db.Column(db.String(120))
+    subject = db.Column(db.String(255))
     body = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
-    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=True)
 
