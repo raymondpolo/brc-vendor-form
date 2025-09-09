@@ -381,30 +381,9 @@
                 <div class="mb-4 flex-grow flex flex-col min-h-0">
                     <label for="body" class="block text-sm font-medium text-gray-700 mb-1">Message Body</label>
                     <div class="email-editor-container flex-grow min-h-0">
-                        <textarea id="body">
-                            <p>Hi Team,</p>
-                            <p>We would like to schedule this request:</p>
-                            <p>&nbsp;</p>
-                            <p><strong>PO:</strong> {{ work_order.id }}-{{ requester_initials }}<br>
-                            <strong>Type of Request:</strong> {{ work_order.request_type }}<br>
-                            <strong>Description / Instructions:</strong><br>
-                            &nbsp;&nbsp;&nbsp;&nbsp;{{ work_order.description }}</p>
-                            <p><strong>Property:</strong> {{ work_order.property }}<br>
-                            <strong>Unit:</strong> {{ work_order.unit or 'N/A' }}<br>
-                            <strong>Address:</strong> {{ work_order.address }}<br>
-                            {% if work_order.tenant_name %}
-                            <strong>Tenant Name:</strong> {{ work_order.tenant_name }}<br>
-                            <strong>Tenant Phone:</strong> {{ work_order.tenant_phone or 'N/A' }}<br>
-                            {% endif %}
-                            {% if work_order.contact_person %}
-                            <strong>Contact Person:</strong> {{ work_order.contact_person }}<br>
-                            <strong>Contact Person Phone:</strong> {{ work_order.contact_person_phone or 'N/A' }}<br>
-                            {% endif %}
-                            <strong>Preferred Dates:</strong><br>
-                            - {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}<br>
-                            - {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}<br>
-                            - {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</p>
-                        </textarea>
+<textarea id="body">
+<p>Hi Team,</p><p>&nbsp;</p><p>&nbsp;</p><p>We would like to schedule this request:</p><p>&nbsp;</p><p><strong>PO:</strong> {{ work_order.id }}-{{ requester_initials }}<br><strong>Type of Request:</strong> {{ work_order.request_type }}<br><strong>Description / Instructions:</strong></p><blockquote style="margin: 0 0 0 40px; border: none; padding: 0px;">{{ work_order.description }}</blockquote><p><strong>Property:</strong> {{ work_order.property }}<br><strong>Unit:</strong> {{ work_order.unit or 'N/A' }}<br><strong>Address:</strong> {{ work_order.address }}<br>{% if work_order.tenant_name %}<strong>Tenant Name:</strong> {{ work_order.tenant_name }}<br><strong>Tenant Phone:</strong> {{ work_order.tenant_phone or 'N/A' }}<br>{% endif %}{% if work_order.contact_person %}<strong>Contact Person:</strong> {{ work_order.contact_person }}<br><strong>Contact Person Phone:</strong> {{ work_order.contact_person_phone or 'N/A' }}<br>{% endif %}<strong>Preferred Dates:</strong><br>- {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}<br>- {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}<br>- {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</p>
+</textarea>
                     </div>
                 </div>
                 <div class="flex justify-end space-x-3 pt-4 -m-4">
@@ -437,8 +416,6 @@
     <span id="notificationMessage"></span>
 </div>
 
-
-<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
@@ -457,13 +434,37 @@
 
         function initializeEditor() {
             if (editor) return;
-            ClassicEditor
-                .create(document.querySelector('#body'))
+            // Use the CKEDITOR global from the super-build, which should be loaded from layout.html
+            CKEDITOR.ClassicEditor
+                .create(document.querySelector('#body'), {
+                    toolbar: {
+                        items: [
+                            'heading', '|', 'bold', 'italic', 'underline', 'link', '|',
+                            'bulletedList', 'numberedList', '|', 'uploadImage', 'insertTable', 'blockQuote', '|',
+                            'undo', 'redo', 'sourceEditing'
+                        ]
+                    },
+                    simpleUpload: {
+                        uploadUrl: '{{ url_for("main.upload_image") }}',
+                        withCredentials: true,
+                        headers: {
+                            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        }
+                    },
+                    removePlugins: [
+                        'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage', 'RealTimeCollaborativeComments', 
+                        'RealTimeCollaborativeTrackChanges', 'RealTimeCollaborativeRevisionHistory', 'PresenceList', 
+                        'Comments', 'TrackChanges', 'TrackChangesData', 'RevisionHistory', 'Pagination', 
+                        'WProofreader', 'MathType', 'SlashCommand', 'Template', 'DocumentOutline', 'FormatPainter', 
+                        'TableOfContents', 'PasteFromOfficeEnhanced', 'ExportPdf', 'ExportWord', 'MultiLevelList', 
+                        'TodoList', 'CaseChange'
+                    ]
+                })
                 .then(newEditor => {
                     editor = newEditor;
                 })
                 .catch(error => {
-                    console.error(error);
+                    console.error('CKEditor Initialization Error:', error);
                 });
         }
         
@@ -610,3 +611,4 @@
     });
 </script>
 {% endblock content %}
+

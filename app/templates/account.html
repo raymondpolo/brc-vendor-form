@@ -63,21 +63,48 @@
         </form>
     </div>
 </div>
-<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const signatureTextarea = document.querySelector('#signature');
     if (signatureTextarea) {
-        ClassicEditor
+        // Use the CKEDITOR global object from the super-build
+        CKEDITOR.ClassicEditor
             .create(signatureTextarea, {
+                // A simplified toolbar with essential features including image upload
+                toolbar: {
+                    items: [
+                        'heading', '|',
+                        'bold', 'italic', 'underline', 'link', '|',
+                        'bulletedList', 'numberedList', '|',
+                        'uploadImage', 'insertTable', 'blockQuote', '|',
+                        'undo', 'redo', 'sourceEditing'
+                    ]
+                },
+                // The essential configuration for the simple image uploader
                 simpleUpload: {
-                    uploadUrl: '{{ url_for("main.upload_image") }}'
-                }
+                    uploadUrl: '{{ url_for("main.upload_image") }}',
+                    withCredentials: true,
+                    headers: {
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                },
+                // List of plugins to remove from the super-build to keep it clean.
+                // We are keeping the necessary ones like ImageUpload, Link, Table etc.
+                removePlugins: [
+                    'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage',
+                    'RealTimeCollaborativeComments', 'RealTimeCollaborativeTrackChanges', 'RealTimeCollaborativeRevisionHistory',
+                    'PresenceList', 'Comments', 'TrackChanges', 'TrackChangesData', 'RevisionHistory',
+                    'Pagination', 'WProofreader', 'MathType', 'SlashCommand', 'Template', 'DocumentOutline',
+                    'FormatPainter', 'TableOfContents', 'PasteFromOfficeEnhanced', 'ExportPdf', 'ExportWord',
+                    // Removing the premium plugins that were causing the error
+                    'MultiLevelList', 'TodoList', 'CaseChange'
+                ]
             })
             .catch(error => {
-                console.error(error);
+                console.error('CKEditor Initialization Error:', error);
             });
     }
 });
 </script>
 {% endblock content %}
+

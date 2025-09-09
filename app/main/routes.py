@@ -15,7 +15,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
 import bleach
 
-from app import db
+from app import db, csrf
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote)
@@ -563,11 +563,9 @@ def edit_request(request_id):
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
     
-    # We must remove the attachments field from the form to prevent it from being overwritten
     del form.attachments
 
     if form.validate_on_submit():
-        # Manually update the work order fields from the form
         work_order.wo_number = form.wo_number.data
         work_order.request_type = form.request_type.data
         work_order.description = form.description.data
@@ -582,7 +580,6 @@ def edit_request(request_id):
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
         
-        # Handle new attachments separately
         if 'attachments' in request.files:
             for file in request.files.getlist('attachments'):
                 if file.filename:
@@ -688,20 +685,27 @@ def account():
         current_user.email = update_form.email.data
         
         if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager']:
-            # Sanitize the HTML signature to prevent XSS, allowing more tags for CKEditor
             allowed_tags = [
-                'a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 
-                'li', 'ol', 'strong', 'ul', 'br', 'p', 'img', 'span', 'div',
-                'figure', 'figcaption', 'table', 'tbody', 'tr', 'td'
+                'a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 'strong',
+                'li', 'ol', 'ul', 'br', 'p', 'img', 'span', 'div', 'font',
+                'table', 'tbody', 'thead', 'tr', 'td', 'th', 'figure', 'figcaption'
             ]
             allowed_attrs = {
-                '*': ['style', 'class'], 
-                'a': ['href', 'title'], 
-                'img': ['src', 'alt', 'width', 'height']
+                '*': ['style', 'class', 'align', 'valign', 'width', 'height', 'cellpadding', 'cellspacing', 'border'],
+                'a': ['href', 'title', 'target'],
+                'img': ['src', 'alt', 'width', 'height', 'style'],
+                'font': ['color', 'face', 'size']
             }
             
             signature_html = request.form.get('signature')
-            current_user.signature = bleach.clean(signature_html, tags=allowed_tags, attributes=allowed_attrs)
+            clean_html = bleach.clean(
+                signature_html,
+                tags=allowed_tags,
+                attributes=allowed_attrs,
+                protocols=['http', 'https', 'mailto', 'data']
+            )
+            
+            current_user.signature = clean_html
         
         db.session.commit()
         flash('Your account has been updated!', 'success')
@@ -874,7 +878,6 @@ def api_user_search():
     user_list = [{'key': user.name, 'value': user.name.replace(' ', '')} for user in users]
     return jsonify(user_list)
 
-# --- NEW ROUTE ---
 @main.route('/request/<int:request_id>/send_email', methods=['POST'])
 @login_required
 @admin_required
@@ -892,7 +895,10 @@ def send_work_order_email(request_id):
     recipients = [recipient]
     cc_list = [email.strip() for email in cc.split(',')] if cc else []
 
-    text_body = render_template('email/work_order_email.txt', work_order=work_order, body=body)
+    # Create a plain text version of the body by stripping all HTML tags
+    text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
+
+    text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
     html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
 
     send_notification_email(
