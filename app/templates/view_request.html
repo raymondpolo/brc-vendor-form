@@ -1,5 +1,18 @@
 {% extends "layout.html" %}
 {% block content %}
+<style>
+    /* This style block ensures the CKEditor instance respects the flexbox layout and becomes scrollable */
+    .email-editor-container .ck.ck-editor {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    .email-editor-container .ck.ck-editor__main > .ck-editor__editable {
+        height: 200px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+</style>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <div class="lg:col-span-2 space-y-6">
@@ -71,7 +84,6 @@
             </div>
         </div>
 
-        {% if work_order.status == 'Quote Sent' %}
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-gray-700 mb-4">Quotes</h3>
             <div class="space-y-4">
@@ -79,30 +91,42 @@
                 <div class="flex items-center justify-between text-sm">
                     <div>
                         <span class="font-medium text-gray-900">{{ quote.vendor.company_name }}:</span>
-                        <a href="{{ url_for('main.download_attachment', attachment_id=quote.id) }}" class="text-indigo-600 hover:underline ml-2">{{ quote.filename }}</a>
+                        <a href="#" class="view-attachment-btn text-indigo-600 hover:underline ml-2" 
+                           data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}" 
+                           data-filename="{{ quote.attachment.filename }}">{{ quote.attachment.filename }}</a>
                     </div>
                     <span class="text-xs text-gray-500">{{ quote.date_sent.strftime('%m/%d/%Y') }}</span>
                 </div>
                 {% else %}
-                <p class="text-sm text-gray-500">No quotes have been uploaded for the assigned vendor yet.</p>
+                <p class="text-sm text-gray-500">No quotes have been uploaded yet.</p>
                 {% endfor %}
             </div>
             {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-            <form method="POST" action="{{ url_for('main.add_quote', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-6 border-t pt-4">
+            <form method="POST" action="{{ url_for('main.add_quote', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-6 border-t pt-4 space-y-4">
                 {{ quote_form.hidden_tag() }}
-                <div class="flex items-center space-x-4">
-                    {{ quote_form.quote_file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
-                    {{ quote_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                <div>
+                    {{ quote_form.vendor.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ quote_form.vendor(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm") }}
                 </div>
-                {% if quote_form.quote_file.errors %}
+                <div>
+                    {{ quote_form.quote_file.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ quote_form.quote_file(class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+                </div>
+                
+                {% if quote_form.errors %}
                     <div class="text-red-500 text-xs mt-1">
-                        {% for error in quote_form.quote_file.errors %}<span>{{ error }}</span>{% endfor %}
+                        {% for field, errors in quote_form.errors.items() %}
+                            {% for error in errors %}<span>{{ error }}</span><br>{% endfor %}
+                        {% endfor %}
                     </div>
                 {% endif %}
+                
+                <div>
+                {{ quote_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </div>
             </form>
             {% endif %}
         </div>
-        {% endif %}
 
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-gray-700 mb-4">Notes</h3>
@@ -182,7 +206,7 @@
                 selectedVendorEmail: '{{ work_order.vendor.email if work_order.vendor else '' }}',
                 selectedVendorPhone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
                 selectedVendorSpecialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
-                selectedVendorWebsite: '{{ work_order.vendor.website if work_order.vendor else '' }}',
+                selectedVendorWebsite: '{{ work_order.website if work_order.vendor else '' }}',
                 results: [],
                 searchVendors() {
                     if (this.search.length < 2) {
@@ -293,18 +317,22 @@
             <h3 class="text-lg font-semibold text-gray-700 mb-4">Attachments</h3>
             <ul class="space-y-2">
                 {% for attachment in work_order.attachments %}
-                <li class="flex items-center justify-between text-sm">
-                    <div>
-                        <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-indigo-600 hover:underline">{{ attachment.filename }}</a>
-                    </div>
-                    {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-                    <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
-                        <button type="submit" class="text-red-500 hover:text-red-700 font-bold">&times;</button>
-                    </form>
+                    {% if attachment.file_type != 'Quote' %}
+                    <li class="flex items-center justify-between text-sm">
+                        <div>
+                             <a href="#" class="view-attachment-btn text-indigo-600 hover:underline"
+                                data-url="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}"
+                                data-filename="{{ attachment.filename }}">{{ attachment.filename }}</a>
+                        </div>
+                        {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                        <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
+                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold">&times;</button>
+                        </form>
+                        {% endif %}
+                    </li>
                     {% endif %}
-                </li>
                 {% else %}
-                <li class="text-sm text-gray-500">No attachments.</li>
+                <li class="text-sm text-gray-500">No general attachments.</li>
                 {% endfor %}
             </ul>
             <form method="POST" action="{{ url_for('main.upload_attachment', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-4 border-t pt-4">
@@ -321,55 +349,68 @@
     </div>
 </div>
 
+{% if current_user.signature %}
+<div id="user-signature" style="display: none;">{{ current_user.signature|safe }}</div>
+{% endif %}
+
 <div id="emailModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl transform">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col">
         <div class="flex justify-between items-center p-4 border-b">
             <h3 class="text-xl font-semibold">Send Work Request as Email</h3>
             <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
         </div>
-        <div class="p-6">
-            <form id="emailForm" onsubmit="return false;">
+        <div class="p-6 flex-grow flex flex-col overflow-hidden">
+            <form id="emailForm" onsubmit="return false;" class="flex-grow flex flex-col">
                 {{ note_form.csrf_token }}
-                <div class="mb-4">
-                    <label for="recipient" class="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
-                    <input type="email" id="recipient" name="recipient" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                    <div class="mb-2">
+                        <label for="recipient" class="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
+                        <input type="email" id="recipient" name="recipient" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="mb-2">
+                        <label for="cc" class="block text-sm font-medium text-gray-700 mb-1">CC (comma-separated)</label>
+                        <input type="text" id="cc" name="cc" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
                 </div>
-                <div class="mb-4">
-                    <label for="cc" class="block text-sm font-medium text-gray-700 mb-1">CC (comma-separated)</label>
-                    <input type="text" id="cc" name="cc" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                <div class="mb-4">
+                <div class="mb-2">
                     <label for="subject" class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                    <input type="text" id="subject" name="subject" readonly
-                           value="Work Request #{{ work_order.id }} - {{ work_order.property }}, {{ work_order.unit or 'N/A' }}"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100">
+                    <input type="text" id="subject" name="subject"
+                           value="Work Request #{{ work_order.id }} - {{ work_order.property }}{% if work_order.unit %}, {{ work_order.unit }}{% endif %}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
-                <div class="mb-4">
+                <div class="mb-4 flex-grow flex flex-col min-h-0">
                     <label for="body" class="block text-sm font-medium text-gray-700 mb-1">Message Body</label>
-                    <textarea id="body" name="body" rows="15" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm" style="resize: none;">
-Hi Team,
-
-We would like to schedule this request:
-
-**PO: {{ work_order.id }}-{{ requester_initials }}**
-**Type of Request:** {{ work_order.request_type }}
-**Description / Instructions:**
-    {{ work_order.description }}
-
-**Property:** {{ work_order.property }}
-**Unit:** {{ work_order.unit or 'N/A' }}
-**Address:** {{ work_order.address }}
-**Tenant Name:** {{ work_order.tenant_name or 'N/A' }}
-**Tenant Phone:** {{ work_order.tenant_phone or 'N/A' }}
-**Contact Person:** {{ work_order.contact_person or 'N/A' }}
-**Contact Person Phone:** {{ work_order.contact_person_phone or 'N/A' }}
-**Preferred Dates:**
-- {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}
-- {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}
-- {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}
-                    </textarea>
+                    <div class="email-editor-container flex-grow min-h-0">
+                        <textarea id="body">
+                            <p>Hi Team,</p>
+                            <p>We would like to schedule this request:</p>
+                            <p>&nbsp;</p>
+                            <p><strong>PO:</strong> {{ work_order.id }}-{{ requester_initials }}<br>
+                            <strong>Type of Request:</strong> {{ work_order.request_type }}<br>
+                            <strong>Description / Instructions:</strong><br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;{{ work_order.description }}</p>
+                            <p><strong>Property:</strong> {{ work_order.property }}<br>
+                            <strong>Unit:</strong> {{ work_order.unit or 'N/A' }}<br>
+                            <strong>Address:</strong> {{ work_order.address }}<br>
+                            {% if work_order.tenant_name %}
+                            <strong>Tenant Name:</strong> {{ work_order.tenant_name }}<br>
+                            <strong>Tenant Phone:</strong> {{ work_order.tenant_phone or 'N/A' }}<br>
+                            {% endif %}
+                            {% if work_order.contact_person %}
+                            <strong>Contact Person:</strong> {{ work_order.contact_person }}<br>
+                            <strong>Contact Person Phone:</strong> {{ work_order.contact_person_phone or 'N/A' }}<br>
+                            {% endif %}
+                            <strong>Preferred Dates:</strong><br>
+                            - {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}<br>
+                            - {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}<br>
+                            - {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</p>
+                        </textarea>
+                    </div>
                 </div>
-                <div class="flex justify-end space-x-3">
+                <div class="flex justify-end space-x-3 pt-4 -m-4">
+                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager'] and current_user.signature %}
+                    <button type="button" id="insertSignatureBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Insert Signature</button>
+                    {% endif %}
                     <button type="button" id="cancelSendBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
                     <button type="submit" id="submitEmailBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center">
                         <i class="fas fa-paper-plane mr-2"></i> Send
@@ -397,6 +438,7 @@ We would like to schedule this request:
 </div>
 
 
+<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
@@ -407,21 +449,43 @@ We would like to schedule this request:
         const emailForm = document.getElementById('emailForm');
         const submitEmailBtn = document.getElementById('submitEmailBtn');
         const recipientInput = document.getElementById('recipient');
+        const insertSignatureBtn = document.getElementById('insertSignatureBtn');
         const csrfToken = emailForm.querySelector('input[name="csrf_token"]').value;
         const notificationToast = document.getElementById('notificationToast');
         const notificationMessage = document.getElementById('notificationMessage');
+        let editor;
+
+        function initializeEditor() {
+            if (editor) return;
+            ClassicEditor
+                .create(document.querySelector('#body'))
+                .then(newEditor => {
+                    editor = newEditor;
+                })
+                .catch(error => {
+                    console.error(error);
+                });
+        }
+        
         function showModal() {
             emailModal.classList.remove('hidden');
             setTimeout(() => {
-               emailModal.classList.remove('opacity-0', 'scale-95');
-            }, 10);
+                emailModal.classList.remove('opacity-0', 'scale-95');
+                initializeEditor();
+            }, 100);
         }
+
         function hideModal() {
+            if (editor) {
+                editor.destroy().catch(error => console.error(error));
+                editor = null;
+            }
             emailModal.classList.add('opacity-0', 'scale-95');
             setTimeout(() => {
                 emailModal.classList.add('hidden');
             }, 300);
         }
+
         function showNotification(message, isSuccess) {
             notificationMessage.textContent = message;
             notificationToast.className = 'fixed bottom-5 right-5 p-4 rounded-lg text-white shadow-lg transition-opacity duration-300';
@@ -437,6 +501,19 @@ We would like to schedule this request:
                     recipientInput.value = '{{ work_order.vendor.email }}';
                 {% endif %}
                 showModal();
+            });
+        }
+        if (insertSignatureBtn) {
+            insertSignatureBtn.addEventListener('click', () => {
+                if (editor) {
+                    const signatureContainer = document.getElementById('user-signature');
+                    if (signatureContainer) {
+                        const signature = signatureContainer.innerHTML;
+                        const viewFragment = editor.data.processor.toView(`<p>&nbsp;</p>${signature}`);
+                        const modelFragment = editor.data.toModel(viewFragment);
+                        editor.model.insertContent(modelFragment, editor.model.document.selection);
+                    }
+                }
             });
         }
         closeModalBtn.addEventListener('click', hideModal);
@@ -455,7 +532,7 @@ We would like to schedule this request:
                 recipient: document.getElementById('recipient').value,
                 cc: document.getElementById('cc').value,
                 subject: document.getElementById('subject').value,
-                body: document.getElementById('body').value.trim()
+                body: editor.getData()
             };
             try {
                 const response = await fetch(`{{ url_for('main.send_work_order_email', request_id=work_order.id) }}`, {
@@ -487,7 +564,7 @@ We would like to schedule this request:
         document.querySelectorAll('.view-attachment-btn').forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                const attachmentUrl = this.href;
+                const attachmentUrl = this.dataset.url;
                 const attachmentFilename = this.dataset.filename;
                 attachmentModalTitle.textContent = attachmentFilename;
                 attachmentFrame.src = attachmentUrl;

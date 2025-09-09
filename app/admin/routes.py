@@ -212,26 +212,101 @@ def manage_properties():
 @admin.route('/upload_properties_csv', methods=['POST'])
 @role_required('Super User')
 def upload_properties_csv():
-    # ... (code remains the same)
-    pass
+    upload_form = PropertyUploadForm()
+    if upload_form.validate_on_submit():
+        try:
+            csv_file = upload_form.csv_file.data
+            stream = io.StringIO(csv_file.stream.read().decode("UTF8"), newline=None)
+            csv_reader = csv.reader(stream)
+            next(csv_reader, None)  # Skip header row
+
+            updated_count = 0
+            added_count = 0
+
+            for row in csv_reader:
+                if len(row) >= 2:
+                    name = row[0].strip()
+                    address = row[1].strip()
+                    manager = row[2].strip() if len(row) > 2 else None
+                    
+                    prop = Property.query.filter_by(name=name).first()
+                    if prop:
+                        prop.address = address
+                        prop.property_manager = manager
+                        updated_count += 1
+                    else:
+                        new_prop = Property(name=name, address=address, property_manager=manager)
+                        db.session.add(new_prop)
+                        added_count += 1
+            
+            db.session.commit()
+            flash(f'Properties successfully processed. Added: {added_count}, Updated: {updated_count}.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred during CSV upload: {e}', 'danger')
+    else:
+        flash('No file or an invalid file type was selected.', 'danger')
+    
+    return redirect(url_for('admin.manage_properties'))
+
 
 @admin.route('/add_property', methods=['POST'])
 @admin_required
 def add_property():
-    # ... (code remains the same)
-    pass
+    form = PropertyForm()
+    property_managers = User.query.filter_by(role='Property Manager').all()
+    form.property_manager.choices = [("", "Select Manager...")] + [(pm.name, pm.name) for pm in property_managers]
+
+    if form.validate_on_submit():
+        new_property = Property(
+            name=form.name.data,
+            address=form.address.data,
+            property_manager=form.property_manager.data
+        )
+        db.session.add(new_property)
+        try:
+            db.session.commit()
+            flash('Property added successfully.', 'success')
+        except IntegrityError:
+            db.session.rollback()
+            flash('A property with this name already exists.', 'danger')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {getattr(form, field).label.text}: {error}", 'danger')
+
+    return redirect(url_for('admin.manage_properties'))
+
 
 @admin.route('/edit_property/<int:property_id>', methods=['GET', 'POST'])
 @admin_required
 def edit_property(property_id):
-    # ... (code remains the same)
-    pass
+    prop = Property.query.get_or_404(property_id)
+    form = PropertyForm(obj=prop)
+    property_managers = User.query.filter_by(role='Property Manager').all()
+    form.property_manager.choices = [("", "Select Manager...")] + [(pm.name, pm.name) for pm in property_managers]
+
+    if form.validate_on_submit():
+        form.populate_obj(prop)
+        db.session.commit()
+        flash('Property updated successfully.', 'success')
+        return redirect(url_for('admin.manage_properties'))
+        
+    return render_template('edit_property.html', title='Edit Property', form=form, property=prop)
+
 
 @admin.route('/delete_property/<int:property_id>', methods=['POST'])
 @role_required('Super User')
 def delete_property(property_id):
-    # ... (code remains the same)
-    pass
+    prop = Property.query.get_or_404(property_id)
+    if WorkOrder.query.filter_by(property_id=prop.id).first():
+        flash('Cannot delete property. It is associated with existing work orders.', 'danger')
+        return redirect(url_for('admin.manage_properties'))
+
+    db.session.delete(prop)
+    db.session.commit()
+    flash('Property has been deleted.', 'success')
+    return redirect(url_for('admin.manage_properties'))
 
 # --- VENDOR MANAGEMENT ROUTES ---
 
@@ -265,6 +340,13 @@ def manage_vendors():
 def add_vendor():
     form = VendorForm()
     if form.validate_on_submit():
+        # Check for existing vendor by email ONLY if an email is provided
+        if form.email.data:
+            existing_vendor_email = Vendor.query.filter_by(email=form.email.data).first()
+            if existing_vendor_email:
+                flash('A vendor with this email already exists.', 'danger')
+                return redirect(url_for('admin.manage_vendors'))
+
         new_vendor = Vendor(
             company_name=form.company_name.data,
             contact_name=form.contact_name.data,
@@ -279,7 +361,8 @@ def add_vendor():
             flash('Vendor added successfully.', 'success')
         except IntegrityError:
             db.session.rollback()
-            flash('A vendor with this company name or email already exists.', 'danger')
+            # This will now only catch the duplicate company name error
+            flash('A vendor with this company name already exists.', 'danger')
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -292,6 +375,13 @@ def edit_vendor(vendor_id):
     vendor = Vendor.query.get_or_404(vendor_id)
     form = VendorForm(obj=vendor)
     if form.validate_on_submit():
+        # Check for email conflict only if the email has changed and is not empty
+        if form.email.data and form.email.data != vendor.email:
+            existing_vendor = Vendor.query.filter_by(email=form.email.data).first()
+            if existing_vendor:
+                flash('That email is already in use by another vendor.', 'danger')
+                return render_template('edit_vendor.html', title='Edit Vendor', form=form, vendor=vendor)
+        
         form.populate_obj(vendor)
         db.session.commit()
         flash('Vendor updated successfully.', 'success')
@@ -334,6 +424,10 @@ def upload_vendors_csv():
                     specialty = row[4].strip() if len(row) > 4 else None
                     website = row[5].strip() if len(row) > 5 else None
                     
+                    # Skip if email is provided and already exists
+                    if email and Vendor.query.filter_by(email=email).first():
+                        continue
+
                     vendor = Vendor.query.filter_by(company_name=company_name).first()
                     if vendor:
                         vendor.contact_name = contact_name

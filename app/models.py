@@ -21,6 +21,7 @@ class User(db.Model, UserMixin):
     role = db.Column(db.String(20), nullable=False, default='Requester')
     is_active = db.Column(db.Boolean, default=False, nullable=False)
     last_message_read_time = db.Column(db.DateTime)
+    signature = db.Column(db.Text, nullable=True)
 
     requests = db.relationship('WorkOrder', backref='author', lazy='dynamic')
     notes = db.relationship('Note', backref='author', lazy='dynamic')
@@ -63,7 +64,7 @@ class Vendor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_name = db.Column(db.String(150), unique=True, nullable=False)
     contact_name = db.Column(db.String(100), nullable=True)
-    email = db.Column(db.String(120), unique=True, nullable=True)
+    email = db.Column(db.String(120), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
     specialty = db.Column(db.String(100), nullable=True)
     website = db.Column(db.String(255), nullable=True)
@@ -76,7 +77,7 @@ class Vendor(db.Model):
 
 class WorkOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    wo_number = db.Column(db.String(100), nullable=False)
+    wo_number = db.Column(db.String(100), nullable=True)
     requester_name = db.Column(db.String(100), nullable=False)
     request_type = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=False)
@@ -146,6 +147,7 @@ class Attachment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
     user = db.relationship('User')
+    quote = db.relationship('Quote', backref='attachment', uselist=False, cascade="all, delete-orphan")
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -168,8 +170,8 @@ class MessageAttachment(db.Model):
 
 class Quote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(255), nullable=False)
     date_sent = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     status = db.Column(db.String(50), nullable=False, default='Pending')
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=False)
+    attachment_id = db.Column(db.Integer, db.ForeignKey('attachment.id'), nullable=False, unique=True)

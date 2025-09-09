@@ -9,6 +9,13 @@ from wtforms.widgets import HiddenInput
 from wtforms_sqlalchemy.fields import QuerySelectField
 from datetime import datetime
 
+# Custom validator to handle empty strings for optional unique fields
+class OptionalUnique(Optional):
+    def __call__(self, form, field):
+        if not field.data:
+            field.data = None
+        super().__call__(form, field)
+
 def date_format(form, field):
     """Custom validator to ensure date string is in MM/DD/YYYY format."""
     if field.data:
@@ -93,6 +100,7 @@ class VendorUploadForm(FlaskForm):
 class UpdateAccountForm(FlaskForm):
     name = StringField('Full Name', validators=[DataRequired(), Length(min=2, max=100)])
     email = StringField('Email', validators=[DataRequired(), Email()])
+    # The signature field is removed from the form, it will be handled directly in the template
     submit = SubmitField('Update Account')
 
     def __init__(self, *args, **kwargs):
@@ -147,7 +155,14 @@ class NoteForm(FlaskForm):
 
 class ChangeStatusForm(FlaskForm):
     status = SelectField('New Status', choices=[
-        'Open', 'Pending', 'Awaiting Approval', 'Quote Sent', 'Scheduled', 'Closed', 'Cancelled'
+        'Open',
+        'Pending',
+        'Quote Requested',
+        'Quote Sent',
+        'Awaiting Approval',
+        'Scheduled',
+        'Closed',
+        'Cancelled'
     ], validators=[DataRequired()])
     scheduled_date = StringField('Scheduled Date', validators=[Optional(), date_format])
     submit = SubmitField('Update Status')
@@ -164,7 +179,7 @@ class AttachmentForm(FlaskForm):
     submit = SubmitField('Upload')
 
 class NewRequestForm(FlaskForm):
-    wo_number = StringField('Work Order #', validators=[DataRequired()])
+    wo_number = StringField('Work Order #', validators=[Optional()])
     request_type = SelectField('Type of Request', choices=[
         'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
         'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
@@ -194,12 +209,13 @@ class PropertyForm(FlaskForm):
 class VendorForm(FlaskForm):
     company_name = StringField('Vendor', validators=[DataRequired()])
     contact_name = StringField('Contact')
-    email = StringField('Email Address', validators=[Optional(), Email()])
+    email = StringField('Email Address', validators=[OptionalUnique(), Email()])
     phone = StringField('Phone Number')
-    specialty = StringField('Specialty (e.g., Plumbing)')
-    website = StringField('Website', validators=[Optional(), URL()])
+    specialty = StringField('Specialty (e.g., Plumbing)', validators=[DataRequired()])
+    website = StringField('Website', validators=[OptionalUnique(), URL()])
     submit = SubmitField('Save Vendor')
 
 class QuoteForm(FlaskForm):
+    vendor = QuerySelectField('Vendor', query_factory=get_vendors, get_label='company_name', allow_blank=False, validators=[DataRequired()])
     quote_file = FileField('Quote File', validators=[DataRequired(), FileAllowed(['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'])])
     submit = SubmitField('Upload Quote')

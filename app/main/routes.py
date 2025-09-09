@@ -13,6 +13,7 @@ from flask import (render_template, request, redirect, url_for, flash,
                    abort, send_from_directory, jsonify, current_app, Response)
 from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
+import bleach
 
 from app import db
 from app.main import main
@@ -48,7 +49,20 @@ def save_attachment(file, work_order_id, file_type='Attachment'):
     attachment = Attachment(filename=unique_filename, user_id=current_user.id, work_order_id=work_order_id, file_type=file_type)
     db.session.add(attachment)
     db.session.commit()
-    return unique_filename
+    return attachment
+
+def work_order_to_dict(req):
+    """Helper function to convert a WorkOrder object to a dictionary."""
+    return {
+        'id': req.id,
+        'date_created': req.date_created.strftime('%Y-%m-%d'),
+        'wo_number': req.wo_number,
+        'requester_name': req.requester_name,
+        'property': req.property,
+        'status': req.status,
+        'request_type': req.request_type,
+        'tag': req.tag
+    }
 
 @main.route('/')
 @login_required
@@ -125,27 +139,10 @@ def dashboard():
 @login_required
 @admin_required
 def all_requests():
-    query = WorkOrder.query
-    search_term = request.args.get('search')
-    if search_term:
-        query = query.filter(or_(
-            WorkOrder.id.like(f'%{search_term}%'), WorkOrder.wo_number.like(f'%{search_term}%'),
-            WorkOrder.property.like(f'%{search_term}%'), WorkOrder.address.like(f'%{search_term}%'),
-            WorkOrder.requester_name.like(f'%{search_term}%')
-        ))
-    requester_filter = request.args.get('requester')
-    if requester_filter:
-        query = query.filter(WorkOrder.user_id == requester_filter)
-    property_filter = request.args.get('property')
-    if property_filter:
-        query = query.filter(WorkOrder.property == property_filter)
-
-    requests_data = query.order_by(WorkOrder.date_created.desc()).all()
-    all_requesters = User.query.filter(User.role.in_(['Requester', 'Admin', 'Scheduler', 'Super User'])).all()
-    all_properties = Property.query.all()
-
-    return render_template('all_requests.html', title='All Requests', requests=requests_data,
-                           all_requesters=all_requesters, all_properties=all_properties)
+    requests_data = WorkOrder.query.order_by(WorkOrder.date_created.desc()).all()
+    requests_list = [work_order_to_dict(req) for req in requests_data]
+    return render_template('all_requests.html', title='All Requests', 
+                           requests_json=json.dumps(requests_list))
 
 @main.route('/my-requests')
 @login_required
@@ -155,63 +152,38 @@ def my_requests():
         query = query.filter(WorkOrder.property_manager == current_user.name)
     else:
         query = query.filter_by(author=current_user)
-    search_term = request.args.get('search')
-    if search_term:
-        query = query.filter(or_(
-            WorkOrder.id.like(f'%{search_term}%'),
-            WorkOrder.wo_number.like(f'%{search_term}%'),
-            WorkOrder.property.like(f'%{search_term}%'),
-            WorkOrder.request_type.like(f'%{search_term}%')
-        ))
+    
     user_requests = query.order_by(WorkOrder.date_created.desc()).all()
-    return render_template('my_requests.html', title='My Requests', requests=user_requests)
+    requests_list = [work_order_to_dict(req) for req in user_requests]
+    return render_template('my_requests.html', title='My Requests', 
+                           requests_json=json.dumps(requests_list))
 
 @main.route('/shared-with-me')
 @login_required
 def shared_requests():
     query = WorkOrder.query.filter(WorkOrder.viewers.contains(current_user))
-    search_term = request.args.get('search')
-    if search_term:
-        query = query.filter(or_(
-            WorkOrder.id.like(f'%{search_term}%'),
-            WorkOrder.wo_number.like(f'%{search_term}%'),
-            WorkOrder.property.like(f'%{search_term}%'),
-            WorkOrder.requester_name.like(f'%{search_term}%')
-        ))
-    requests = query.order_by(WorkOrder.date_created.desc()).all()
-    return render_template('shared_requests.html', title='Shared With Me', requests=requests)
+    requests_data = query.order_by(WorkOrder.date_created.desc()).all()
+    requests_list = [work_order_to_dict(req) for req in requests_data]
+    return render_template('shared_requests.html', title='Shared With Me', 
+                           requests_json=json.dumps(requests_list))
 
 @main.route('/requests/status/<status>')
 @login_required
 @admin_required
 def requests_by_status(status):
-    query = WorkOrder.query.filter_by(status=status)
-    search_term = request.args.get('search')
-    if search_term:
-        query = query.filter(or_(
-            WorkOrder.id.like(f'%{search_term}%'),
-            WorkOrder.wo_number.like(f'%{search_term}%'),
-            WorkOrder.property.like(f'%{search_term}%'),
-            WorkOrder.requester_name.like(f'%{search_term}%')
-        ))
-    filtered_requests = query.order_by(WorkOrder.date_created.desc()).all()
-    return render_template('requests_by_status.html', title=f'Requests: {status}', requests=filtered_requests, status=status)
+    filtered_requests = WorkOrder.query.filter_by(status=status).order_by(WorkOrder.date_created.desc()).all()
+    requests_list = [work_order_to_dict(req) for req in filtered_requests]
+    return render_template('requests_by_status.html', title=f'Requests: {status}', 
+                           requests_json=json.dumps(requests_list), status=status)
 
 @main.route('/requests/tag/<tag_name>')
 @login_required
 @admin_required
 def requests_by_tag(tag_name):
-    query = WorkOrder.query.filter(WorkOrder.tag.like(f'%{tag_name}%'))
-    search_term = request.args.get('search')
-    if search_term:
-        query = query.filter(or_(
-            WorkOrder.id.like(f'%{search_term}%'),
-            WorkOrder.wo_number.like(f'%{search_term}%'),
-            WorkOrder.property.like(f'%{search_term}%'),
-            WorkOrder.requester_name.like(f'%{search_term}%')
-        ))
-    tagged_requests = query.order_by(WorkOrder.date_created.desc()).all()
-    return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', requests=tagged_requests, tag_name=tag_name)
+    tagged_requests = WorkOrder.query.filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
+    requests_list = [work_order_to_dict(req) for req in tagged_requests]
+    return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', 
+                           requests_json=json.dumps(requests_list), tag_name=tag_name)
 
 @main.route('/request/<int:request_id>', methods=['GET', 'POST'])
 @login_required
@@ -304,9 +276,14 @@ def change_status(request_id):
     
     if form.validate_on_submit():
         new_status = form.status.data
-        if new_status == 'Scheduled' and not form.scheduled_date.data:
-            flash('A scheduled date is required to change the status to "Scheduled".', 'danger')
-            return redirect(url_for('main.view_request', request_id=request_id))
+        
+        if new_status == 'Scheduled':
+            if not work_order.vendor_id:
+                flash('A vendor must be assigned before scheduling.', 'danger')
+                return redirect(url_for('main.view_request', request_id=request_id))
+            if not form.scheduled_date.data:
+                flash('A scheduled date is required to change the status to "Scheduled".', 'danger')
+                return redirect(url_for('main.view_request', request_id=request_id))
 
         old_status = work_order.status
         if old_status == new_status:
@@ -586,13 +563,31 @@ def edit_request(request_id):
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
     
+    # We must remove the attachments field from the form to prevent it from being overwritten
+    del form.attachments
+
     if form.validate_on_submit():
-        form.populate_obj(work_order)
+        # Manually update the work order fields from the form
+        work_order.wo_number = form.wo_number.data
+        work_order.request_type = form.request_type.data
+        work_order.description = form.description.data
+        work_order.property = form.property.data
+        work_order.unit = form.unit.data
+        work_order.tenant_name = form.tenant_name.data
+        work_order.tenant_phone = form.tenant_phone.data
+        work_order.contact_person = form.contact_person.data
+        work_order.contact_person_phone = form.contact_person_phone.data
         
         work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
         
+        # Handle new attachments separately
+        if 'attachments' in request.files:
+            for file in request.files.getlist('attachments'):
+                if file.filename:
+                    save_attachment(file, work_order.id)
+
         db.session.add(AuditLog(text='Edited request details.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash('Request has been updated.', 'success')
@@ -620,9 +615,9 @@ def upload_attachment(request_id):
         for file in form.file.data:
             if file and file.filename:
                 file_type = request.form.get('file_type', 'Attachment')
-                filename = save_attachment(file, request_id, file_type)
+                attachment_obj = save_attachment(file, request_id, file_type)
                 
-                if filename:
+                if attachment_obj:
                     db.session.add(AuditLog(text=f'Uploaded {file_type}: {secure_filename(file.filename)}', user_id=current_user.id, work_order_id=work_order.id))
                     flash(f'{file_type} "{secure_filename(file.filename)}" uploaded successfully.', 'success')
                 else:
@@ -639,7 +634,33 @@ def upload_attachment(request_id):
 @login_required
 def download_attachment(attachment_id):
     attachment = Attachment.query.get_or_404(attachment_id)
+    work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
+    
+    is_author = work_order.author == current_user
+    is_viewer = current_user in work_order.viewers
+    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
+    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+
+    if not (is_author or is_viewer or is_property_manager or is_admin_staff):
+        abort(403)
+        
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=True)
+
+@main.route('/view_attachment/<int:attachment_id>')
+@login_required
+def view_attachment(attachment_id):
+    attachment = Attachment.query.get_or_404(attachment_id)
+    work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
+    
+    is_author = work_order.author == current_user
+    is_viewer = current_user in work_order.viewers
+    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
+    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+    
+    if not (is_author or is_viewer or is_property_manager or is_admin_staff):
+        abort(403)
+        
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
 
 @main.route('/delete_attachment/<int:attachment_id>', methods=['POST'])
 @login_required
@@ -663,10 +684,29 @@ def account():
     update_form = UpdateAccountForm(obj=current_user)
     password_form = ChangePasswordForm()
     if 'update_account' in request.form and update_form.validate_on_submit():
-        update_form.populate_obj(current_user)
+        current_user.name = update_form.name.data
+        current_user.email = update_form.email.data
+        
+        if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager']:
+            # Sanitize the HTML signature to prevent XSS, allowing more tags for CKEditor
+            allowed_tags = [
+                'a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 
+                'li', 'ol', 'strong', 'ul', 'br', 'p', 'img', 'span', 'div',
+                'figure', 'figcaption', 'table', 'tbody', 'tr', 'td'
+            ]
+            allowed_attrs = {
+                '*': ['style', 'class'], 
+                'a': ['href', 'title'], 
+                'img': ['src', 'alt', 'width', 'height']
+            }
+            
+            signature_html = request.form.get('signature')
+            current_user.signature = bleach.clean(signature_html, tags=allowed_tags, attributes=allowed_attrs)
+        
         db.session.commit()
         flash('Your account has been updated!', 'success')
         return redirect(url_for('main.account'))
+        
     if 'change_password' in request.form and password_form.validate_on_submit():
         if current_user.check_password(password_form.current_password.data):
             current_user.set_password(password_form.new_password.data)
@@ -675,7 +715,28 @@ def account():
         else:
             flash('Incorrect current password.', 'danger')
         return redirect(url_for('main.account'))
+
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
+
+
+@main.route('/upload_image', methods=['POST'])
+@login_required
+def upload_image():
+    if 'upload' in request.files:
+        file = request.files['upload']
+        if file:
+            filename = secure_filename(file.filename)
+            ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+            unique_filename = f"{uuid.uuid4().hex}.{ext}"
+            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
+            url = url_for('main.uploaded_file', filename=unique_filename, _external=True)
+            return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
+    return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
+
+@main.route('/uploads/<filename>')
+@login_required
+def uploaded_file(filename):
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 @main.route('/reports')
 @login_required
@@ -854,26 +915,24 @@ def add_quote(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     form = QuoteForm()
     if form.validate_on_submit():
-        if work_order.vendor:
-            file = form.quote_file.data
-            filename = save_attachment(file, work_order.id, file_type='Quote')
-            
-            if filename:
-                quote = Quote(
-                    filename=filename,
-                    work_order_id=work_order.id,
-                    vendor_id=work_order.vendor.id
-                )
-                db.session.add(quote)
-                db.session.add(AuditLog(text=f"Quote '{file.filename}' uploaded.", user_id=current_user.id, work_order_id=work_order.id))
-                db.session.commit()
-                flash('Quote uploaded successfully.', 'success')
-            else:
-                flash('There was an error uploading the quote file.', 'danger')
+        vendor = form.vendor.data
+        file = form.quote_file.data
+        attachment_obj = save_attachment(file, work_order.id, file_type='Quote')
+        
+        if attachment_obj:
+            quote = Quote(
+                work_order_id=work_order.id,
+                vendor_id=vendor.id,
+                attachment_id=attachment_obj.id
+            )
+            db.session.add(quote)
+            db.session.add(AuditLog(text=f"Quote '{attachment_obj.filename}' for vendor '{vendor.company_name}' uploaded.", user_id=current_user.id, work_order_id=work_order.id))
+            db.session.commit()
+            flash(f'Quote for {vendor.company_name} uploaded successfully.', 'success')
         else:
-            flash('A vendor must be assigned before adding a quote.', 'danger')
+            flash('There was an error saving the quote file.', 'danger')
     else:
-        flash('There was an error with the quote form.', 'danger')
+        flash('There was an error with the quote form. Please select a vendor and a valid file.', 'danger')
     return redirect(url_for('main.view_request', request_id=request_id))
 
 def get_date_range(range_name, start_str, end_str):

@@ -2,16 +2,16 @@
 <html>
 <head>
     <style>
-        body { font-family: sans-serif; color: #333; line-height: 1.6; }
-        .container { padding: 20px; border: 1px solid #ddd; border-radius: 5px; max-width: 600px; margin: auto; }
-        .content { white-space: pre-wrap; font-family: monospace; background-color: #f7f7f7; padding: 15px; border-radius: 4px; }
+        body { font-family: sans-serif; color: #000; line-height: 1.6; }
+        .container { margin: auto; }
+        .content { font-family: sans-serif; white-space: normal; }
         .footer { margin-top: 20px; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 15px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="content">
-{{ body }}
+            {{ body|safe }}
         </div>
         <div class="footer">
             <p>

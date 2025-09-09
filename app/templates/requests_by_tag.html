@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-md">
+<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()">
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-semibold text-gray-700">Requests Tagged: <span class="font-bold">{{ tag_name }}</span></h3>
         <a href="{{ url_for('main.dashboard') }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-md hover:bg-gray-50">
@@ -8,17 +8,9 @@
         </a>
     </div>
 
-    <div class="bg-white p-4 rounded-lg shadow-md mb-6 border">
-        <form method="GET" action="{{ url_for('main.requests_by_tag', tag_name=tag_name) }}">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div class="md:col-span-4">
-                    <input type="text" name="search" placeholder="Search by ID, WO#, Property, Requester..." class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" value="{{ request.args.get('search', '') }}">
-                </div>
-                <div>
-                    <button type="submit" class="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Search</button>
-                </div>
-            </div>
-        </form>
+    <div class="mb-4">
+        <input type="text" x-model="search" placeholder="Search by ID, WO#, Property, Requester..." 
+               class="w-full md:w-1/2 lg:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
     </div>
 
     <div class="overflow-x-auto">
@@ -30,45 +22,74 @@
                     <th scope="col" class="px-6 py-3">WO#</th>
                     <th scope="col" class="px-6 py-3">Requester</th>
                     <th scope="col" class="px-6 py-3">Property</th>
-                    <th scope="col" class="px-6 py-3">Status</th>
+                    <th scope="col" class="px-6 py-3">Status & Tags</th>
                 </tr>
             </thead>
             <tbody>
-                {% for req in requests %}
-                <tr class="bg-white border-b hover:bg-gray-50">
-                    <td class="px-6 py-4">
-                        <a href="{{ url_for('main.view_request', request_id=req.id) }}" class="font-medium text-indigo-600 hover:underline">#{{ req.id }}</a>
-                    </td>
-                    <td class="px-6 py-4">{{ req.date_created.strftime('%m/%d/%Y') }}</td>
-                    <td class="px-6 py-4">{{ req.wo_number }}</td>
-                    <td class="px-6 py-4">{{ req.requester_name }}</td>
-                    <td class="px-6 py-4">{{ req.property }}</td>
-                    <td class="px-6 py-4">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                            {% if req.status in ['New', 'Open'] %} bg-blue-100 text-blue-800
-                            {% elif req.status in ['Closed'] %} bg-gray-100 text-gray-800
-                            {% elif req.status in ['Cancelled'] %} bg-red-100 text-red-800
-                            {% else %} bg-yellow-100 text-yellow-800 {% endif %}">
-                            {{ req.status }}
-                        </span>
-                        {% if req.tag %}
-                            {% for t in req.tag.split(',') %}
-                                {% if t %}
-                                <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                                    {% if t in ['Approved', 'Completed'] %} bg-green-100 text-green-800
-                                    {% elif t in ['Declined'] %} bg-red-100 text-red-800
-                                    {% elif t in ['Go-back'] %} bg-blue-100 text-blue-800
-                                    {% else %} bg-purple-100 text-purple-800 {% endif %}">
-                                    {{ t }}
-                                </span>
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
+                <template x-for="req in filteredRequests" :key="req.id">
+                    <tr class="bg-white border-b hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <a :href="'/request/' + req.id" class="font-medium text-indigo-600 hover:underline" x-text="'#' + req.id"></a>
+                        </td>
+                        <td class="px-6 py-4" x-text="req.date_created"></td>
+                        <td class="px-6 py-4" x-text="req.wo_number"></td>
+                        <td class="px-6 py-4" x-text="req.requester_name"></td>
+                        <td class="px-6 py-4" x-text="req.property"></td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                  :class="{
+                                      'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
+                                      'bg-gray-100 text-gray-800': req.status === 'Closed',
+                                      'bg-red-100 text-red-800': req.status === 'Cancelled',
+                                      'bg-yellow-100 text-yellow-800': !['New', 'Open', 'Closed', 'Cancelled'].includes(req.status)
+                                  }"
+                                  x-text="req.status">
+                            </span>
+                            <template x-if="req.tag">
+                                <template x-for="t in req.tag.split(',').filter(Boolean)" :key="t">
+                                     <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="{
+                                              'bg-green-100 text-green-800': ['Approved', 'Completed'].includes(t),
+                                              'bg-red-100 text-red-800': ['Declined'].includes(t),
+                                              'bg-blue-100 text-blue-800': ['Go-back'].includes(t),
+                                              'bg-purple-100 text-purple-800': !['Approved', 'Completed', 'Declined', 'Go-back'].includes(t)
+                                          }"
+                                          x-text="t">
+                                    </span>
+                                </template>
+                            </template>
+                        </td>
+                    </tr>
+                </template>
+                <tr x-show="filteredRequests.length === 0">
+                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                        No requests found matching your search.
                     </td>
                 </tr>
-                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+<script>
+    function requestManager() {
+        return {
+            search: '',
+            requests: {{ requests_json|safe }},
+            get filteredRequests() {
+                if (this.search === '') {
+                    return this.requests;
+                }
+                return this.requests.filter(req => {
+                    const searchLower = this.search.toLowerCase();
+                    return (
+                        req.id.toString().includes(searchLower) ||
+                        req.wo_number.toLowerCase().includes(searchLower) ||
+                        req.requester_name.toLowerCase().includes(searchLower) ||
+                        req.property.toLowerCase().includes(searchLower)
+                    );
+                });
+            }
+        }
+    }
+</script>
 {% endblock content %}
