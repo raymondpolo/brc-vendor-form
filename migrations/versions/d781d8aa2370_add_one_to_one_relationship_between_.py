@@ -47,8 +47,9 @@ def upgrade():
         with op.batch_alter_table('vendor', schema=None) as batch_op:
             # Attempt to drop the unique constraint on the 'email' column.
             batch_op.drop_constraint('uq_vendor_email', type_='unique')
-    except (ValueError, KeyError) as e:
+        except Exception as e:
         # If the constraint doesn't exist, catch the error and print a message.
+        # This is safer for different database backends.
         print(f"Skipping drop constraint on vendor.email as it may not exist: {e}")
 
 
