@@ -2,7 +2,7 @@
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <h2 class="text-2xl font-bold mb-6 text-gray-800">Edit Property: {{ property.name }}</h2>
-    <form method="POST" action="{{ url_for('main.edit_property', property_id=property.id) }}">
+    <form method="POST" action="{{ url_for('admin.edit_property', property_id=property.id) }}">
         {{ form.hidden_tag() }}
         <div class="space-y-6">
             <div>
@@ -19,11 +19,9 @@
             </div>
         </div>
         <div class="mt-8 flex justify-end space-x-4">
-            <!-- This is the corrected line -->
-            <a href="{{ url_for('main.manage_properties') }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
+            <a href="{{ url_for('admin.manage_properties') }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
             {{ form.submit(value="Update Property", class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
         </div>
     </form>
 </div>
 {% endblock content %}
-

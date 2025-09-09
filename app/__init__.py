@@ -1,42 +1,60 @@
+# app/__init__.py
+import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_mail import Mail
 from config import Config
-from whitenoise import WhiteNoise
+from flask_migrate import Migrate
+from flask_wtf.csrf import CSRFProtect # --- ADD THIS IMPORT ---
 
 db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
-login_manager.login_message = 'Please log in to access this page.'
 login_manager.login_message_category = 'info'
 mail = Mail()
+migrate = Migrate()
+csrf = CSRFProtect() # --- ADD THIS LINE ---
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
     mail.init_app(app)
+    migrate.init_app(app, db)
+    csrf.init_app(app) # --- ADD THIS LINE ---
 
-    # Add WhiteNoise middleware to serve static files in production
-    app.wsgi_app = WhiteNoise(app.wsgi_app, root='app/static/')
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    # Import and register blueprints
-    from app.main.routes import main as main_blueprint
-    app.register_blueprint(main_blueprint)
-
-    from app.auth.routes import auth as auth_blueprint
+    from app.auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint, url_prefix='/auth')
-    
-    from app.main.context_processors import inject_notifications
-    app.context_processor(inject_notifications)
 
+    from app.main import main as main_blueprint
+    app.register_blueprint(main_blueprint)
+    
+    from app.admin import admin as admin_blueprint
+    app.register_blueprint(admin_blueprint, url_prefix='/admin')
+
+    from app import models
+
+    @app.context_processor
+    def inject_notifications():
+        from flask_login import current_user
+        from app.models import Notification
+        if current_user.is_authenticated:
+            unread_notifications = Notification.query.filter_by(
+                user_id=current_user.id, is_read=False
+            ).order_by(Notification.timestamp.desc()).all()
+            return dict(unread_notifications=unread_notifications)
+        return dict(unread_notifications=[])
+    
     with app.app_context():
-        db.create_all()
-        from app.models import User
-        User.create_default_superuser()
+        try:
+            models.User.create_default_superuser()
+        except Exception as e:
+            app.logger.info(f"Could not create superuser (this is normal on first run): {e}")
+
 
     return app

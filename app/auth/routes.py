@@ -1,7 +1,7 @@
-from flask import render_template, redirect, url_for, flash, request
+from flask import render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_user, logout_user, current_user
 from itsdangerous import URLSafeTimedSerializer
-from app import db, create_app
+from app import db
 from app.auth import auth
 from app.models import User
 from app.forms import LoginForm, RequestResetForm, ResetPasswordForm, SetPasswordForm
@@ -29,9 +29,10 @@ def logout():
 
 @auth.route('/set-password/<token>', methods=['GET', 'POST'])
 def set_password(token):
-    s = URLSafeTimedSerializer(create_app().config['SECRET_KEY'])
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:
-        email = s.loads(token, salt='account-setup-salt', max_age=86400) # 24 hours
+        # CORRECTED: max_age changed from 86400 (1 day) to 604800 (7 days)
+        email = s.loads(token, salt='account-setup-salt', max_age=604800)
     except:
         flash('The activation link is invalid or has expired.', 'danger')
         return redirect(url_for('auth.login'))
@@ -52,6 +53,7 @@ def set_password(token):
         db.session.commit()
         flash('Your account has been activated! You are now able to log in.', 'success')
         return redirect(url_for('auth.login'))
+    
     return render_template('auth/set_password.html', title='Set Your Password', form=form, token=token)
 
 @auth.route('/reset_password', methods=['GET', 'POST'])
@@ -62,7 +64,7 @@ def reset_request():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user:
-            s = URLSafeTimedSerializer(create_app().config['SECRET_KEY'])
+            s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
             token = s.dumps(user.email, salt='password-reset-salt')
             email_body = f"""
             <p>To reset your password, please visit the following link. This link will expire in 1 hour.</p>
@@ -70,6 +72,7 @@ def reset_request():
             send_notification_email(
                 subject="Password Reset Request",
                 recipients=[user.email],
+                text_body=f"To reset your password, please visit the following link: {url_for('auth.reset_token', token=token, _external=True)}",
                 html_body=render_template(
                     'email/notification_email.html',
                     title="Password Reset",
@@ -80,13 +83,14 @@ def reset_request():
             )
         flash('If an account with that email exists, a password reset link has been sent.', 'info')
         return redirect(url_for('auth.login'))
+    
     return render_template('auth/reset_request.html', title='Reset Password', form=form)
 
 @auth.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_token(token):
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
-    s = URLSafeTimedSerializer(create_app().config['SECRET_KEY'])
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:
         email = s.loads(token, salt='password-reset-salt', max_age=3600) # 1 hour
     except:
@@ -104,5 +108,5 @@ def reset_token(token):
         db.session.commit()
         flash('Your password has been updated! You are now able to log in.', 'success')
         return redirect(url_for('auth.login'))
+    
     return render_template('auth/reset_token.html', title='Reset Password', form=form, token=token)
-

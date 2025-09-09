@@ -1,3 +1,4 @@
+# Vendor Request Form/app/models.py
 from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,7 +21,7 @@ class User(db.Model, UserMixin):
     role = db.Column(db.String(20), nullable=False, default='Requester')
     is_active = db.Column(db.Boolean, default=False, nullable=False)
     last_message_read_time = db.Column(db.DateTime)
-    
+
     requests = db.relationship('WorkOrder', backref='author', lazy='dynamic')
     notes = db.relationship('Note', backref='author', lazy='dynamic')
     notifications = db.relationship('Notification', backref='user', lazy='dynamic')
@@ -58,6 +59,22 @@ class User(db.Model, UserMixin):
             print(f'Password: {admin_password}')
             print('----------------------------------')
 
+class Vendor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company_name = db.Column(db.String(150), unique=True, nullable=False)
+    contact_name = db.Column(db.String(100), nullable=True)
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
+    specialty = db.Column(db.String(100), nullable=True)
+    # --- NEW FIELD ---
+    website = db.Column(db.String(255), nullable=True)
+
+    work_orders = db.relationship('WorkOrder', backref='vendor', lazy='dynamic')
+    quotes = db.relationship('Quote', backref='vendor', lazy='dynamic')
+
+    def __repr__(self):
+        return f"Vendor('{self.company_name}')"
+
 class WorkOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     wo_number = db.Column(db.String(100), nullable=False)
@@ -74,7 +91,6 @@ class WorkOrder(db.Model):
     contact_person_phone = db.Column(db.String(20), nullable=True)
     status = db.Column(db.String(50), nullable=False, default='New')
     tag = db.Column(db.String(255), nullable=True)
-    vendor_assigned = db.Column(db.String(100), nullable=True)
     date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     scheduled_date = db.Column(db.Date, nullable=True)
     date_completed = db.Column(db.DateTime, nullable=True)
@@ -82,10 +98,15 @@ class WorkOrder(db.Model):
     preferred_date_2 = db.Column(db.Date, nullable=True)
     preferred_date_3 = db.Column(db.Date, nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
+
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='work_order', lazy=True, cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='work_order', lazy=True, cascade="all, delete-orphan")
-    messages = db.relationship('Message', backref='work_order', lazy=True)
+    messages = db.relationship('Message', backref='work_order', lazy=True, cascade="all, delete-orphan")
+    quotes = db.relationship('Quote', backref='work_order', lazy=True, cascade="all, delete-orphan")
+
     viewers = db.relationship('User', secondary=work_order_viewers, lazy='subquery',
                               backref=db.backref('viewable_orders', lazy=True))
 
@@ -94,6 +115,7 @@ class Property(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     address = db.Column(db.String(200), nullable=False)
     property_manager = db.Column(db.String(100), nullable=True)
+    work_orders = db.relationship('WorkOrder', backref='property_relation', lazy='dynamic')
 
 class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -132,8 +154,23 @@ class Message(db.Model):
     recipient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     sender_email = db.Column(db.String(120))
     recipient_email = db.Column(db.String(120))
+    cc = db.Column(db.Text, nullable=True)
     subject = db.Column(db.String(255))
     body = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=True)
+    attachments = db.relationship('MessageAttachment', backref='message', lazy=True, cascade="all, delete-orphan")
+
+class MessageAttachment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=False)
+
+class Quote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    date_sent = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    status = db.Column(db.String(50), nullable=False, default='Pending')
+    work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
+    vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=False)

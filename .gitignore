@@ -1,22 +1,23 @@
-Environment variables
+# Environment variables
 .env
 *.env
 
-Python
-pycache/
+# Python
+__pycache__/
 *.py[cod]
 *$py.class
 
-IDE and OS files
+# IDE and OS files
 .vscode/
 .idea/
 .DS_Store
 
-Instance folder (contains the database)
+# Instance folder (contains the database)
 /instance/
 
-Uploads folder
-/app/uploads/
+# Uploads folder (ignore contents, not the folder itself)
+/uploads/*
+!/uploads/.gitkeep
 
-Virtual environment
+# Virtual environment
 venv/

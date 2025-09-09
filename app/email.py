@@ -1,12 +1,28 @@
+from flask import current_app, render_template
 from flask_mail import Message
 from app import mail
-from flask import current_app
+from threading import Thread
 
-def send_notification_email(subject, recipients, html_body, text_body=None, sender=None):
-    if sender is None:
-        sender = current_app.config['ADMINS'][0]
-    msg = Message(subject, sender=sender, recipients=recipients)
-    msg.body = text_body or 'This is an HTML email. Please use an email client that supports HTML.'
+def send_async_email(app, msg):
+    with app.app_context():
+        # The try...except block has been removed.
+        # If there's an error (e.g., bad credentials), it will now appear in your Flask terminal.
+        mail.send(msg)
+
+def send_notification_email(subject, recipients, text_body, html_body, attachments=None, cc=None, sender=None):
+    """
+    Standardized function to send notification emails.
+    """
+    app = current_app._get_current_object()
+    
+    effective_sender = sender or app.config['MAIL_DEFAULT_SENDER']
+    
+    msg = Message(subject, sender=effective_sender, recipients=recipients, cc=cc)
+    msg.body = text_body
     msg.html = html_body
-    mail.send(msg)
 
+    if attachments:
+        for filename, file_data in attachments:
+            msg.attach(filename, file_data.content_type, file_data.read())
+
+    Thread(target=send_async_email, args=(app, msg)).start()

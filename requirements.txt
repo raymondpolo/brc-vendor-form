@@ -1,3 +1,4 @@
+# Vendor Request Form/requirements.txt
 Flask
 Flask-SQLAlchemy
 Flask-Login
@@ -9,4 +10,8 @@ itsdangerous
 python-dotenv
 gunicorn
 psycopg2-binary
+python-magic-bin
 whitenoise
+Flask-Migrate
+SQLAlchemy-Utils
+WTForms-SQLAlchemy

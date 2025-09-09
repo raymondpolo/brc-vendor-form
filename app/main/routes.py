@@ -1,3 +1,4 @@
+# app/main/routes.py
 import os
 import csv
 import io
@@ -7,39 +8,34 @@ import uuid
 from functools import wraps
 from collections import Counter
 from datetime import datetime, time, timedelta
-from smtplib import SMTPDataError
 
 from flask import (render_template, request, redirect, url_for, flash,
                    abort, send_from_directory, jsonify, current_app, Response)
 from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
-from itsdangerous import URLSafeTimedSerializer
-from flask_wtf.csrf import CSRFProtect
 
 from app import db
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
-                        AuditLog, Attachment, Message)
+                        AuditLog, Attachment, Vendor, Quote)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
-                       PropertyUploadForm, AdminUpdateUserForm,
-                       AdminResetPasswordForm, UpdateAccountForm, ChangePasswordForm, InviteUserForm, AddUserForm, AssignVendorForm, PropertyForm, ReportForm, MessageForm)
+                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
-
-csrf = CSRFProtect()
-
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role not in ['Admin', 'Scheduler', 'Super User']:
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated_function
+from app.decorators import admin_required
 
 request_types_list = [
     'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
     'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
 ]
+
+def get_requester_initials(name):
+    parts = name.split()
+    if len(parts) > 1:
+        return (parts[0][0] + parts[-1][0]).upper()
+    elif parts:
+        return parts[0][:2].upper()
+    return ""
 
 def save_attachment(file, work_order_id, file_type='Attachment'):
     if not file or not file.filename:
@@ -102,13 +98,13 @@ def dashboard():
     status_counts = Counter(req.status for req in all_work_orders)
     type_counts = Counter(req.request_type for req in all_work_orders)
     property_counts = Counter(req.property for req in all_work_orders)
-    vendor_counts = Counter(req.vendor_assigned for req in all_work_orders if req.vendor_assigned)
+    vendor_counts = Counter(req.vendor.company_name for req in all_work_orders if req.vendor)
     
     approved_by_pm = Counter(wo.property_manager for wo in all_work_orders if wo.tag and 'Approved' in wo.tag.split(','))
     declined_by_pm = Counter(wo.property_manager for wo in all_work_orders if wo.tag and 'Declined' in wo.tag.split(','))
     
     goback_work_orders = WorkOrder.query.filter(WorkOrder.tag.like('%Go-back%')).all()
-    goback_by_vendor = Counter(wo.vendor_assigned or 'Unassigned' for wo in goback_work_orders)
+    goback_by_vendor = Counter(wo.vendor.company_name if wo.vendor else 'Unassigned' for wo in goback_work_orders)
 
     chart_data = {
         "status": {"labels": list(status_counts.keys()), "data": list(status_counts.values())},
@@ -127,10 +123,8 @@ def dashboard():
 
 @main.route('/requests')
 @login_required
+@admin_required
 def all_requests():
-    if current_user.role in ['Requester', 'Property Manager']:
-        return redirect(url_for('main.my_requests'))
-
     query = WorkOrder.query
     search_term = request.args.get('search')
     if search_term:
@@ -175,25 +169,48 @@ def my_requests():
 @main.route('/shared-with-me')
 @login_required
 def shared_requests():
-    requests = WorkOrder.query.filter(WorkOrder.viewers.contains(current_user)).order_by(WorkOrder.date_created.desc()).all()
+    query = WorkOrder.query.filter(WorkOrder.viewers.contains(current_user))
+    search_term = request.args.get('search')
+    if search_term:
+        query = query.filter(or_(
+            WorkOrder.id.like(f'%{search_term}%'),
+            WorkOrder.wo_number.like(f'%{search_term}%'),
+            WorkOrder.property.like(f'%{search_term}%'),
+            WorkOrder.requester_name.like(f'%{search_term}%')
+        ))
+    requests = query.order_by(WorkOrder.date_created.desc()).all()
     return render_template('shared_requests.html', title='Shared With Me', requests=requests)
 
 @main.route('/requests/status/<status>')
 @login_required
+@admin_required
 def requests_by_status(status):
-    if current_user.role in ['Requester', 'Property Manager']:
-        abort(403)
-    filtered_requests = WorkOrder.query.filter_by(status=status).order_by(WorkOrder.date_created.desc()).all()
+    query = WorkOrder.query.filter_by(status=status)
+    search_term = request.args.get('search')
+    if search_term:
+        query = query.filter(or_(
+            WorkOrder.id.like(f'%{search_term}%'),
+            WorkOrder.wo_number.like(f'%{search_term}%'),
+            WorkOrder.property.like(f'%{search_term}%'),
+            WorkOrder.requester_name.like(f'%{search_term}%')
+        ))
+    filtered_requests = query.order_by(WorkOrder.date_created.desc()).all()
     return render_template('requests_by_status.html', title=f'Requests: {status}', requests=filtered_requests, status=status)
 
 @main.route('/requests/tag/<tag_name>')
 @login_required
+@admin_required
 def requests_by_tag(tag_name):
-    if current_user.role in ['Requester', 'Property Manager']:
-        abort(403)
-    
-    tagged_requests = WorkOrder.query.filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
-    
+    query = WorkOrder.query.filter(WorkOrder.tag.like(f'%{tag_name}%'))
+    search_term = request.args.get('search')
+    if search_term:
+        query = query.filter(or_(
+            WorkOrder.id.like(f'%{search_term}%'),
+            WorkOrder.wo_number.like(f'%{search_term}%'),
+            WorkOrder.property.like(f'%{search_term}%'),
+            WorkOrder.requester_name.like(f'%{search_term}%')
+        ))
+    tagged_requests = query.order_by(WorkOrder.date_created.desc()).all()
     return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', requests=tagged_requests, tag_name=tag_name)
 
 @main.route('/request/<int:request_id>', methods=['GET', 'POST'])
@@ -206,13 +223,18 @@ def view_request(request_id):
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
+
     note_form = NoteForm()
     status_form = ChangeStatusForm()
     attachment_form = AttachmentForm()
     assign_vendor_form = AssignVendorForm()
-    user_names = [user.name for user in User.query.all()]
+    quote_form = QuoteForm()
+    requester_initials = get_requester_initials(work_order.requester_name)
+    quotes = work_order.quotes
+
     if is_admin_staff:
-        status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined']]
+        status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined', 'New']]
+    
     if request.method == 'GET':
         if is_admin_staff and work_order.status == 'New':
             work_order.status = 'Open'
@@ -220,11 +242,14 @@ def view_request(request_id):
             flash('Request status has been updated to Open.', 'info')
         db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
+
     if note_form.validate_on_submit() and 'post_note' in request.form:
-        note = Note(text=note_form.text.data, author=current_user, work_order=work_order)
+        note_text = note_form.text.data
+        note = Note(text=note_text, author=current_user, work_order=work_order)
         db.session.add(note)
         notified_users = {work_order.author} if work_order.author != current_user else set()
-        tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_form.text.data)
+        
+        tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
         for name in tagged_names:
             tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
             if tagged_user:
@@ -233,8 +258,9 @@ def view_request(request_id):
                 if tagged_user != current_user:
                     notified_users.add(tagged_user)
         db.session.commit()
+
         for user in notified_users:
-            notification = Notification(text=f'{current_user.name} left a note on Request #{work_order.id}',
+            notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
                 link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
             db.session.add(notification)
             email_body = f"""
@@ -245,6 +271,7 @@ def view_request(request_id):
             send_notification_email(
                 subject=f"New Note on Request #{work_order.id}",
                 recipients=[user.email],
+                text_body=f"{current_user.name} mentioned you in a note on Request #{work_order.id}",
                 html_body=render_template(
                     'email/notification_email.html',
                     title="New Note on Request",
@@ -256,38 +283,44 @@ def view_request(request_id):
         db.session.commit()
         flash('Your note has been added.', 'success')
         return redirect(url_for('main.view_request', request_id=work_order.id))
-    
-    pm = None
-    if work_order.property_manager:
-        pm = User.query.filter_by(name=work_order.property_manager, role='Property Manager').first()
-        
+
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.asc()).all()
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
-                           attachment_form=attachment_form, assign_vendor_form=assign_vendor_form, user_names=user_names, pm=pm)
+                           attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
+                           requester_initials=requester_initials, quote_form=quote_form, quotes=quotes)
+
 
 @main.route('/change_status/<int:request_id>', methods=['POST'])
 @login_required
+@admin_required
 def change_status(request_id):
-    if current_user.role not in ['Admin', 'Scheduler', 'Super User']:
-        abort(403)
     work_order = WorkOrder.query.get_or_404(request_id)
     form = ChangeStatusForm()
+    form.status.choices = [c for c in form.status.choices if c[0] != 'New']
     if current_user.role in ['Admin', 'Scheduler', 'Super User']:
         form.status.choices = [c for c in form.status.choices if c[0] not in ['Approved', 'Quote Declined']]
+    
     if form.validate_on_submit():
-        old_status, new_status = work_order.status, form.status.data
+        new_status = form.status.data
+        if new_status == 'Scheduled' and not form.scheduled_date.data:
+            flash('A scheduled date is required to change the status to "Scheduled".', 'danger')
+            return redirect(url_for('main.view_request', request_id=request_id))
+
+        old_status = work_order.status
         if old_status == new_status:
             return redirect(url_for('main.view_request', request_id=request_id))
+
         work_order.status = new_status
         log_text = f'Changed status from {old_status} to {new_status}.'
-        if new_status == 'Scheduled' and form.scheduled_date.data:
-            work_order.scheduled_date = form.scheduled_date.data
+        
+        if new_status == 'Scheduled':
+            work_order.scheduled_date = datetime.strptime(form.scheduled_date.data, '%m/%d/%Y').date()
             log_text += f' for {work_order.scheduled_date.strftime("%Y-%m-%d")}'
         else:
             work_order.scheduled_date = None
-        
+            
         current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
         if new_status == 'Closed':
             current_tags.add('Completed')
@@ -296,7 +329,7 @@ def change_status(request_id):
         
         if old_status == 'Closed' and new_status != 'Closed':
             current_tags.discard('Completed')
-        
+
         work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
 
@@ -308,6 +341,7 @@ def change_status(request_id):
             send_notification_email(
                 subject=f"Status Update for Request #{work_order.id}",
                 recipients=[work_order.author.email],
+                text_body=f"The status of your Request #{work_order.id} was changed to {new_status}.",
                 html_body=render_template(
                     'email/notification_email.html',
                     title="Request Status Updated",
@@ -316,6 +350,7 @@ def change_status(request_id):
                     link=url_for('main.view_request', request_id=work_order.id, _external=True)
                 )
             )
+        
         if new_status == 'Quote Sent' and work_order.property_manager:
             manager = User.query.filter_by(name=work_order.property_manager, role='Property Manager').first()
             if manager:
@@ -328,6 +363,7 @@ def change_status(request_id):
                 send_notification_email(
                     subject=f"Quote Approval Needed for Request #{work_order.id}",
                     recipients=[manager.email],
+                    text_body=f"A quote requires your approval for Request #{work_order.id}.",
                     html_body=render_template(
                         'email/notification_email.html',
                         title="Quote Approval Needed",
@@ -338,6 +374,9 @@ def change_status(request_id):
                 )
         db.session.commit()
         flash(f'Status updated to {new_status}.', 'success')
+    else:
+        flash('Could not update status. Please check the form for errors.', 'danger')
+
     return redirect(url_for('main.view_request', request_id=request_id))
 
 @main.route('/tag_request/<int:request_id>', methods=['POST'])
@@ -434,17 +473,37 @@ def cancel_request(request_id):
 
 @main.route('/assign_vendor/<int:request_id>', methods=['POST'])
 @login_required
+@admin_required
 def assign_vendor(request_id):
-    if current_user.role not in ['Admin', 'Scheduler', 'Super User']:
-        abort(403)
     work_order = WorkOrder.query.get_or_404(request_id)
-    form = AssignVendorForm()
-    if form.validate_on_submit():
-        vendor_name = form.vendor_assigned.data
-        work_order.vendor_assigned = vendor_name
-        db.session.add(AuditLog(text=f"Vendor '{vendor_name}' assigned.", user_id=current_user.id, work_order_id=work_order.id))
+    vendor_id = request.form.get('vendor_id')
+
+    if not vendor_id:
+        flash('No vendor selected.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+    vendor = Vendor.query.get(vendor_id)
+    if not vendor:
+        flash('Invalid vendor selected.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+    work_order.vendor_id = vendor.id
+    db.session.add(AuditLog(text=f"Vendor '{vendor.company_name}' assigned.", user_id=current_user.id, work_order_id=work_order.id))
+    db.session.commit()
+    flash(f"Vendor '{vendor.company_name}' has been assigned to this request.", 'success')
+    return redirect(url_for('main.view_request', request_id=request_id))
+
+@main.route('/unassign_vendor/<int:request_id>', methods=['POST'])
+@login_required
+@admin_required
+def unassign_vendor(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    if work_order.vendor:
+        vendor_name = work_order.vendor.company_name
+        work_order.vendor_id = None
+        db.session.add(AuditLog(text=f"Vendor '{vendor_name}' unassigned.", user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
-        flash(f"Vendor '{vendor_name}' has been assigned to this request.", 'success')
+        flash(f"Vendor '{vendor_name}' has been unassigned.", 'success')
     return redirect(url_for('main.view_request', request_id=request_id))
 
 @main.route('/notifications/read/<int:notification_id>')
@@ -457,170 +516,6 @@ def mark_notification_read(notification_id):
     db.session.commit()
     return redirect(notification.link)
 
-@main.route('/messages/')
-@main.route('/messages/<box>')
-@login_required
-def messages(box='inbox'):
-    shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
-    if box == 'sent':
-        query = Message.query.filter_by(sender_id=current_user.id)
-        if current_user.role in ['Admin', 'Scheduler', 'Super User'] and shared_email:
-            query = Message.query.filter(or_(Message.sender_id == current_user.id, Message.sender_email == shared_email))
-    else:
-        box = 'inbox'
-        query = Message.query.filter_by(recipient_id=current_user.id)
-        if current_user.role in ['Admin', 'Scheduler', 'Super User'] and shared_email:
-            query = Message.query.filter(or_(Message.recipient_id == current_user.id, Message.recipient_email == shared_email))
-            
-    messages = query.order_by(Message.timestamp.desc()).all()
-    return render_template('messages/inbox.html', title='Messages', messages=messages, box=box)
-
-@main.route('/messages/compose', methods=['GET', 'POST'])
-@login_required
-def compose_message():
-    form = MessageForm()
-    
-    sender_choices = [(current_user.email, f"{current_user.name} ({current_user.email})")]
-    if current_user.role in ['Admin', 'Scheduler', 'Super User']:
-        shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
-        if shared_email:
-            sender_choices.append((shared_email, f"Shared Account ({shared_email})"))
-    form.sender_choice.choices = sender_choices
-
-    recipient_email = request.args.get('recipient_email')
-    work_order_id = request.args.get('work_order_id', type=int)
-    subject = request.args.get('subject')
-
-    if form.validate_on_submit():
-        recipient = User.query.filter_by(email=form.recipient.data).first()
-        sender_email = form.sender_choice.data
-        
-        msg = Message(sender_id=current_user.id,
-                      sender_email=sender_email,
-                      recipient_email=form.recipient.data,
-                      subject=form.subject.data,
-                      body=form.body.data)
-        if recipient:
-            msg.recipient_id = recipient.id
-
-        if form.work_order_id.data:
-            msg.work_order_id = int(form.work_order_id.data)
-        
-        link = url_for('main.view_request', request_id=msg.work_order_id, _external=True) if msg.work_order_id else None
-
-        text_body = f"""{msg.body}
-
---
-Sent from the BRC Vendor Request Portal.
-You can reply directly to this email.
-"""
-        if link:
-            text_body += f"\nRelated to Request #{msg.work_order_id}: {link}"
-
-        html_body = f"""
-        <p>{msg.body.replace(chr(10), '<br>')}</p>
-        <br>
-        --
-        <p style="font-size: 0.9em; color: #6c757d;">
-            Sent from the BRC Vendor Request Portal.<br>
-            You can reply directly to this email.<br>
-            {'Related to <a href="' + link + '">Request #' + str(msg.work_order_id) + '</a>' if link else ''}
-        </p>
-        """
-        
-        try:
-            send_notification_email(
-                subject=f"[BRC Request #{msg.work_order_id or 'N/A'}] {msg.subject}",
-                recipients=[msg.recipient_email],
-                text_body=text_body,
-                html_body=html_body,
-                sender=sender_email
-            )
-            db.session.add(msg)
-            db.session.commit()
-            flash('Your message has been sent.', 'success')
-            return redirect(url_for('main.messages'))
-        except SMTPDataError:
-            flash('Email failed to send. The authenticated user does not have "Send As" permission for the selected sender email. Please check your email server settings.', 'danger')
-            return redirect(url_for('main.compose_message'))
-
-    elif request.method == 'GET':
-        if recipient_email:
-            form.recipient.data = recipient_email
-        if work_order_id:
-            form.work_order_id.data = work_order_id
-            if not subject:
-                form.subject.data = f'Regarding Work Request #{work_order_id}'
-        if subject:
-            form.subject.data = subject
-
-    return render_template('messages/compose_message.html', title='Compose Message', form=form)
-
-@main.route('/messages/<int:message_id>')
-@login_required
-def view_message(message_id):
-    message = Message.query.get_or_404(message_id)
-    is_recipient = message.recipient == current_user
-    is_sender = message.author == current_user
-
-    can_view_shared = False
-    if current_user.role in ['Admin', 'Scheduler', 'Super User']:
-        shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
-        if shared_email and (message.recipient_email == shared_email or message.sender_email == shared_email):
-            can_view_shared = True
-
-    if not (is_recipient or is_sender or can_view_shared):
-        abort(403)
-             
-    if message.recipient == current_user and not message.is_read:
-        message.is_read = True
-        db.session.commit()
-    return render_template('messages/view_message.html', title='View Message', message=message)
-
-@main.route('/email-webhook', methods=['POST'])
-@csrf.exempt
-def email_webhook():
-    data = request.json
-    if not data:
-        return 'Invalid data', 400
-
-    sender_info = data.get('sender', {})
-    sender = sender_info.get('email')
-    
-    to_list = data.get('to', [{}])
-    recipient = to_list[0].get('email') if to_list else None
-
-    subject = data.get('subject')
-    body_plain = data.get('text')
-
-    if not all([sender, recipient, subject, body_plain]):
-        return 'Missing data', 406
-
-    author = User.query.filter_by(email=sender).first()
-    sender_id = author.id if author else None
-
-    recipient_user = User.query.filter_by(email=recipient).first()
-    recipient_id = recipient_user.id if recipient_user else None
-
-    work_order_id = None
-    match = re.search(r'\[BRC Request #(\d+)\]', subject)
-    if match:
-        work_order_id = int(match.group(1))
-
-    msg = Message(
-        sender_id=sender_id,
-        sender_email=sender,
-        recipient_id=recipient_id,
-        recipient_email=recipient,
-        subject=subject,
-        body=body_plain,
-        work_order_id=work_order_id
-    )
-    db.session.add(msg)
-    db.session.commit()
-
-    return 'OK', 200
-
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required
 def new_request():
@@ -628,6 +523,10 @@ def new_request():
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
     if form.validate_on_submit():
+        date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
+        date2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
+        date3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
+
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
             request_type=form.request_type.data, description=form.description.data,
@@ -636,13 +535,20 @@ def new_request():
             property_manager=properties_dict.get(form.property.data, {}).get('manager', ''),
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
             contact_person=form.contact_person.data, contact_person_phone=form.contact_person_phone.data,
-            vendor_assigned=form.vendor_assigned.data,
-            preferred_date_1=form.date_1.data, preferred_date_2=form.date_2.data,
-            preferred_date_3=form.date_3.data, user_id=current_user.id)
+            preferred_date_1=date1, preferred_date_2=date2,
+            preferred_date_3=date3, user_id=current_user.id)
+        
+        if form.vendor_assigned.data:
+            vendor = Vendor.query.filter(Vendor.company_name.ilike(form.vendor_assigned.data)).first()
+            if vendor:
+                new_order.vendor_id = vendor.id
+
         db.session.add(new_order)
         db.session.commit()
+
         for file in form.attachments.data:
             save_attachment(file, new_order.id)
+            
         admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
         for user in admins_and_schedulers:
             if user != current_user:
@@ -652,6 +558,12 @@ def new_request():
         db.session.commit()
         flash('Your request has been created!', 'success')
         return redirect(url_for('main.my_requests'))
+    
+    elif request.method == 'POST':
+        print("--- FORM VALIDATION FAILED ---")
+        print("Errors:", form.errors)
+        print("----------------------------")
+        
     return render_template('request_form.html', title='New Request', form=form,
         properties=properties, property_data=json.dumps(properties_dict))
 
@@ -661,32 +573,41 @@ def edit_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+    
     if not (is_author or is_admin_staff):
-        abort(403)
+        flash('You do not have permission to edit this request.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
     if is_author and work_order.status in ['Closed', 'Cancelled']:
         flash('This request cannot be edited because it is already closed.', 'warning')
         return redirect(url_for('main.view_request', request_id=work_order.id))
+        
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
+    
     if form.validate_on_submit():
-        uploaded_files = form.attachments.data
-        del form.attachments
         form.populate_obj(work_order)
-        work_order.preferred_date_1 = form.date_1.data
-        work_order.preferred_date_2 = form.date_2.data
-        work_order.preferred_date_3 = form.date_3.data
-        work_order.vendor_assigned = form.vendor_assigned.data
+        
+        work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
+        work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
+        work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
+        
         db.session.add(AuditLog(text='Edited request details.', user_id=current_user.id, work_order_id=work_order.id))
-        for file in uploaded_files:
-            if file and file.filename:
-                save_attachment(file, work_order.id)
         db.session.commit()
         flash('Request has been updated.', 'success')
         return redirect(url_for('main.view_request', request_id=work_order.id))
-    form.date_1.data = work_order.preferred_date_1
-    form.date_2.data = work_order.preferred_date_2
-    form.date_3.data = work_order.preferred_date_3
+        
+    elif request.method == 'POST':
+        print("--- EDIT FORM VALIDATION FAILED ---")
+        print("Errors:", form.errors)
+        print("---------------------------------")
+
+    if request.method == 'GET':
+        form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
+        form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
+        form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
+    
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
                            properties=properties, property_data=json.dumps(properties_dict))
 
@@ -696,17 +617,23 @@ def upload_attachment(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     form = AttachmentForm()
     if form.validate_on_submit():
-        file = form.file.data
-        file_type = request.form.get('file_type', 'Attachment')
-        
-        filename = save_attachment(file, request_id, file_type)
-        
-        if filename:
-            db.session.add(AuditLog(text=f'Uploaded {file_type}: {secure_filename(file.filename)}', user_id=current_user.id, work_order_id=work_order.id))
-            flash(f'{file_type} uploaded successfully.', 'success')
-        else:
-            flash('No file selected.', 'danger')
+        for file in form.file.data:
+            if file and file.filename:
+                file_type = request.form.get('file_type', 'Attachment')
+                filename = save_attachment(file, request_id, file_type)
+                
+                if filename:
+                    db.session.add(AuditLog(text=f'Uploaded {file_type}: {secure_filename(file.filename)}', user_id=current_user.id, work_order_id=work_order.id))
+                    flash(f'{file_type} "{secure_filename(file.filename)}" uploaded successfully.', 'success')
+                else:
+                    flash('There was an error uploading one of the files.', 'danger')
+            else:
+                flash('No file selected or file was empty.', 'danger')
+        db.session.commit()
+    else:
+        flash('File upload failed validation.', 'danger')
     return redirect(url_for('main.view_request', request_id=request_id))
+
 
 @main.route('/download_attachment/<int:attachment_id>')
 @login_required
@@ -750,208 +677,6 @@ def account():
         return redirect(url_for('main.account'))
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
-@main.route('/admin/users', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def manage_users():
-    invite_form = InviteUserForm()
-    add_user_form = AddUserForm()
-    if invite_form.validate_on_submit() and 'invite_user' in request.form:
-        user = User(name=invite_form.name.data,
-                    email=invite_form.email.data,
-                    role=invite_form.role.data,
-                    is_active=False)
-        db.session.add(user)
-        db.session.commit()
-        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        token = s.dumps(user.email, salt='account-setup-salt')
-        email_body = f"""
-        <p>You have been invited to create an account for the BRC Vendor Form.</p>
-        <p>Please click the link below to set your password and activate your account. This link will expire in 24 hours.</p>
-        """
-        send_notification_email(
-            subject="You're invited to the BRC Vendor Form",
-            recipients=[user.email],
-            html_body=render_template(
-                'email/notification_email.html',
-                title="Account Invitation",
-                user=user,
-                body_content=email_body,
-                link=url_for('auth.set_password', token=token, _external=True)
-            )
-        )
-        flash(f'An invitation has been sent to {user.email}.', 'success')
-        return redirect(url_for('main.manage_users'))
-    if add_user_form.validate_on_submit() and 'add_user' in request.form:
-        if current_user.role == 'Super User':
-            user = User(name=add_user_form.name.data,
-                        email=add_user_form.email.data,
-                        role=add_user_form.role.data,
-                        is_active=True)
-            user.set_password(add_user_form.password.data)
-            db.session.add(user)
-            db.session.commit()
-            flash(f'User {user.name} has been added and is now active.', 'success')
-        else:
-            flash('Only a Super User can add users directly.', 'danger')
-        return redirect(url_for('main.manage_users'))
-    all_users = User.query.all()
-    return render_template('manage_users.html', title='User Management',
-                           invite_form=invite_form, add_user_form=add_user_form, users=all_users)
-
-@main.route('/admin/properties', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def manage_properties():
-    property_form = PropertyForm()
-    upload_form = PropertyUploadForm()
-    property_managers = User.query.filter_by(role='Property Manager').all()
-    property_form.property_manager.choices = [("", "Select Manager...")] + [(pm.name, pm.name) for pm in property_managers]
-    
-    all_properties = Property.query.order_by(Property.name).all()
-    return render_template('manage_properties.html', title='Property Management',
-                           property_form=property_form, upload_form=upload_form, properties=all_properties)
-
-@main.route('/admin/upload_properties_csv', methods=['POST'])
-@login_required
-@admin_required
-def upload_properties_csv():
-    if current_user.role != 'Super User':
-        abort(403)
-    
-    upload_form = PropertyUploadForm()
-    if upload_form.validate_on_submit():
-        try:
-            csv_file = upload_form.csv_file.data
-            stream = io.StringIO(csv_file.stream.read().decode("UTF8"), newline=None)
-            csv_reader = csv.reader(stream)
-            next(csv_reader, None)
-            
-            updated_count = 0
-            added_count = 0
-
-            for row in csv_reader:
-                if len(row) == 3:
-                    property_name = row[0].strip()
-                    address = row[1].strip()
-                    manager = row[2].strip()
-
-                    prop = Property.query.filter_by(name=property_name).first()
-                    if prop:
-                        prop.address = address
-                        prop.property_manager = manager
-                        updated_count += 1
-                    else:
-                        new_property = Property(name=property_name, address=address, property_manager=manager)
-                        db.session.add(new_property)
-                        added_count += 1
-            
-            db.session.commit()
-            flash(f'Properties successfully processed. Added: {added_count}, Updated: {updated_count}.', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'An error occurred during CSV upload: {e}', 'danger')
-    else:
-        flash('No file or an invalid file type was selected.', 'danger')
-        
-    return redirect(url_for('main.manage_properties'))
-
-@main.route('/admin/add_property', methods=['POST'])
-@login_required
-@admin_required
-def add_property():
-    form = PropertyForm()
-    property_managers = User.query.filter_by(role='Property Manager').all()
-    form.property_manager.choices = [("", "Select Manager...")] + [(pm.name, pm.name) for pm in property_managers]
-
-    if form.validate_on_submit():
-        new_property = Property(name=form.name.data,
-                                address=form.address.data,
-                                property_manager=form.property_manager.data)
-        db.session.add(new_property)
-        db.session.commit()
-        flash('Property added successfully.', 'success')
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"Error in {getattr(form, field).label.text}: {error}", 'danger')
-    return redirect(url_for('main.manage_properties'))
-
-@main.route('/admin/edit_property/<int:property_id>', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def edit_property(property_id):
-    prop = Property.query.get_or_404(property_id)
-    form = PropertyForm(obj=prop)
-    property_managers = User.query.filter_by(role='Property Manager').all()
-    form.property_manager.choices = [("", "Select Manager...")] + [(pm.name, pm.name) for pm in property_managers]
-
-    if form.validate_on_submit():
-        prop.name = form.name.data
-        prop.address = form.address.data
-        prop.property_manager = form.property_manager.data
-        db.session.commit()
-        flash('Property updated successfully.', 'success')
-        return redirect(url_for('main.manage_properties'))
-
-    return render_template('edit_property.html', title='Edit Property', form=form, property=prop)
-
-@main.route('/admin/delete_property/<int:property_id>', methods=['POST'])
-@login_required
-@admin_required
-def delete_property(property_id):
-    if current_user.role != 'Super User':
-        abort(403)
-    prop = Property.query.get_or_404(property_id)
-    
-    if WorkOrder.query.filter_by(property=prop.name).first():
-        flash('Cannot delete property. It is currently associated with one or more work requests.', 'danger')
-        return redirect(url_for('main.manage_properties'))
-
-    db.session.delete(prop)
-    db.session.commit()
-    flash('Property has been deleted.', 'success')
-    return redirect(url_for('main.manage_properties'))
-    
-@main.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def edit_user(user_id):
-    user_to_edit = User.query.get_or_404(user_id)
-    if current_user.role == 'Admin' and user_to_edit.role in ['Admin', 'Super User']:
-        abort(403)
-    update_form = AdminUpdateUserForm(original_email=user_to_edit.email, obj=user_to_edit)
-    password_form = AdminResetPasswordForm()
-    if 'update_user' in request.form and update_form.validate_on_submit():
-        update_form.populate_obj(user_to_edit)
-        db.session.commit()
-        flash(f'User {user_to_edit.name} has been updated.', 'success')
-        return redirect(url_for('main.manage_users'))
-    if 'reset_password' in request.form and password_form.validate_on_submit():
-        user_to_edit.set_password(password_form.new_password.data)
-        db.session.commit()
-        flash(f"Password for {user_to_edit.name} has been reset.", "success")
-        return redirect(url_for('main.edit_user', user_id=user_id))
-    return render_template('edit_user.html', title='Edit User', update_form=update_form,
-                           password_form=password_form, user=user_to_edit)
-
-@main.route('/delete_user/<int:user_id>', methods=['POST'])
-@login_required
-def delete_user(user_id):
-    if current_user.role != 'Super User':
-        abort(403)
-    user_to_delete = User.query.get_or_404(user_id)
-    if user_to_delete == current_user:
-        flash('You cannot delete your own account.', 'danger')
-        return redirect(url_for('main.manage_users'))
-    if user_to_delete.requests:
-        flash('This user cannot be deleted because they have existing requests. Please reassign or delete their requests first.', 'danger')
-        return redirect(url_for('main.manage_users'))
-    db.session.delete(user_to_delete)
-    db.session.commit()
-    flash(f'User {user_to_delete.name} has been deleted.', 'success')
-    return redirect(url_for('main.manage_users'))
-
 @main.route('/reports')
 @login_required
 @admin_required
@@ -988,7 +713,7 @@ def download_all_work_orders():
     csv_writer.writerow(headers)
     for wo in work_orders:
         csv_writer.writerow([
-            wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor_assigned, 
+            wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor.company_name if wo.vendor else '', 
             wo.date_created.strftime('%Y-%m-%d %H:%M'),
             wo.date_completed.strftime('%Y-%m-%d %H:%M') if wo.date_completed else '',
             wo.requester_name, wo.request_type, wo.property, wo.unit,
@@ -1053,7 +778,7 @@ def download_summary_report():
         mimetype="text/csv",
         headers={"Content-Disposition": f"summary_report_{date_type}.csv"}
     )
-    
+
 @main.route('/calendar')
 @login_required
 def calendar():
@@ -1071,6 +796,85 @@ def api_events():
                    'url': url_for('main.view_request', request_id=event.id)}
                   for event in events]
     return jsonify(event_list)
+    
+@main.route('/api/vendors/search')
+@login_required
+def search_vendors():
+    q = request.args.get('q')
+    if q:
+        vendors = Vendor.query.filter(Vendor.company_name.ilike(f'%{q}%')).all()
+        return jsonify([{'id': v.id, 'company_name': v.company_name, 'contact_name': v.contact_name, 'email': v.email, 'phone': v.phone, 'specialty': v.specialty, 'website': v.website} for v in vendors])
+    return jsonify([])
+
+@main.route('/api/users/search')
+@login_required
+def api_user_search():
+    users = User.query.filter_by(is_active=True).all()
+    user_list = [{'key': user.name, 'value': user.name.replace(' ', '')} for user in users]
+    return jsonify(user_list)
+
+# --- NEW ROUTE ---
+@main.route('/request/<int:request_id>/send_email', methods=['POST'])
+@login_required
+@admin_required
+def send_work_order_email(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    data = request.get_json()
+    recipient = data.get('recipient')
+    cc = data.get('cc')
+    subject = data.get('subject')
+    body = data.get('body')
+
+    if not recipient:
+        return jsonify({'success': False, 'message': 'Recipient email is required.'}), 400
+
+    recipients = [recipient]
+    cc_list = [email.strip() for email in cc.split(',')] if cc else []
+
+    text_body = render_template('email/work_order_email.txt', work_order=work_order, body=body)
+    html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
+
+    send_notification_email(
+        subject=subject,
+        recipients=recipients,
+        cc=cc_list,
+        text_body=text_body,
+        html_body=html_body
+    )
+    
+    db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Email sent successfully!'})
+
+@main.route('/request/<int:request_id>/add_quote', methods=['POST'])
+@login_required
+@admin_required
+def add_quote(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = QuoteForm()
+    if form.validate_on_submit():
+        if work_order.vendor:
+            file = form.quote_file.data
+            filename = save_attachment(file, work_order.id, file_type='Quote')
+            
+            if filename:
+                quote = Quote(
+                    filename=filename,
+                    work_order_id=work_order.id,
+                    vendor_id=work_order.vendor.id
+                )
+                db.session.add(quote)
+                db.session.add(AuditLog(text=f"Quote '{file.filename}' uploaded.", user_id=current_user.id, work_order_id=work_order.id))
+                db.session.commit()
+                flash('Quote uploaded successfully.', 'success')
+            else:
+                flash('There was an error uploading the quote file.', 'danger')
+        else:
+            flash('A vendor must be assigned before adding a quote.', 'danger')
+    else:
+        flash('There was an error with the quote form.', 'danger')
+    return redirect(url_for('main.view_request', request_id=request_id))
 
 def get_date_range(range_name, start_str, end_str):
     today = datetime.utcnow().date()
@@ -1106,13 +910,13 @@ def get_date_range(range_name, start_str, end_str):
         end_date = datetime(last_year, 12, 31).date()
     elif range_name == 'custom_date':
         if start_str:
-            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            start_date = datetime.strptime(start_str, '%m/%d/%Y').date()
             end_date = start_date
     elif range_name == 'custom_range':
         if start_str:
-            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            start_date = datetime.strptime(start_str, '%m/%d/%Y').date()
         if end_str:
-            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%m/%d/%Y').date()
 
     if start_date:
         start_date = datetime.combine(start_date, time.min)
@@ -1120,4 +924,3 @@ def get_date_range(range_name, start_str, end_str):
         end_date = datetime.combine(end_date, time.max)
         
     return start_date, end_date
-

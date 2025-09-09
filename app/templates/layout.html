@@ -7,18 +7,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/tributejs/dist/tribute.css" />
     <style>
         body { font-family: 'Inter', sans-serif; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://unpkg.com/tributejs"></script>
 </head>
 <body class="bg-gray-100">
     <div x-data="{ isSidebarOpen: true }" class="flex h-screen bg-gray-100">
         {% if current_user.is_authenticated %}
-        <!-- Sidebar -->
         <aside :class="isSidebarOpen ? 'w-64' : 'w-20'" class="bg-gray-800 text-white transition-all duration-300 ease-in-out flex flex-col">
             <div class="flex items-center justify-center h-20 border-b border-gray-700 px-4">
-                <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="h-12 w-auto">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="h-12 w-auto">
                 <h1 x-show="isSidebarOpen" class="ml-3 text-xl font-bold">BRC Vendor Form</h1>
             </div>
             <nav class="flex-1 px-4 py-6 space-y-2">
@@ -55,7 +58,7 @@
                     <span x-show="isSidebarOpen" class="ml-4">Reports</span>
                 </a>
                 
-                <div x-data="{ open: {{ 'true' if request.endpoint.startswith('main.manage_') or request.endpoint in ['main.edit_user', 'main.edit_property'] else 'false' }} }">
+                <div x-data="{ open: {{ 'true' if request.endpoint.startswith('admin.') else 'false' }} }">
                     <button @click="open = !open" class="flex items-center justify-between w-full px-4 py-2 rounded-md text-gray-300 hover:bg-gray-700 hover:text-white">
                         <div class="flex items-center">
                             <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.096 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -64,8 +67,9 @@
                         <svg x-show="isSidebarOpen" class="w-4 h-4" :class="{'transform rotate-180': open}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     <div x-show="open && isSidebarOpen" class="pl-8 py-2 space-y-2 text-sm">
-                        <a href="{{ url_for('main.manage_users') }}" class="block px-4 py-2 rounded-md {% if request.endpoint == 'main.manage_users' or request.endpoint == 'main.edit_user' %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">User Management</a>
-                        <a href="{{ url_for('main.manage_properties') }}" class="block px-4 py-2 rounded-md {% if request.endpoint == 'main.manage_properties' or request.endpoint == 'main.edit_property' %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">Property Management</a>
+                        <a href="{{ url_for('admin.manage_users') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_users', 'admin.edit_user'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">User Management</a>
+                        <a href="{{ url_for('admin.manage_properties') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_properties', 'admin.edit_property'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">Property Management</a>
+                        <a href="{{ url_for('admin.manage_vendors') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_vendors', 'admin.edit_vendor'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">Vendor Management</a>
                     </div>
                 </div>
                 {% endif %}
@@ -84,20 +88,10 @@
             <header class="flex items-center justify-between p-4 bg-white border-b border-gray-200">
                 <h2 class="text-2xl font-semibold text-gray-800">{{ title }}</h2>
                 <div class="flex items-center space-x-4">
-                    <!-- Messaging Icon -->
-                    <a href="{{ url_for('main.messages') }}" class="relative p-2 text-gray-500 bg-white rounded-full hover:bg-gray-100 hover:text-gray-700">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        {% if unread_messages_count and unread_messages_count > 0 %}
-                            <span class="absolute top-0 right-0 h-4 w-4 text-xs font-bold text-white bg-red-500 rounded-full flex items-center justify-center">{{ unread_messages_count }}</span>
-                        {% endif %}
-                    </a>
-                    <!-- Notification Icon -->
                     <div x-data="{ notifOpen: false }" class="relative">
                         <button @click="notifOpen = !notifOpen" class="relative p-2 text-gray-500 bg-white rounded-full hover:bg-gray-100 hover:text-gray-700">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                            {% if unread_notifications_count > 0 %}
+                            {% if unread_notifications %}
                             <span class="absolute top-0 right-0 h-2 w-2 mt-1 mr-2 bg-red-500 rounded-full"></span>
                             {% endif %}
                         </button>
@@ -150,4 +144,3 @@
     </div>
 </body>
 </html>
-

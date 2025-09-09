@@ -2,19 +2,20 @@
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <h2 class="text-2xl font-bold mb-6 text-gray-800">Edit Request #{{ work_order.id }}</h2>
-    <form method="POST" action="" enctype="multipart/form-data">
+    <form method="POST" action="{{ url_for('main.edit_request', request_id=work_order.id) }}" enctype="multipart/form-data" 
+          x-data="{ 
+              property: '{{ work_order.property | e }}', 
+              address: '{{ work_order.address | e }}', 
+              manager: '{{ work_order.property_manager | e }}' 
+          }">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700">Requester</label>
-                <input type="text" value="{{ work_order.author.name }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
-            </div>
 
-            <div class="md:col-span-2">
-                {{ form.description.label(class="block text-sm font-medium text-gray-700") }}
-                {{ form.description(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm", rows="4") }}
+            <div>
+                <label for="requester_name" class="block text-sm font-medium text-gray-700">Name of Requester</label>
+                <input type="text" name="requester_name" id="requester_name" value="{{ work_order.author.name }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
+            
             <div>
                 {{ form.wo_number.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.wo_number(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
@@ -24,13 +25,44 @@
                 {{ form.request_type(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
             </div>
             <div>
-                {{ form.property.label(class="block text-sm font-medium text-gray-700") }}
-                {{ form.property(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                <label for="preferred_vendor" class="block text-sm font-medium text-gray-700">Preferred Vendor (Optional)</label>
+                <input type="text" name="preferred_vendor" id="preferred_vendor" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <div class="md:col-span-2">
+                {{ form.description.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.description(rows="4", class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                 {% if form.description.errors %}
+                    <div class="text-red-500 text-xs mt-1">
+                        {% for error in form.description.errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div>
+                <label for="property" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
+                <input list="properties" name="property" id="property" x-model="property" 
+                       @change="address = {{ property_data }}[property]?.address || ''; manager = {{ property_data }}[property]?.manager || ''" 
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
+                <datalist id="properties">
+                    {% for prop in properties %}
+                    <option value="{{ prop.name }}">
+                    {% endfor %}
+                </datalist>
             </div>
             <div>
                 {{ form.unit.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.unit(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
             </div>
+
+            <div class="md:col-span-2">
+                <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+                <input type="text" name="address" id="address" x-model="address" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+            </div>
+            <div class="md:col-span-2">
+                <label for="property_manager" class="block text-sm font-medium text-gray-700">Property Manager</label>
+                <input type="text" name="property_manager" id="property_manager" x-model="manager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+            </div>
+
             <div>
                 {{ form.tenant_name.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.tenant_name(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
@@ -47,52 +79,28 @@
                 {{ form.contact_person_phone.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.contact_person_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
             </div>
-            <div>
-                {{ form.vendor_assigned.label(class="block text-sm font-medium text-gray-700") }}
-                {{ form.vendor_assigned(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-            </div>
+
              <div class="md:col-span-2">
-                <span class="block text-sm font-medium text-gray-700 mb-2">Preferred Dates</span>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        {{ form.date_1.label(class="block text-xs font-medium text-gray-500") }}
-                        {{ form.date_1(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                    </div>
-                    <div>
-                        {{ form.date_2.label(class="block text-xs font-medium text-gray-500") }}
-                        {{ form.date_2(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                    </div>
-                    <div>
-                        {{ form.date_3.label(class="block text-xs font-medium text-gray-500") }}
-                        {{ form.date_3(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                    </div>
+                <label class="block text-sm font-medium text-gray-700">Preferred Date Range (at least 3) <span class="text-red-500">*</span></label>
+                <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {{ form.date_1(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                    {{ form.date_2(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                    {{ form.date_3(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
                 </div>
             </div>
-            <div class="md:col-span-2">
-                {{ form.attachments.label(class="block text-sm font-medium text-gray-700") }}
-                {{ form.attachments(class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+            
             </div>
-
-            <div class="md:col-span-2">
-                <h4 class="text-md font-medium text-gray-800">Existing Attachments</h4>
-                <ul class="mt-2 space-y-2">
-                    {% for attachment in work_order.attachments %}
-                        <li class="flex items-center justify-between text-sm text-gray-600">
-                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-indigo-600 hover:underline">{{ attachment.filename }}</a>
-                            <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
-                                <button type="submit" class="text-red-500 hover:text-red-700 font-bold">&times;</button>
-                            </form>
-                        </li>
-                    {% else %}
-                        <li>No attachments yet.</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
         <div class="mt-8 flex justify-end space-x-4">
             <a href="{{ url_for('main.view_request', request_id=work_order.id) }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
             {{ form.submit(value="Save Changes", class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
         </div>
     </form>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        flatpickr("input[name='date_1']", { dateFormat: "m/d/Y" });
+        flatpickr("input[name='date_2']", { dateFormat: "m/d/Y" });
+        flatpickr("input[name='date_3']", { dateFormat: "m/d/Y" });
+    });
+</script>
 {% endblock content %}
