@@ -1,3 +1,4 @@
+# app/auth/routes.py
 from flask import render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_user, logout_user, current_user
 from itsdangerous import URLSafeTimedSerializer
@@ -31,8 +32,7 @@ def logout():
 def set_password(token):
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:
-        # CORRECTED: max_age changed from 86400 (1 day) to 604800 (7 days)
-        email = s.loads(token, salt='account-setup-salt', max_age=604800)
+        email = s.loads(token, salt='account-setup-salt', max_age=604800) # 7 days
     except:
         flash('The activation link is invalid or has expired.', 'danger')
         return redirect(url_for('auth.login'))

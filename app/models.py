@@ -1,4 +1,4 @@
-# Vendor Request Form/app/models.py
+# app/models.py
 from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -66,7 +66,6 @@ class Vendor(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=True)
     phone = db.Column(db.String(20), nullable=True)
     specialty = db.Column(db.String(100), nullable=True)
-    # --- NEW FIELD ---
     website = db.Column(db.String(255), nullable=True)
 
     work_orders = db.relationship('WorkOrder', backref='vendor', lazy='dynamic')

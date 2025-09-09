@@ -1,3 +1,4 @@
+# app/forms.py
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, SelectField, TextAreaField, MultipleFileField, HiddenField, FloatField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional, URL
@@ -145,7 +146,6 @@ class NoteForm(FlaskForm):
     submit = SubmitField('Post Note')
 
 class ChangeStatusForm(FlaskForm):
-    # CORRECTED: 'New' is removed from the choices
     status = SelectField('New Status', choices=[
         'Open', 'Pending', 'Awaiting Approval', 'Quote Sent', 'Scheduled', 'Closed', 'Cancelled'
     ], validators=[DataRequired()])
