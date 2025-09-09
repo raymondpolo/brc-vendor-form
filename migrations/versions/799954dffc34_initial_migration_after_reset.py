@@ -1,8 +1,8 @@
-"""Initial migration
+"""Initial migration after reset
 
-Revision ID: 49c944191cc5
+Revision ID: 799954dffc34
 Revises: 
-Create Date: 2025-09-07 12:18:24.000045
+Create Date: 2025-09-08 22:05:13.260813
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '49c944191cc5'
+revision = '799954dffc34'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -44,6 +44,7 @@ def upgrade():
     sa.Column('email', sa.String(length=120), nullable=True),
     sa.Column('phone', sa.String(length=20), nullable=True),
     sa.Column('specialty', sa.String(length=100), nullable=True),
+    sa.Column('website', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('company_name'),
     sa.UniqueConstraint('email')
@@ -143,8 +144,7 @@ def upgrade():
     )
     op.create_table('quote',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('amount', sa.Float(), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('filename', sa.String(length=255), nullable=False),
     sa.Column('date_sent', sa.DateTime(), nullable=False),
     sa.Column('status', sa.String(length=50), nullable=False),
     sa.Column('work_order_id', sa.Integer(), nullable=False),
