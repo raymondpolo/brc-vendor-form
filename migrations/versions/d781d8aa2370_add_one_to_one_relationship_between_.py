@@ -15,11 +15,6 @@ down_revision = '799954dffc34'
 branch_labels = None
 depends_on = None
 
-# This line is crucial for PostgreSQL. It tells Alembic not to wrap this
-# specific migration in a single transaction. This prevents the "transaction aborted"
-# error when the optional DROP CONSTRAINT fails.
-disable_ddl_transaction = True
-
 
 def upgrade():
     # This block will handle the alteration of the 'quote' table.
@@ -48,23 +43,32 @@ def upgrade():
         batch_op.drop_column('filename')
 
     # This block will handle the alteration of the 'vendor' table.
-    try:
+    # We introspect the database to see if the constraint exists before trying to drop it.
+    # This avoids errors that would abort the transaction on PostgreSQL.
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    constraints = insp.get_unique_constraints('vendor')
+    if any(c['name'] == 'uq_vendor_email' for c in constraints):
         with op.batch_alter_table('vendor', schema=None) as batch_op:
-            # Attempt to drop the unique constraint on the 'email' column.
             batch_op.drop_constraint('uq_vendor_email', type_='unique')
-    except Exception as e:
-        # If the constraint doesn't exist, catch the error and print a message.
-        # This is safer for different database backends.
-        print(f"Skipping drop constraint on vendor.email as it may not exist: {e}")
+    else:
+        # This print statement is helpful for logging during deployment.
+        print("Constraint 'uq_vendor_email' not found on table 'vendor', skipping drop.")
 
 
 def downgrade():
     # Revert the changes in the reverse order of the upgrade.
-    try:
+    # Similar to the upgrade, we check if the constraint exists before creating it
+    # to make the downgrade process more robust.
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    constraints = insp.get_unique_constraints('vendor')
+    if not any(c['name'] == 'uq_vendor_email' for c in constraints):
         with op.batch_alter_table('vendor', schema=None) as batch_op:
             batch_op.create_unique_constraint('uq_vendor_email', ['email'])
-    except Exception as e:
-        print(f"Could not create unique constraint on vendor.email: {e}")
+    else:
+        print("Constraint 'uq_vendor_email' already exists, skipping creation.")
+
 
     with op.batch_alter_table('quote', schema=None) as batch_op:
         batch_op.add_column(sa.Column('filename', sa.VARCHAR(length=255), nullable=True))
@@ -81,3 +85,4 @@ def downgrade():
         batch_op.alter_column('filename', existing_type=sa.VARCHAR(length=255), nullable=False)
         batch_op.drop_constraint('fk_quote_attachment_id_attachment', type_='foreignkey')
         batch_op.drop_column('attachment_id')
+

@@ -102,18 +102,9 @@ def run_migrations_online():
             target_metadata=get_metadata(),
             **conf_args
         )
-        
-        # This is the key change: we get the migration context
-        # and check the `disable_ddl_transaction` flag.
-        migration_context = context.get_context()
-        
-        # If the flag is set, we run migrations outside the transaction block.
-        if migration_context.script.disable_ddl_transaction:
+
+        with context.begin_transaction():
             context.run_migrations()
-        # Otherwise, we run them inside the transaction block as before.
-        else:
-            with context.begin_transaction():
-                context.run_migrations()
 
 
 if context.is_offline_mode():
