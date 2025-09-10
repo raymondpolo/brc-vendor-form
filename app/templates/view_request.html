@@ -92,13 +92,26 @@
             <div class="space-y-4">
                 {% for quote in quotes %}
                 <div class="flex items-center justify-between text-sm">
-                    <div>
-                        <span class="font-medium text-gray-900">{{ quote.vendor.company_name }}:</span>
-                        <a href="#" class="view-attachment-btn text-indigo-600 hover:underline ml-2" 
+                    <div class="flex items-center min-w-0">
+                        <span class="font-medium text-gray-900 flex-shrink-0">{{ quote.vendor.company_name }}:</span>
+                        <a href="#" class="view-attachment-btn text-indigo-600 hover:underline ml-2 truncate" 
                            data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}" 
-                           data-filename="{{ quote.attachment.filename }}">{{ quote.attachment.filename }}</a>
+                           data-filename="{{ quote.attachment.filename }}"
+                           title="{{ quote.attachment.filename }}">
+                           {{ quote.attachment.filename }}
+                        </a>
                     </div>
-                    <span class="text-xs text-gray-500">{{ quote.date_sent.strftime('%m/%d/%Y') }}</span>
+                    <div class="flex items-center space-x-4 flex-shrink-0 ml-4">
+                        <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-500 hover:text-indigo-600" title="Download Quote">
+                           <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        </a>
+                        {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                        <form action="{{ url_for('main.delete_quote', quote_id=quote.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this quote?');">
+                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold" title="Delete Quote">&times;</button>
+                        </form>
+                        {% endif %}
+                        <span class="text-xs text-gray-500">{{ quote.date_sent.strftime('%m/%d/%Y') }}</span>
+                    </div>
                 </div>
                 {% else %}
                 <p class="text-sm text-gray-500">No quotes have been uploaded yet.</p>
@@ -342,16 +355,24 @@
                 {% for attachment in work_order.attachments %}
                     {% if attachment.file_type != 'Quote' %}
                     <li class="flex items-center justify-between text-sm">
-                        <div>
-                             <a href="#" class="view-attachment-btn text-indigo-600 hover:underline"
+                        <div class="flex items-center min-w-0">
+                             <a href="#" class="view-attachment-btn text-indigo-600 hover:underline truncate"
                                 data-url="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}"
-                                data-filename="{{ attachment.filename }}">{{ attachment.filename }}</a>
+                                data-filename="{{ attachment.filename }}"
+                                title="{{ attachment.filename }}">
+                                {{ attachment.filename }}
+                             </a>
                         </div>
-                        {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-                        <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
-                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold">&times;</button>
-                        </form>
-                        {% endif %}
+                        <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
+                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-500 hover:text-indigo-600" title="Download Attachment">
+                               <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            </a>
+                            {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                            <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
+                                <button type="submit" class="text-red-500 hover:text-red-700 font-bold">&times;</button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </li>
                     {% endif %}
                 {% else %}
@@ -629,3 +650,4 @@
     });
 </script>
 {% endblock content %}
+

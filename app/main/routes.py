@@ -939,8 +939,38 @@ def add_quote(request_id):
         else:
             flash('There was an error saving the quote file.', 'danger')
     else:
-        flash('There was an error with the quote form. Please select a vendor and a valid file.', 'danger')
+        for field, errors in form.errors.items():
+            for error_message in errors:
+                flash(f"Error in {getattr(form, field).label.text}: {error_message}", 'danger')
     return redirect(url_for('main.view_request', request_id=request_id))
+
+@main.route('/request/delete_quote/<int:quote_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_quote(quote_id):
+    quote = Quote.query.get_or_404(quote_id)
+    work_order_id = quote.work_order_id
+    attachment = Attachment.query.get(quote.attachment_id)
+
+    if attachment:
+        try:
+            os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
+        except OSError as e:
+            print(f"Error deleting file {attachment.filename}: {e}")
+            pass  # Continue even if file is not found
+        
+        db.session.delete(attachment)
+
+    vendor_name = quote.vendor.company_name if quote.vendor else 'N/A'
+    
+    db.session.add(AuditLog(text=f"Deleted quote from vendor '{vendor_name}'.", user_id=current_user.id, work_order_id=work_order_id))
+    
+    db.session.delete(quote)
+    db.session.commit()
+    
+    flash('Quote has been deleted successfully.', 'success')
+    return redirect(url_for('main.view_request', request_id=work_order_id))
+
 
 def get_date_range(range_name, start_str, end_str):
     today = datetime.utcnow().date()
@@ -990,3 +1020,4 @@ def get_date_range(range_name, start_str, end_str):
         end_date = datetime.combine(end_date, time.max)
         
     return start_date, end_date
+
