@@ -15,6 +15,11 @@ down_revision = '799954dffc34'
 branch_labels = None
 depends_on = None
 
+# This line is crucial for PostgreSQL. It tells Alembic not to wrap this
+# specific migration in a single transaction. This prevents the "transaction aborted"
+# error when the optional DROP CONSTRAINT fails.
+disable_ddl_transaction = True
+
 
 def upgrade():
     # This block will handle the alteration of the 'quote' table.
@@ -49,6 +54,7 @@ def upgrade():
             batch_op.drop_constraint('uq_vendor_email', type_='unique')
     except Exception as e:
         # If the constraint doesn't exist, catch the error and print a message.
+        # This is safer for different database backends.
         print(f"Skipping drop constraint on vendor.email as it may not exist: {e}")
 
 
