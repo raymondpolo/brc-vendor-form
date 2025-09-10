@@ -130,11 +130,22 @@ def resend_invitation(user_id):
 @admin_required
 def edit_user(user_id):
     user_to_edit = User.query.get_or_404(user_id)
+    # An Admin cannot edit another Admin or a Super User.
     if current_user.role == 'Admin' and user_to_edit.role in ['Admin', 'Super User']:
-        abort(403)
+        flash('You do not have permission to edit this user.', 'danger')
+        return redirect(url_for('admin.manage_users'))
 
     update_form = AdminUpdateUserForm(original_email=user_to_edit.email, obj=user_to_edit)
     password_form = AdminResetPasswordForm()
+
+    # Super User can edit anyone, Admin can edit non-admins.
+    if current_user.role == 'Super User':
+        # Super User can see all roles in the dropdown
+        update_form.role.choices = ['Requester', 'Scheduler', 'Property Manager', 'Admin', 'Super User']
+    else: # This means current_user is an Admin
+        # Admin cannot promote others to Admin or Super User
+        update_form.role.choices = ['Requester', 'Scheduler', 'Property Manager']
+
 
     if 'update_user' in request.form and update_form.validate_on_submit():
         update_form.populate_obj(user_to_edit)
@@ -161,6 +172,11 @@ def toggle_active_status(user_id):
         flash('You cannot disable your own account.', 'danger')
         return redirect(url_for('admin.manage_users'))
     
+    # Prevent Admin from disabling a Super User
+    if current_user.role == 'Admin' and user.role == 'Super User':
+        flash('Admins do not have permission to disable Super Users.', 'danger')
+        return redirect(url_for('admin.manage_users'))
+
     user.is_active = not user.is_active
     db.session.commit()
     

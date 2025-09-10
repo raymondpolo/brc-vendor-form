@@ -9,7 +9,7 @@
     </div>
 
     <div class="mb-4">
-        <input type="text" x-model="search" placeholder="Search by ID, WO#, Property, Requester..." 
+        <input type="text" x-model="search" placeholder="Search by ID, WO#, Property, Requester, Vendor..." 
                class="w-full md:w-1/2 lg:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
     </div>
 
@@ -22,6 +22,7 @@
                     <th scope="col" class="px-6 py-3">WO#</th>
                     <th scope="col" class="px-6 py-3">Requester</th>
                     <th scope="col" class="px-6 py-3">Property</th>
+                    <th scope="col" class="px-6 py-3">Assigned Vendor</th>
                     <th scope="col" class="px-6 py-3">Status & Tags</th>
                 </tr>
             </thead>
@@ -35,6 +36,7 @@
                         <td class="px-6 py-4" x-text="req.wo_number"></td>
                         <td class="px-6 py-4" x-text="req.requester_name"></td>
                         <td class="px-6 py-4" x-text="req.property"></td>
+                        <td class="px-6 py-4" x-text="req.vendor_name"></td>
                         <td class="px-6 py-4">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                                   :class="{
@@ -62,7 +64,7 @@
                     </tr>
                 </template>
                 <tr x-show="filteredRequests.length === 0">
-                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">
                         No requests found matching your search.
                     </td>
                 </tr>
@@ -85,7 +87,8 @@
                         req.id.toString().includes(searchLower) ||
                         req.wo_number.toLowerCase().includes(searchLower) ||
                         req.requester_name.toLowerCase().includes(searchLower) ||
-                        req.property.toLowerCase().includes(searchLower)
+                        req.property.toLowerCase().includes(searchLower) ||
+                        (req.vendor_name && req.vendor_name.toLowerCase().includes(searchLower))
                     );
                 });
             }

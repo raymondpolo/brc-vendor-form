@@ -8,9 +8,8 @@
         height: 100%;
     }
     .email-editor-container .ck.ck-editor__main > .ck-editor__editable {
-        height: 200px;
-        max-height: 200px;
-        overflow-y: auto;
+        max-height: calc(90vh - 350px); /* Adjust 350px if needed to account for other elements */
+        overflow-y: auto !important;
     }
 </style>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -64,6 +63,10 @@
                 <div>
                     <h3 class="font-semibold text-gray-700">Assigned Vendor</h3>
                     <p class="text-gray-600">{{ work_order.vendor.company_name if work_order.vendor else 'N/A' }}</p>
+                </div>
+                 <div>
+                    <h3 class="font-semibold text-gray-700">Work Order #</h3>
+                    <p class="text-gray-600">{{ work_order.wo_number or 'N/A' }}</p>
                 </div>
                 <div>
                     <h3 class="font-semibold text-gray-700">Address</h3>
@@ -200,13 +203,22 @@
         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
         <div x-data="{
                 isEditing: false,
+                initial: {
+                    name: '{{ work_order.vendor.company_name if work_order.vendor else '' }}',
+                    id: '{{ work_order.vendor.id if work_order.vendor else '' }}',
+                    contact: '{{ work_order.vendor.contact_name if work_order.vendor else '' }}',
+                    email: '{{ work_order.vendor.email if work_order.vendor else '' }}',
+                    phone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
+                    specialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
+                    website: '{{ work_order.vendor.website if work_order.vendor else '' }}'
+                },
                 search: '{{ work_order.vendor.company_name if work_order.vendor else '' }}',
                 selectedVendorId: '{{ work_order.vendor.id if work_order.vendor else '' }}',
                 selectedVendorContact: '{{ work_order.vendor.contact_name if work_order.vendor else '' }}',
                 selectedVendorEmail: '{{ work_order.vendor.email if work_order.vendor else '' }}',
                 selectedVendorPhone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
                 selectedVendorSpecialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
-                selectedVendorWebsite: '{{ work_order.website if work_order.vendor else '' }}',
+                selectedVendorWebsite: '{{ work_order.vendor.website if work_order.vendor else '' }}',
                 results: [],
                 searchVendors() {
                     if (this.search.length < 2) {
@@ -237,6 +249,17 @@
                     this.selectedVendorPhone = '';
                     this.selectedVendorSpecialty = '';
                     this.selectedVendorWebsite = '';
+                },
+                cancelEditing() {
+                    this.isEditing = false;
+                    this.search = this.initial.name;
+                    this.selectedVendorId = this.initial.id;
+                    this.selectedVendorContact = this.initial.contact;
+                    this.selectedVendorEmail = this.initial.email;
+                    this.selectedVendorPhone = this.initial.phone;
+                    this.selectedVendorSpecialty = this.initial.specialty;
+                    this.selectedVendorWebsite = this.initial.website;
+                    this.results = [];
                 }
             }"
              class="bg-white p-6 rounded-lg shadow-md">
@@ -248,7 +271,7 @@
                     <div class="flex items-center space-x-2">
                         <input type="text" x-model="search" @input.debounce.300ms="searchVendors()" :readonly="!isEditing"
                                class="block w-full rounded-md border-gray-300 shadow-sm" :class="{ 'bg-gray-100': !isEditing }">
-                        <button type="button" @click="isEditing = !isEditing" x-text="isEditing ? 'Cancel' : 'Assign'"
+                        <button type="button" @click.prevent="isEditing ? cancelEditing() : isEditing = true" x-text="isEditing ? 'Cancel' : 'Assign'"
                                 class="px-3 py-2 border rounded-md text-sm font-medium"
                                 :class="isEditing ? 'bg-gray-200 text-gray-800' : 'bg-indigo-600 text-white hover:bg-indigo-700'">
                         </button>
@@ -349,10 +372,6 @@
     </div>
 </div>
 
-{% if current_user.signature %}
-<div id="user-signature" style="display: none;">{{ current_user.signature|safe }}</div>
-{% endif %}
-
 <div id="emailModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col">
         <div class="flex justify-between items-center p-4 border-b">
@@ -381,12 +400,33 @@
                 <div class="mb-4 flex-grow flex flex-col min-h-0">
                     <label for="body" class="block text-sm font-medium text-gray-700 mb-1">Message Body</label>
                     <div class="email-editor-container flex-grow min-h-0">
-<textarea id="body">
-<p>Hi Team,</p><p>&nbsp;</p><p>&nbsp;</p><p>We would like to schedule this request:</p><p>&nbsp;</p><p><strong>PO:</strong> {{ work_order.id }}-{{ requester_initials }}<br><strong>Type of Request:</strong> {{ work_order.request_type }}<br><strong>Description / Instructions:</strong></p><blockquote style="margin: 0 0 0 40px; border: none; padding: 0px;">{{ work_order.description }}</blockquote><p><strong>Property:</strong> {{ work_order.property }}<br><strong>Unit:</strong> {{ work_order.unit or 'N/A' }}<br><strong>Address:</strong> {{ work_order.address }}<br>{% if work_order.tenant_name %}<strong>Tenant Name:</strong> {{ work_order.tenant_name }}<br><strong>Tenant Phone:</strong> {{ work_order.tenant_phone or 'N/A' }}<br>{% endif %}{% if work_order.contact_person %}<strong>Contact Person:</strong> {{ work_order.contact_person }}<br><strong>Contact Person Phone:</strong> {{ work_order.contact_person_phone or 'N/A' }}<br>{% endif %}<strong>Preferred Dates:</strong><br>- {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}<br>- {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}<br>- {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</p>
-</textarea>
+                        <textarea id="body">
+                            <p>Hi Team,</p>
+                            <p>We would like to schedule this request:</p>
+                            <p>&nbsp;</p>
+                            <p><strong>PO:</strong> {{ work_order.id }}-{{ requester_initials }}<br>
+                            <strong>Type of Request:</strong> {{ work_order.request_type }}<br>
+                            <strong>Description / Instructions:</strong><br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;{{ work_order.description }}</p>
+                            <p><strong>Property:</strong> {{ work_order.property }}<br>
+                            <strong>Unit:</strong> {{ work_order.unit or 'N/A' }}<br>
+                            <strong>Address:</strong> {{ work_order.address }}<br>
+                            {% if work_order.tenant_name %}
+                            <strong>Tenant Name:</strong> {{ work_order.tenant_name }}<br>
+                            <strong>Tenant Phone:</strong> {{ work_order.tenant_phone or 'N/A' }}<br>
+                            {% endif %}
+                            {% if work_order.contact_person %}
+                            <strong>Contact Person:</strong> {{ work_order.contact_person }}<br>
+                            <strong>Contact Person Phone:</strong> {{ work_order.contact_person_phone or 'N/A' }}<br>
+                            {% endif %}
+                            <strong>Preferred Dates:</strong><br>
+                            - {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}<br>
+                            - {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}<br>
+                            - {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</p>
+                        </textarea>
                     </div>
                 </div>
-                <div class="flex justify-end space-x-3 pt-4 -m-4">
+                <div class="flex justify-end space-x-3 pt-4">
                     {% if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager'] and current_user.signature %}
                     <button type="button" id="insertSignatureBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Insert Signature</button>
                     {% endif %}
@@ -416,6 +456,8 @@
     <span id="notificationMessage"></span>
 </div>
 
+
+<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
@@ -434,37 +476,13 @@
 
         function initializeEditor() {
             if (editor) return;
-            // Use the CKEDITOR global from the super-build, which should be loaded from layout.html
-            CKEDITOR.ClassicEditor
-                .create(document.querySelector('#body'), {
-                    toolbar: {
-                        items: [
-                            'heading', '|', 'bold', 'italic', 'underline', 'link', '|',
-                            'bulletedList', 'numberedList', '|', 'uploadImage', 'insertTable', 'blockQuote', '|',
-                            'undo', 'redo', 'sourceEditing'
-                        ]
-                    },
-                    simpleUpload: {
-                        uploadUrl: '{{ url_for("main.upload_image") }}',
-                        withCredentials: true,
-                        headers: {
-                            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                        }
-                    },
-                    removePlugins: [
-                        'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage', 'RealTimeCollaborativeComments', 
-                        'RealTimeCollaborativeTrackChanges', 'RealTimeCollaborativeRevisionHistory', 'PresenceList', 
-                        'Comments', 'TrackChanges', 'TrackChangesData', 'RevisionHistory', 'Pagination', 
-                        'WProofreader', 'MathType', 'SlashCommand', 'Template', 'DocumentOutline', 'FormatPainter', 
-                        'TableOfContents', 'PasteFromOfficeEnhanced', 'ExportPdf', 'ExportWord', 'MultiLevelList', 
-                        'TodoList', 'CaseChange'
-                    ]
-                })
+            ClassicEditor
+                .create(document.querySelector('#body'))
                 .then(newEditor => {
                     editor = newEditor;
                 })
                 .catch(error => {
-                    console.error('CKEditor Initialization Error:', error);
+                    console.error(error);
                 });
         }
         
@@ -611,4 +629,3 @@
     });
 </script>
 {% endblock content %}
-

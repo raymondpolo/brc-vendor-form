@@ -88,7 +88,8 @@
                                     </form>
                                 </template>
                                 
-                                <template x-if="user.id !== {{ current_user.id }}">
+                                <!-- Admins cannot disable Super Users -->
+                                <template x-if="user.id !== {{ current_user.id }} && !('{{ current_user.role }}' === 'Admin' && user.role === 'Super User')">
                                     <form :action="`/admin/user/${user.id}/toggle-active`" method="POST">
                                         <button type="submit" class="font-medium" 
                                                 :class="user.is_active ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'">

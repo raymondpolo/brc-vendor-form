@@ -61,7 +61,8 @@ def work_order_to_dict(req):
         'property': req.property,
         'status': req.status,
         'request_type': req.request_type,
-        'tag': req.tag
+        'tag': req.tag,
+        'vendor_name': req.vendor.company_name if req.vendor else 'N/A'
     }
 
 @main.route('/')
