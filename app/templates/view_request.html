@@ -273,6 +273,13 @@
                     this.selectedVendorSpecialty = this.initial.specialty;
                     this.selectedVendorWebsite = this.initial.website;
                     this.results = [];
+                },
+                confirmUnassign() {
+                    if (confirm('Are you sure you want to unassign this vendor?')) {
+                        this.unassignVendor();
+                        this.$refs.vendorForm.action = '{{ url_for('main.unassign_vendor', request_id=work_order.id) }}';
+                        this.$refs.vendorForm.submit();
+                    }
                 }
             }"
              class="bg-white p-6 rounded-lg shadow-md">
@@ -326,10 +333,8 @@
                             </div>
                         </div>
                         <div x-show="!isEditing">
-                            <button @click="$refs.vendorForm.action='{{ url_for('main.unassign_vendor', request_id=work_order.id) }}'; unassignVendor()" 
-                                    type="submit" 
-                                    class="text-gray-400 hover:text-red-600 transition-colors"
-                                    onclick="return confirm('Are you sure you want to unassign this vendor?');">
+                            <button type="button" @click="confirmUnassign()" 
+                                    class="text-gray-400 hover:text-red-600 transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                                 </svg>
@@ -364,8 +369,8 @@
                              </a>
                         </div>
                         <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
-                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-500 hover:text-indigo-600" title="Download Attachment">
-                               <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-400 hover:text-indigo-600">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                             </a>
                             {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
                             <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
@@ -650,4 +655,3 @@
     });
 </script>
 {% endblock content %}
-
