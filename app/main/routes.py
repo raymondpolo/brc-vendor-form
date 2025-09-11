@@ -79,21 +79,19 @@ def dashboard():
     if current_user.role in ['Requester', 'Property Manager']:
         return redirect(url_for('main.my_requests'))
 
-    stats_query = db.session.query(
-        func.count(WorkOrder.id).label('total'),
-        func.sum(case((WorkOrder.status == 'New', 1), else_=0)).label('new'),
-        func.sum(case((WorkOrder.status == 'Open', 1), else_=0)).label('open'),
-        func.sum(case((WorkOrder.status == 'Pending', 1), else_=0)).label('pending'),
-        func.sum(case((WorkOrder.status == 'Scheduled', 1), else_=0)).label('scheduled'),
-        func.sum(case((WorkOrder.status == 'Cancelled', 1), else_=0)).label('cancelled'),
-        func.sum(case((WorkOrder.status == 'Closed', 1), else_=0)).label('closed')
-    ).one()
-    stats = {
-        "totalRequests": stats_query.total or 0, "new": stats_query.new or 0,
-        "open": stats_query.open or 0, "pending": stats_query.pending or 0,
-        "scheduled": stats_query.scheduled or 0, "cancelled": stats_query.cancelled or 0,
-        "closed": stats_query.closed or 0,
-    }
+    # Define the canonical list of all possible statuses in the desired display order
+    all_statuses = [
+        'New', 'Open', 'Pending', 'Quote Requested', 'Quote Sent',
+        'Awaiting Approval', 'Scheduled', 'Closed', 'Cancelled'
+    ]
+
+    # Query the counts for statuses that actually exist in the DB
+    status_counts_query = db.session.query(WorkOrder.status, func.count(WorkOrder.id)).group_by(WorkOrder.status).all()
+    db_counts = {status: count for status, count in status_counts_query}
+
+    # Build the final stats dictionary, ensuring all statuses are present
+    stats = {status: db_counts.get(status, 0) for status in all_statuses}
+    stats['totalRequests'] = sum(db_counts.values())
 
     all_work_orders = WorkOrder.query.all()
     all_tags = []
@@ -110,7 +108,7 @@ def dashboard():
         "go_back": tag_counts.get('Go-back', 0)
     }
 
-    status_counts = Counter(req.status for req in all_work_orders)
+    status_counts_for_chart = Counter(req.status for req in all_work_orders)
     type_counts = Counter(req.request_type for req in all_work_orders)
     property_counts = Counter(req.property for req in all_work_orders)
     vendor_counts = Counter(req.vendor.company_name for req in all_work_orders if req.vendor)
@@ -122,7 +120,7 @@ def dashboard():
     goback_by_vendor = Counter(wo.vendor.company_name if wo.vendor else 'Unassigned' for wo in goback_work_orders)
 
     chart_data = {
-        "status": {"labels": list(status_counts.keys()), "data": list(status_counts.values())},
+        "status": {"labels": list(status_counts_for_chart.keys()), "data": list(status_counts_for_chart.values())},
         "type": {"labels": list(type_counts.keys()), "data": list(type_counts.values())},
         "property": {"labels": list(property_counts.keys()), "data": list(property_counts.values())},
         "vendor": {"labels": list(vendor_counts.keys()), "data": list(vendor_counts.values())},
@@ -131,9 +129,22 @@ def dashboard():
         "goback_by_vendor": {"labels": list(goback_by_vendor.keys()), "data": list(goback_by_vendor.values())}
     }
 
+    status_colors = {
+        'New': 'border-blue-500',
+        'Open': 'border-cyan-500',
+        'Pending': 'border-yellow-400',
+        'Scheduled': 'border-purple-500',
+        'Closed': 'border-gray-700',
+        'Cancelled': 'border-gray-400',
+        'Quote Requested': 'border-orange-500',
+        'Quote Sent': 'border-pink-500',
+        'Awaiting Approval': 'border-red-500',
+    }
+    
+    # We pass `all_statuses` to the template to control the display order
     return render_template(
-        'dashboard.html', title='Dashboard', stats=stats,
-        tag_stats=tag_stats, chart_data=chart_data
+        'dashboard.html', title='Dashboard', stats=stats, all_statuses=all_statuses,
+        tag_stats=tag_stats, chart_data=chart_data, status_colors=status_colors
     )
 
 @main.route('/requests')
@@ -1020,4 +1031,3 @@ def get_date_range(range_name, start_str, end_str):
         end_date = datetime.combine(end_date, time.max)
         
     return start_date, end_date
-
