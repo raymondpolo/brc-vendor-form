@@ -718,7 +718,8 @@ def account():
 
             def embed_local_images(html_content):
                 upload_folder = current_app.config['UPLOAD_FOLDER']
-                img_tags = re.findall(r'<img src="[^"]*/uploads/([^"]+)"', html_content)
+                # --- CORRECTED REGEX TO FIND FULL URL ---
+                img_tags = re.findall(r'<img src="https?://[^/]+/uploads/([^"]+)"', html_content)
                 
                 for filename in img_tags:
                     filepath = os.path.join(upload_folder, filename.split('?')[0])
@@ -734,7 +735,8 @@ def account():
                                 
                             data_uri = f"data:{mime_type};base64,{encoded_string}"
                             
-                            original_src_pattern = f'src="[^"]*/uploads/{re.escape(filename)}"'
+                            # Use a more specific regex for replacement
+                            original_src_pattern = r'src="https?://[^/]+/uploads/' + re.escape(filename) + r'"'
                             html_content = re.sub(original_src_pattern, f'src="{data_uri}"', html_content)
                         except Exception as e:
                             current_app.logger.error(f"Error embedding image {filename}: {e}")
