@@ -221,88 +221,147 @@
 
         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
         <div x-data="{
-                isEditing: false,
-                initial: {
-                    name: '{{ work_order.vendor.company_name if work_order.vendor else '' }}',
-                    id: '{{ work_order.vendor.id if work_order.vendor else '' }}',
-                    contact: '{{ work_order.vendor.contact_name if work_order.vendor else '' }}',
-                    email: '{{ work_order.vendor.email if work_order.vendor else '' }}',
-                    phone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
-                    specialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
-                    website: '{{ work_order.vendor.website if work_order.vendor else '' }}'
-                },
-                search: '{{ work_order.vendor.company_name if work_order.vendor else '' }}',
-                selectedVendorId: '{{ work_order.vendor.id if work_order.vendor else '' }}',
-                selectedVendorContact: '{{ work_order.vendor.contact_name if work_order.vendor else '' }}',
-                selectedVendorEmail: '{{ work_order.vendor.email if work_order.vendor else '' }}',
-                selectedVendorPhone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
-                selectedVendorSpecialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
-                selectedVendorWebsite: '{{ work_order.vendor.website if work_order.vendor else '' }}',
-                results: [],
-                searchVendors() {
-                    if (this.search.length < 2) {
-                        this.results = [];
-                        return;
-                    }
-                    fetch(`/api/vendors/search?q=${this.search}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            this.results = data;
-                        });
-                },
-                selectVendor(vendor) {
-                    this.search = vendor.company_name;
-                    this.selectedVendorId = vendor.id;
-                    this.selectedVendorContact = vendor.contact_name || '';
-                    this.selectedVendorEmail = vendor.email || '';
-                    this.selectedVendorPhone = vendor.phone || '';
-                    this.selectedVendorSpecialty = vendor.specialty || '';
-                    this.selectedVendorWebsite = vendor.website || '';
-                    this.results = [];
-                },
-                unassignVendor() {
-                    this.search = '';
-                    this.selectedVendorId = '';
-                    this.selectedVendorContact = '';
-                    this.selectedVendorEmail = '';
-                    this.selectedVendorPhone = '';
-                    this.selectedVendorSpecialty = '';
-                    this.selectedVendorWebsite = '';
-                },
-                cancelEditing() {
-                    this.isEditing = false;
-                    this.search = this.initial.name;
-                    this.selectedVendorId = this.initial.id;
-                    this.selectedVendorContact = this.initial.contact;
-                    this.selectedVendorEmail = this.initial.email;
-                    this.selectedVendorPhone = this.initial.phone;
-                    this.selectedVendorSpecialty = this.initial.specialty;
-                    this.selectedVendorWebsite = this.initial.website;
-                    this.results = [];
-                },
-                confirmUnassign() {
-                    if (confirm('Are you sure you want to unassign this vendor?')) {
-                        this.unassignVendor();
-                        this.$refs.vendorForm.action = '{{ url_for('main.unassign_vendor', request_id=work_order.id) }}';
-                        this.$refs.vendorForm.submit();
-                    }
+            isEditing: false,
+
+            // Raw initial values from server/template (don't use normalize here!)
+            rawInitial: {
+                name: '{{ work_order.vendor.company_name if work_order.vendor else '' }}',
+                id: '{{ work_order.vendor.id if work_order.vendor else '' }}',
+                contact: '{{ work_order.vendor.contact_name if work_order.vendor else '' }}',
+                email: '{{ work_order.vendor.email if work_order.vendor else '' }}',
+                phone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
+                specialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
+                website: '{{ work_order.vendor.website if work_order.vendor else '' }}'
+            },
+
+            // Will be populated in init()
+            initial: {},
+
+            search: '',
+            selectedVendorId: '',
+            selectedVendorContact: '',
+            selectedVendorEmail: '',
+            selectedVendorPhone: '',
+            selectedVendorSpecialty: '',
+            selectedVendorWebsite: '',
+
+            results: [],
+
+            normalize(value) {
+                if (!value || value === 'None' || value === 'null') {
+                    return '';
                 }
-            }"
-             class="bg-white p-6 rounded-lg shadow-md">
+                return value;
+            },
+
+            init() {
+                // Normalize and set initial values
+                this.initial = {
+                    name: this.normalize(this.rawInitial.name),
+                    id: this.normalize(this.rawInitial.id),
+                    contact: this.normalize(this.rawInitial.contact),
+                    email: this.normalize(this.rawInitial.email),
+                    phone: this.normalize(this.rawInitial.phone),
+                    specialty: this.normalize(this.rawInitial.specialty),
+                    website: this.normalize(this.rawInitial.website)
+                };
+
+                // Set default selection from initial values
+                this.search = this.initial.name;
+                this.selectedVendorId = this.initial.id;
+                this.selectedVendorContact = this.initial.contact;
+                this.selectedVendorEmail = this.initial.email;
+                this.selectedVendorPhone = this.initial.phone;
+                this.selectedVendorSpecialty = this.initial.specialty;
+                this.selectedVendorWebsite = this.initial.website;
+            },
+
+            searchVendors() {
+                if (this.search.length < 2) {
+                    this.results = [];
+                    return;
+                }
+
+                fetch(`/api/vendors/search?q=${this.search}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        this.results = data;
+                    });
+            },
+
+            selectVendor(vendor) {
+                this.search = vendor.company_name;
+                this.selectedVendorId = vendor.id;
+                this.selectedVendorContact = this.normalize(vendor.contact_name);
+                this.selectedVendorEmail = this.normalize(vendor.email);
+                this.selectedVendorPhone = this.normalize(vendor.phone);
+                this.selectedVendorSpecialty = this.normalize(vendor.specialty);
+                this.selectedVendorWebsite = this.normalize(vendor.website);
+                this.results = [];
+            },
+
+            cancelEditing() {
+                this.isEditing = false;
+                this.search = this.initial.name;
+                this.selectedVendorId = this.initial.id;
+                this.selectedVendorContact = this.initial.contact;
+                this.selectedVendorEmail = this.initial.email;
+                this.selectedVendorPhone = this.initial.phone;
+                this.selectedVendorSpecialty = this.initial.specialty;
+                this.selectedVendorWebsite = this.initial.website;
+                this.results = [];
+            },
+
+            unassignVendor() {
+                this.search = '';
+                this.selectedVendorId = '';
+                this.selectedVendorContact = '';
+                this.selectedVendorEmail = '';
+                this.selectedVendorPhone = '';
+                this.selectedVendorSpecialty = '';
+                this.selectedVendorWebsite = '';
+
+                this.initial = {
+                    name: '',
+                    id: '',
+                    contact: '',
+                    email: '',
+                    phone: '',
+                    specialty: '',
+                    website: ''
+                };
+            },
+
+            confirmUnassign() {
+                if (confirm('Are you sure you want to unassign this vendor?')) {
+                    this.unassignVendor();
+                    this.$refs.vendorForm.action = '{{ url_for('main.unassign_vendor', request_id=work_order.id) }}';
+                    this.$refs.vendorForm.submit();
+                }
+            }
+        }"
+        x-init="init()"
+        class="bg-white p-6 rounded-lg shadow-md">
+
             <h3 class="text-lg font-semibold text-gray-700 mb-4">Assign Vendor</h3>
+
             <form x-ref="vendorForm" method="POST" action="{{ url_for('main.assign_vendor', request_id=work_order.id) }}">
                 {{ assign_vendor_form.csrf_token }}
                 <input type="hidden" name="vendor_id" x-model="selectedVendorId">
+
                 <div class="relative">
                     <div class="flex items-center space-x-2">
                         <input type="text" x-model="search" @input.debounce.300ms="searchVendors()" :readonly="!isEditing"
-                               class="block w-full rounded-md border-gray-300 shadow-sm" :class="{ 'bg-gray-100': !isEditing }">
-                        <button type="button" @click.prevent="isEditing ? cancelEditing() : isEditing = true" x-text="isEditing ? 'Cancel' : 'Assign'"
+                            class="block w-full rounded-md border-gray-300 shadow-sm" :class="{ 'bg-gray-100': !isEditing }">
+                        <button type="button" @click.prevent="isEditing ? cancelEditing() : isEditing = true"
+                                x-text="isEditing ? 'Cancel' : 'Assign'"
                                 class="px-3 py-2 border rounded-md text-sm font-medium"
                                 :class="isEditing ? 'bg-gray-200 text-gray-800' : 'bg-indigo-600 text-white hover:bg-indigo-700'">
                         </button>
                     </div>
-                    <div x-show="isEditing && results.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
+
+                    <div x-show="isEditing && results.length > 0"
+                        class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
                         <ul>
                             <template x-for="vendor in results" :key="vendor.id">
                                 <li @click="selectVendor(vendor)"
@@ -313,7 +372,7 @@
                         </ul>
                     </div>
                 </div>
-                
+
                 <div x-show="selectedVendorId" class="mt-4 border-t pt-4 space-y-2 text-sm">
                     <div class="flex justify-between items-start">
                         <div>
@@ -333,16 +392,26 @@
                                 <span class="font-semibold text-gray-600">Specialty:</span>
                                 <span class="text-gray-800" x-text="selectedVendorSpecialty || 'N/A'"></span>
                             </div>
-                            <div x-show="selectedVendorWebsite">
+                            <div>
                                 <span class="font-semibold text-gray-600">Website:</span>
-                                <a :href="selectedVendorWebsite" target="_blank" class="text-indigo-600 hover:underline" x-text="selectedVendorWebsite"></a>
+                                <template x-if="selectedVendorWebsite">
+                                    <a :href="selectedVendorWebsite" target="_blank"
+                                    class="text-indigo-600 hover:underline"
+                                    x-text="selectedVendorWebsite"></a>
+                                </template>
+                                <template x-if="!selectedVendorWebsite">
+                                    <span class="text-gray-800">N/A</span>
+                                </template>
                             </div>
                         </div>
+
                         <div x-show="!isEditing">
-                            <button type="button" @click="confirmUnassign()" 
+                            <button type="button" @click="confirmUnassign()"
                                     class="text-gray-400 hover:text-red-600 transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                        clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
