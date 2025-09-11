@@ -8,6 +8,7 @@ import mimetypes
 import json
 import uuid
 from flask import current_app
+from markupsafe import Markup
 from functools import wraps
 from collections import Counter
 from datetime import datetime, time, timedelta
@@ -695,6 +696,7 @@ def delete_attachment(attachment_id):
 def account():
     update_form = UpdateAccountForm(obj=current_user)
     password_form = ChangePasswordForm()
+
     if 'update_account' in request.form and update_form.validate_on_submit():
         current_user.name = update_form.name.data
         current_user.email = update_form.email.data
@@ -714,14 +716,11 @@ def account():
             
             signature_html = request.form.get('signature')
 
-            # --- NEW LOGIC TO EMBED IMAGES ---
             def embed_local_images(html_content):
                 upload_folder = current_app.config['UPLOAD_FOLDER']
-                # Find all img tags with a src pointing to our uploads folder
                 img_tags = re.findall(r'<img src="[^"]*/uploads/([^"]+)"', html_content)
                 
                 for filename in img_tags:
-                    # Construct the full path to the image file, removing any cache-busting query params
                     filepath = os.path.join(upload_folder, filename.split('?')[0])
                     
                     if os.path.exists(filepath):
@@ -729,15 +728,12 @@ def account():
                             with open(filepath, "rb") as image_file:
                                 encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
                             
-                            # Determine the MIME type (e.g., 'image/png')
                             mime_type, _ = mimetypes.guess_type(filepath)
                             if not mime_type:
-                                mime_type = 'image/png' # Default fallback
+                                mime_type = 'image/png'
                                 
-                            # Create the Base64 data URI
                             data_uri = f"data:{mime_type};base64,{encoded_string}"
                             
-                            # Replace the original src with the data URI
                             original_src_pattern = f'src="[^"]*/uploads/{re.escape(filename)}"'
                             html_content = re.sub(original_src_pattern, f'src="{data_uri}"', html_content)
                         except Exception as e:
@@ -746,13 +742,12 @@ def account():
                 return html_content
 
             embedded_html = embed_local_images(signature_html)
-            # --- END NEW LOGIC ---
 
             clean_html = bleach.clean(
-                embedded_html, # We now clean the HTML *after* embedding the image
+                embedded_html,
                 tags=allowed_tags,
                 attributes=allowed_attrs,
-                protocols=['http', 'https', 'mailto', 'data'] # 'data' protocol is crucial here
+                protocols=['http', 'https', 'mailto', 'data']
             )
             
             current_user.signature = clean_html
@@ -769,6 +764,10 @@ def account():
         else:
             flash('Incorrect current password.', 'danger')
         return redirect(url_for('main.account'))
+
+    # Debug line with corrected Markup import
+    if current_user.signature:
+        flash(Markup(f"<b>DEBUG:</b> Current signature HTML is: <pre>{current_user.signature}</pre>"))
 
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
