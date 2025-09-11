@@ -745,7 +745,13 @@ def upload_image():
             ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
             unique_filename = f"{uuid.uuid4().hex}.{ext}"
             file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
-            url = url_for('main.uploaded_file', filename=unique_filename, _external=True)
+            
+            # --- MODIFICATION START ---
+            # Add a unique timestamp as a query parameter to "bust" the cache
+            cache_buster = int(datetime.utcnow().timestamp())
+            url = url_for('main.uploaded_file', filename=unique_filename, v=cache_buster, _external=True)
+            # --- MODIFICATION END ---
+            
             return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
     return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
 
