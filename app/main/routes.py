@@ -702,6 +702,9 @@ def account():
         current_user.email = update_form.email.data
 
         if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager']:
+            # --- START DEBUG ---
+            flash(Markup("<b>STEP 1 (POST):</b> Received update request."))
+            # --- END DEBUG ---
             allowed_tags = [
                 'a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 'strong',
                 'li', 'ol', 'ul', 'br', 'p', 'img', 'span', 'div', 'font',
@@ -715,12 +718,15 @@ def account():
             }
             
             signature_html = request.form.get('signature')
+            flash(Markup(f"<b>STEP 2 (POST):</b> Raw HTML from editor: <pre>{signature_html}</pre>"))
 
             def embed_local_images(html_content):
                 upload_folder = current_app.config['UPLOAD_FOLDER']
-                # --- CORRECTED REGEX TO FIND FULL URL ---
-                img_tags = re.findall(r'<img src="https?://[^/]+/uploads/([^"]+)"', html_content)
+                # More robust regex to find the image URL
+                img_tags = re.findall(r'<img[^>]+src="https?://[^/]+/uploads/([^"]+)"', html_content)
                 
+                flash(f"<b>STEP 3 (POST):</b> Found image filenames in HTML: {img_tags}")
+
                 for filename in img_tags:
                     filepath = os.path.join(upload_folder, filename.split('?')[0])
                     
@@ -735,15 +741,15 @@ def account():
                                 
                             data_uri = f"data:{mime_type};base64,{encoded_string}"
                             
-                            # Use a more specific regex for replacement
                             original_src_pattern = r'src="https?://[^/]+/uploads/' + re.escape(filename) + r'"'
                             html_content = re.sub(original_src_pattern, f'src="{data_uri}"', html_content)
                         except Exception as e:
-                            current_app.logger.error(f"Error embedding image {filename}: {e}")
+                            flash(f"ERROR embedding image {filename}: {e}")
                 
                 return html_content
 
             embedded_html = embed_local_images(signature_html)
+            flash(Markup(f"<b>STEP 4 (POST):</b> HTML after Base64 conversion attempt: <pre>{embedded_html}</pre>"))
 
             clean_html = bleach.clean(
                 embedded_html,
@@ -767,9 +773,9 @@ def account():
             flash('Incorrect current password.', 'danger')
         return redirect(url_for('main.account'))
 
-    # Debug line with corrected Markup import
+    # Debug line for GET request
     if current_user.signature:
-        flash(Markup(f"<b>DEBUG:</b> Current signature HTML is: <pre>{current_user.signature}</pre>"))
+        flash(Markup(f"<b>DEBUG (GET):</b> Current signature HTML in DB is: <pre>{current_user.signature}</pre>"))
 
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
