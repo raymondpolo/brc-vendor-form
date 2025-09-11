@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 // The essential configuration for the simple image uploader
                 simpleUpload: {
-                    uploadUrl: '{{ url_for("main.upload_image") }}',
+                    uploadUrl: '{{ url_for("main.upload_image", _external=True) }}',
                     withCredentials: true,
                     headers: {
                         'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -107,4 +107,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock content %}
-
