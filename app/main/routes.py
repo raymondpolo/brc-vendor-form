@@ -750,7 +750,6 @@ def upload_image():
     return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
 
 @main.route('/uploads/<filename>')
-@login_required
 def uploaded_file(filename):
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
