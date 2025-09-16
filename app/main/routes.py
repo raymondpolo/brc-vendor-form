@@ -24,10 +24,10 @@ from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
-                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm)
+                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
-from app.decorators import admin_required
+from app.decorators import admin_required, role_required
 
 request_types_list = [
     'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
@@ -83,21 +83,20 @@ def dashboard():
     if current_user.role in ['Requester', 'Property Manager']:
         return redirect(url_for('main.my_requests'))
 
-    # Define the canonical list of all possible statuses in the desired display order
     all_statuses = [
         'New', 'Open', 'Pending', 'Quote Requested', 'Quote Sent',
         'Awaiting Approval', 'Scheduled', 'Closed', 'Cancelled'
     ]
+    
+    base_query = WorkOrder.query.filter_by(is_deleted=False)
 
-    # Query the counts for statuses that actually exist in the DB
-    status_counts_query = db.session.query(WorkOrder.status, func.count(WorkOrder.id)).group_by(WorkOrder.status).all()
+    status_counts_query = base_query.with_entities(WorkOrder.status, func.count(WorkOrder.id)).group_by(WorkOrder.status).all()
     db_counts = {status: count for status, count in status_counts_query}
 
-    # Build the final stats dictionary, ensuring all statuses are present
     stats = {status: db_counts.get(status, 0) for status in all_statuses}
     stats['totalRequests'] = sum(db_counts.values())
 
-    all_work_orders = WorkOrder.query.all()
+    all_work_orders = base_query.all()
     all_tags = []
     for wo in all_work_orders:
         if wo.tag:
@@ -107,7 +106,6 @@ def dashboard():
     tag_stats = {
         "approved": tag_counts.get('Approved', 0),
         "declined": tag_counts.get('Declined', 0),
-        "waiting_approval": tag_counts.get('Waiting Approval', 0),
         "follow_up": tag_counts.get('Follow-up needed', 0),
         "go_back": tag_counts.get('Go-back', 0)
     }
@@ -120,7 +118,7 @@ def dashboard():
     approved_by_pm = Counter(wo.property_manager for wo in all_work_orders if wo.tag and 'Approved' in wo.tag.split(','))
     declined_by_pm = Counter(wo.property_manager for wo in all_work_orders if wo.tag and 'Declined' in wo.tag.split(','))
     
-    goback_work_orders = WorkOrder.query.filter(WorkOrder.tag.like('%Go-back%')).all()
+    goback_work_orders = base_query.filter(WorkOrder.tag.like('%Go-back%')).all()
     goback_by_vendor = Counter(wo.vendor.company_name if wo.vendor else 'Unassigned' for wo in goback_work_orders)
 
     chart_data = {
@@ -145,7 +143,6 @@ def dashboard():
         'Awaiting Approval': 'border-red-500',
     }
     
-    # We pass `all_statuses` to the template to control the display order
     return render_template(
         'dashboard.html', title='Dashboard', stats=stats, all_statuses=all_statuses,
         tag_stats=tag_stats, chart_data=chart_data, status_colors=status_colors
@@ -155,7 +152,7 @@ def dashboard():
 @login_required
 @admin_required
 def all_requests():
-    requests_data = WorkOrder.query.order_by(WorkOrder.date_created.desc()).all()
+    requests_data = WorkOrder.query.filter_by(is_deleted=False).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
     return render_template('all_requests.html', title='All Requests', 
                            requests_json=json.dumps(requests_list))
@@ -163,7 +160,7 @@ def all_requests():
 @main.route('/my-requests')
 @login_required
 def my_requests():
-    query = WorkOrder.query
+    query = WorkOrder.query.filter_by(is_deleted=False)
     if current_user.role == 'Property Manager':
         query = query.filter(WorkOrder.property_manager == current_user.name)
     else:
@@ -177,7 +174,7 @@ def my_requests():
 @main.route('/shared-with-me')
 @login_required
 def shared_requests():
-    query = WorkOrder.query.filter(WorkOrder.viewers.contains(current_user))
+    query = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.viewers.contains(current_user))
     requests_data = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
     return render_template('shared_requests.html', title='Shared With Me', 
@@ -187,7 +184,7 @@ def shared_requests():
 @login_required
 @admin_required
 def requests_by_status(status):
-    filtered_requests = WorkOrder.query.filter_by(status=status).order_by(WorkOrder.date_created.desc()).all()
+    filtered_requests = WorkOrder.query.filter_by(is_deleted=False, status=status).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in filtered_requests]
     return render_template('requests_by_status.html', title=f'Requests: {status}', 
                            requests_json=json.dumps(requests_list), status=status)
@@ -196,7 +193,7 @@ def requests_by_status(status):
 @login_required
 @admin_required
 def requests_by_tag(tag_name):
-    tagged_requests = WorkOrder.query.filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
+    tagged_requests = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in tagged_requests]
     return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', 
                            requests_json=json.dumps(requests_list), tag_name=tag_name)
@@ -205,6 +202,10 @@ def requests_by_tag(tag_name):
 @login_required
 def view_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
+
+    if work_order.is_deleted and current_user.role != 'Super User':
+        abort(404)
+
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -217,13 +218,18 @@ def view_request(request_id):
     attachment_form = AttachmentForm()
     assign_vendor_form = AssignVendorForm()
     quote_form = QuoteForm()
+    delete_form = DeleteRestoreRequestForm()
+    tag_form = TagForm()
     requester_initials = get_requester_initials(work_order.requester_name)
     quotes = work_order.quotes
 
     if is_admin_staff:
         status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined', 'New']]
     
-    if request.method == 'GET':
+    if current_user.role in ['Admin', 'Scheduler']:
+        tag_form.tag.choices = [c for c in tag_form.tag.choices if c[0] not in ['Approved', 'Declined']]
+
+    if request.method == 'GET' and not work_order.is_deleted:
         if is_admin_staff and work_order.status == 'New':
             work_order.status = 'Open'
             db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
@@ -277,7 +283,53 @@ def view_request(request_id):
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
-                           requester_initials=requester_initials, quote_form=quote_form, quotes=quotes)
+                           requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
+                           delete_form=delete_form, tag_form=tag_form)
+
+
+@main.route('/request/<int:request_id>/delete', methods=['POST'])
+@login_required
+@role_required(['Super User'])
+def delete_request(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = DeleteRestoreRequestForm()
+    if form.validate_on_submit():
+        work_order.is_deleted = True
+        work_order.deleted_at = datetime.utcnow()
+        db.session.add(AuditLog(text='Request soft-deleted.', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+        flash(f'Request #{work_order.id} has been deleted. It can be restored.', 'success')
+        return redirect(url_for('main.dashboard'))
+    else:
+        flash('Invalid request to delete the work order.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+
+@main.route('/request/<int:request_id>/restore', methods=['POST'])
+@login_required
+@role_required(['Super User'])
+def restore_request(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = DeleteRestoreRequestForm()
+    if form.validate_on_submit():
+        work_order.is_deleted = False
+        work_order.deleted_at = None
+        db.session.add(AuditLog(text='Request restored.', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+        flash(f'Request #{work_order.id} has been restored.', 'success')
+        return redirect(url_for('main.view_request', request_id=request_id))
+    else:
+        flash('Invalid request to restore the work order.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+
+@main.route('/deleted-requests')
+@login_required
+@role_required(['Super User'])
+def deleted_requests():
+    deleted = WorkOrder.query.filter_by(is_deleted=True).order_by(WorkOrder.deleted_at.desc()).all()
+    form = DeleteRestoreRequestForm()
+    return render_template('deleted_requests.html', title='Deleted Requests', requests=deleted, form=form)
 
 
 @main.route('/change_status/<int:request_id>', methods=['POST'])
@@ -376,74 +428,54 @@ def change_status(request_id):
 @login_required
 def tag_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    action = request.form.get('action')
-    tag_value = request.form.get('tag')
+    form = TagForm()
     
     can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
-    can_requester = current_user.id == work_order.user_id
-    can_admin = current_user.role in ['Admin', 'Scheduler', 'Super User']
+    can_super_user = current_user.role == 'Super User'
+    can_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
 
-    current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
-    log_text = ""
-
-    if action == 'remove_tag':
-        if not can_admin:
-            abort(403)
-        tag_to_remove = request.form.get('tag_to_remove')
-        if tag_to_remove:
-            current_tags.discard(tag_to_remove)
-            log_text = f"Tag '{tag_to_remove}' removed"
-            flash(f"Tag '{tag_to_remove}' has been removed.", 'info')
-    else:
-        tag_to_add = tag_value
-        log_text = f"Request tagged as '{tag_to_add}'"
-        
-        if tag_to_add in ['Approved', 'Declined']:
-            if not can_pm: abort(403)
-            current_tags.discard('Approved')
-            current_tags.discard('Declined')
-            current_tags.discard('Waiting Approval')
-            current_tags.add(tag_to_add)
-            flash(f'Quote has been {tag_to_add.lower()}.', 'success')
-        
-        elif tag_to_add == 'Waiting Approval':
-            if not (can_pm or can_admin): abort(403)
-            work_order.status = 'Pending'
-            current_tags.add(tag_to_add)
-            log_text += " and status set to 'Pending'"
-            flash('Request status set to Pending, tagged for approval.', 'info')
-
-        elif tag_to_add == 'Follow-up needed':
-            if not can_admin: abort(403)
-            work_order.status = 'Pending'
-            current_tags.add(tag_to_add)
-            log_text += " and status set to 'Pending'"
-            flash('Request status set to Pending, tagged for follow-up.', 'info')
-
-        elif tag_to_add == 'Completed':
-            if not (can_pm or can_requester or can_admin): abort(403)
-            current_tags.add('Completed')
-            work_order.status = 'Closed'
-            work_order.date_completed = datetime.utcnow()
-            log_text = "Request marked as 'Completed' and status set to 'Closed'"
-            flash('Request has been marked as completed.', 'success')
-        
-        elif tag_to_add == 'Go-back':
-            if not (can_pm or can_admin or can_requester): abort(403)
-            work_order.status = 'Open'
-            current_tags.discard('Completed')
-            current_tags.add('Go-back')
-            log_text = "Request has been reopened (Go-back)"
-            flash('Request has been reopened.', 'info')
-        
+    if request.form.get('action') == 'remove_tag':
+        # Use a generic form for CSRF validation on the remove action
+        remove_form = DeleteRestoreRequestForm()
+        if remove_form.validate_on_submit():
+            if not can_admin_staff:
+                abort(403)
+            tag_to_remove = request.form.get('tag_to_remove')
+            current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
+            if tag_to_remove in current_tags:
+                current_tags.remove(tag_to_remove)
+                work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+                db.session.add(AuditLog(text=f"Tag '{tag_to_remove}' removed.", user_id=current_user.id, work_order_id=work_order.id))
+                db.session.commit()
+                flash(f"Tag '{tag_to_remove}' has been removed.", 'info')
         else:
-            flash('Invalid action.', 'danger')
+            flash('Could not remove tag due to a security error.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+    if form.validate_on_submit():
+        tag_to_add = form.tag.data
+        
+        if tag_to_add in ['Approved', 'Declined'] and not (can_pm or can_super_user):
+            flash('You do not have permission to approve or decline requests.', 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
 
-    work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
-    db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
-    db.session.commit()
+        current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
+        
+        if tag_to_add not in current_tags:
+            current_tags.add(tag_to_add)
+            work_order.tag = ','.join(sorted(list(filter(None, current_tags))))
+            db.session.add(AuditLog(text=f"Request tagged as '{tag_to_add}'.", user_id=current_user.id, work_order_id=work_order.id))
+            db.session.commit()
+            flash(f"Request has been tagged as '{tag_to_add}'.", 'success')
+        else:
+            flash(f"Request is already tagged as '{tag_to_add}'.", 'info')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {getattr(form, field).label.text}: {error}", 'danger')
+            
     return redirect(url_for('main.view_request', request_id=request_id))
+
 
 @main.route('/cancel_request/<int:request_id>', methods=['POST'])
 @login_required

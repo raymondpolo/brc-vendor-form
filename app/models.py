@@ -100,6 +100,8 @@ class WorkOrder(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
     property_id = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='work_order', lazy=True, cascade="all, delete-orphan")

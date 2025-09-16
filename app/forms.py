@@ -219,3 +219,17 @@ class QuoteForm(FlaskForm):
     vendor = QuerySelectField('Vendor', query_factory=get_vendors, get_label='company_name', allow_blank=False, validators=[DataRequired()])
     quote_file = FileField('Quote File', validators=[DataRequired(), FileAllowed(['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'])])
     submit = SubmitField('Upload Quote')
+
+class DeleteRestoreRequestForm(FlaskForm):
+    """An empty form for CSRF protection."""
+    pass
+
+class TagForm(FlaskForm):
+    tag = SelectField('Tag', choices=[
+        ('Approved', 'Approved'),
+        ('Declined', 'Declined'),
+        ('Follow-up needed', 'Follow-up needed'),
+        ('Completed', 'Completed'),
+        ('Go-back', 'Go-back')
+    ], validators=[DataRequired()])
+    submit = SubmitField('Add Tag')
