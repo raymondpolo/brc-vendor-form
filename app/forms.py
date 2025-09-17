@@ -230,4 +230,5 @@ class TagForm(FlaskForm):
         ('Completed', 'Completed'),
         ('Go-back', 'Go-back')
     ], validators=[DataRequired()])
+    follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
     submit = SubmitField('Add Tag')

@@ -103,6 +103,7 @@ class WorkOrder(db.Model):
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
     approved_quote_id = db.Column(db.Integer, db.ForeignKey('quote.id'), nullable=True)
+    follow_up_date = db.Column(db.Date, nullable=True)
 
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='work_order', lazy=True, cascade="all, delete-orphan")

@@ -446,16 +446,14 @@ def quote_action(request_id, quote_id, action):
         flash_text = f"Quote from {quote.vendor.company_name} has been approved."
     elif action == 'decline':
         quote.status = 'Declined'
-        # Only add 'Declined' tag if no other quotes are approved
-        if not any(q.status == 'Approved' for q in work_order.quotes):
-            current_tags.add('Declined')
+        if not any(q.status == 'Approved' for q in work_order.quotes if q.id != quote.id):
             current_tags.discard('Approved')
+            current_tags.add('Declined')
         log_text = f"Quote from {quote.vendor.company_name} declined."
         flash_text = f"Quote from {quote.vendor.company_name} has been declined."
     elif action == 'clear':
         quote.status = 'Pending'
-        # Check if any other quotes are approved or declined to adjust tags
-        if not any(q.status == 'Approved' for q in work_order.quotes):
+        if not any(q.status == 'Approved' for q in work_order.quotes if q.id != quote.id):
             current_tags.discard('Approved')
         if not any(q.status == 'Declined' for q in work_order.quotes):
             current_tags.discard('Declined')
@@ -517,6 +515,13 @@ def tag_request(request_id):
 
         current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
         
+        if tag_to_add == 'Follow-up needed':
+            follow_up_date_str = form.follow_up_date.data
+            if not follow_up_date_str:
+                flash('A follow-up date is required when adding the "Follow-up needed" tag.', 'danger')
+                return redirect(url_for('main.view_request', request_id=request_id))
+            work_order.follow_up_date = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
+
         # Add logic to handle mutually exclusive tags
         if tag_to_add == 'Approved':
             current_tags.discard('Declined')
@@ -1010,6 +1015,14 @@ def api_events():
                    'start': event.scheduled_date.strftime('%Y-%m-%d'),
                    'url': url_for('main.view_request', request_id=event.id)}
                   for event in events]
+    follow_up_events = WorkOrder.query.filter(WorkOrder.follow_up_date.isnot(None)).all()
+    for event in follow_up_events:
+        event_list.append({
+            'title': f"Follow-up for Request #{event.id}",
+            'start': event.follow_up_date.strftime('%Y-%m-%d'),
+            'url': url_for('main.view_request', request_id=event.id),
+            'color': 'red'
+        })
     return jsonify(event_list)
     
 @main.route('/api/vendors/search')
