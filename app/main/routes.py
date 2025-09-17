@@ -85,7 +85,7 @@ def dashboard():
 
     all_statuses = [
         'New', 'Open', 'Pending', 'Quote Requested', 'Quote Sent',
-        'Awaiting Approval', 'Scheduled', 'Closed', 'Cancelled'
+        'Scheduled', 'Closed', 'Cancelled'
     ]
     
     base_query = WorkOrder.query.filter_by(is_deleted=False)
@@ -140,7 +140,6 @@ def dashboard():
         'Cancelled': 'border-gray-400',
         'Quote Requested': 'border-orange-500',
         'Quote Sent': 'border-pink-500',
-        'Awaiting Approval': 'border-red-500',
     }
     
     return render_template(
@@ -424,6 +423,53 @@ def change_status(request_id):
 
     return redirect(url_for('main.view_request', request_id=request_id))
 
+@main.route('/request/<int:request_id>/quote/<int:quote_id>/<action>', methods=['POST'])
+@login_required
+def quote_action(request_id, quote_id, action):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    quote = Quote.query.get_or_404(quote_id)
+
+    can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
+    can_super_user = current_user.role == 'Super User'
+
+    if not (can_pm or can_super_user):
+        flash('You do not have permission to approve or decline quotes.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+    current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
+
+    if action == 'approve':
+        quote.status = 'Approved'
+        current_tags.add('Approved')
+        current_tags.discard('Declined')
+        log_text = f"Quote from {quote.vendor.company_name} approved."
+        flash_text = f"Quote from {quote.vendor.company_name} has been approved."
+    elif action == 'decline':
+        quote.status = 'Declined'
+        # Only add 'Declined' tag if no other quotes are approved
+        if not any(q.status == 'Approved' for q in work_order.quotes):
+            current_tags.add('Declined')
+            current_tags.discard('Approved')
+        log_text = f"Quote from {quote.vendor.company_name} declined."
+        flash_text = f"Quote from {quote.vendor.company_name} has been declined."
+    elif action == 'clear':
+        quote.status = 'Pending'
+        # Check if any other quotes are approved or declined to adjust tags
+        if not any(q.status == 'Approved' for q in work_order.quotes):
+            current_tags.discard('Approved')
+        if not any(q.status == 'Declined' for q in work_order.quotes):
+            current_tags.discard('Declined')
+        log_text = f"Status for quote from {quote.vendor.company_name} cleared."
+        flash_text = f"Status for quote from {quote.vendor.company_name} has been cleared."
+    else:
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+    work_order.tag = ','.join(sorted(list(filter(None, current_tags))))
+    db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
+    db.session.commit()
+    flash(flash_text, 'success')
+    return redirect(url_for('main.view_request', request_id=request_id))
+
 @main.route('/tag_request/<int:request_id>', methods=['POST'])
 @login_required
 def tag_request(request_id):
@@ -432,15 +478,20 @@ def tag_request(request_id):
     
     can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
     can_super_user = current_user.role == 'Super User'
-    can_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+    
+    # Define roles that can remove any tag vs. roles with restrictions
+    can_remove_any_tag = current_user.role in ['Property Manager', 'Super User']
 
     if request.form.get('action') == 'remove_tag':
-        # Use a generic form for CSRF validation on the remove action
         remove_form = DeleteRestoreRequestForm()
         if remove_form.validate_on_submit():
-            if not can_admin_staff:
-                abort(403)
             tag_to_remove = request.form.get('tag_to_remove')
+            
+            # Authorization check for removing tags
+            if tag_to_remove in ['Approved', 'Declined'] and not (can_pm or can_super_user):
+                flash(f"You do not have permission to remove the '{tag_to_remove}' tag.", 'danger')
+                return redirect(url_for('main.view_request', request_id=request_id))
+
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
             if tag_to_remove in current_tags:
                 current_tags.remove(tag_to_remove)
@@ -452,15 +503,26 @@ def tag_request(request_id):
             flash('Could not remove tag due to a security error.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
+    # Dynamically set choices for the form based on user role
+    if current_user.role in ['Admin', 'Scheduler']:
+        form.tag.choices = [c for c in form.tag.choices if c[0] not in ['Approved', 'Declined']]
+
     if form.validate_on_submit():
         tag_to_add = form.tag.data
         
+        # This check is now implicitly handled by the form choices, but kept for defense-in-depth
         if tag_to_add in ['Approved', 'Declined'] and not (can_pm or can_super_user):
             flash('You do not have permission to approve or decline requests.', 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
 
         current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
         
+        # Add logic to handle mutually exclusive tags
+        if tag_to_add == 'Approved':
+            current_tags.discard('Declined')
+        elif tag_to_add == 'Declined':
+            current_tags.discard('Approved')
+
         if tag_to_add not in current_tags:
             current_tags.add(tag_to_add)
             work_order.tag = ','.join(sorted(list(filter(None, current_tags))))

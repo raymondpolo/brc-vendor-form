@@ -102,12 +102,13 @@ class WorkOrder(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
+    approved_quote_id = db.Column(db.Integer, db.ForeignKey('quote.id'), nullable=True)
 
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='work_order', lazy=True, cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='work_order', lazy=True, cascade="all, delete-orphan")
     messages = db.relationship('Message', backref='work_order', lazy=True, cascade="all, delete-orphan")
-    quotes = db.relationship('Quote', backref='work_order', lazy=True, cascade="all, delete-orphan")
+    quotes = db.relationship('Quote', backref='work_order', lazy=True, cascade="all, delete-orphan", foreign_keys='Quote.work_order_id')
 
     viewers = db.relationship('User', secondary=work_order_viewers, lazy='subquery',
                               backref=db.backref('viewable_orders', lazy=True))

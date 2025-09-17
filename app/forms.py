@@ -159,7 +159,6 @@ class ChangeStatusForm(FlaskForm):
         'Pending',
         'Quote Requested',
         'Quote Sent',
-        'Awaiting Approval',
         'Scheduled',
         'Closed',
         'Cancelled'
@@ -226,8 +225,7 @@ class DeleteRestoreRequestForm(FlaskForm):
 
 class TagForm(FlaskForm):
     tag = SelectField('Tag', choices=[
-        ('Approved', 'Approved'),
-        ('Declined', 'Declined'),
+        ('Awaiting Approval', 'Awaiting Approval'),
         ('Follow-up needed', 'Follow-up needed'),
         ('Completed', 'Completed'),
         ('Go-back', 'Go-back')
