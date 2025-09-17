@@ -121,30 +121,74 @@ def dashboard():
     goback_work_orders = base_query.filter(WorkOrder.tag.like('%Go-back%')).all()
     goback_by_vendor = Counter(wo.vendor.company_name if wo.vendor else 'Unassigned' for wo in goback_work_orders)
 
-    chart_data = {
-        "status": {"labels": list(status_counts_for_chart.keys()), "data": list(status_counts_for_chart.values())},
-        "type": {"labels": list(type_counts.keys()), "data": list(type_counts.values())},
-        "property": {"labels": list(property_counts.keys()), "data": list(property_counts.values())},
-        "vendor": {"labels": list(vendor_counts.keys()), "data": list(vendor_counts.values())},
-        "approved_by_pm": {"labels": list(approved_by_pm.keys()), "data": list(approved_by_pm.values())},
-        "declined_by_pm": {"labels": list(declined_by_pm.keys()), "data": list(declined_by_pm.values())},
-        "goback_by_vendor": {"labels": list(goback_by_vendor.keys()), "data": list(goback_by_vendor.values())}
+    status_colors = {
+        'New': {'bg': 'bg-blue-100', 'text': 'text-blue-800', 'border': 'border-blue-500', 'rgba': 'rgba(59, 130, 246, 0.8)'},
+        'Open': {'bg': 'bg-cyan-100', 'text': 'text-cyan-800', 'border': 'border-cyan-500', 'rgba': 'rgba(6, 182, 212, 0.8)'},
+        'Pending': {'bg': 'bg-yellow-100', 'text': 'text-yellow-800', 'border': 'border-yellow-400', 'rgba': 'rgba(245, 158, 11, 0.8)'},
+        'Quote Requested': {'bg': 'bg-orange-100', 'text': 'text-orange-800', 'border': 'border-orange-500', 'rgba': 'rgba(249, 115, 22, 0.8)'},
+        'Quote Sent': {'bg': 'bg-pink-100', 'text': 'text-pink-800', 'border': 'border-pink-500', 'rgba': 'rgba(236, 72, 153, 0.8)'},
+        'Scheduled': {'bg': 'bg-purple-100', 'text': 'text-purple-800', 'border': 'border-purple-500', 'rgba': 'rgba(168, 85, 247, 0.8)'},
+        'Closed': {'bg': 'bg-gray-100', 'text': 'text-gray-800', 'border': 'border-gray-700', 'rgba': 'rgba(55, 65, 81, 0.8)'},
+        'Completed': {'bg': 'bg-green-100', 'text': 'text-green-800', 'border': 'border-green-500', 'rgba': 'rgba(34, 197, 94, 0.8)'},
+        'Cancelled': {'bg': 'bg-gray-100', 'text': 'text-gray-800', 'border': 'border-gray-400', 'rgba': 'rgba(156, 163, 175, 0.8)'},
     }
 
-    status_colors = {
-        'New': 'border-blue-500',
-        'Open': 'border-cyan-500',
-        'Pending': 'border-yellow-400',
-        'Scheduled': 'border-purple-500',
-        'Closed': 'border-gray-700',
-        'Cancelled': 'border-gray-400',
-        'Quote Requested': 'border-orange-500',
-        'Quote Sent': 'border-pink-500',
+    tag_colors = {
+        'Approved': {'bg': 'bg-green-100', 'text': 'text-green-800', 'border': 'border-green-500', 'rgba': 'rgba(34, 197, 94, 0.8)'},
+        'Declined': {'bg': 'bg-red-100', 'text': 'text-red-800', 'border': 'border-red-500', 'rgba': 'rgba(239, 68, 68, 0.8)'},
+        'Follow-up needed': {'bg': 'bg-purple-100', 'text': 'text-purple-800', 'border': 'border-purple-500', 'rgba': 'rgba(168, 85, 247, 0.8)'},
+        'Go-back': {'bg': 'bg-blue-100', 'text': 'text-blue-800', 'border': 'border-blue-500', 'rgba': 'rgba(59, 130, 246, 0.8)'},
+    }
+
+    generic_chart_colors = [
+        'rgba(54, 162, 235, 0.8)', 'rgba(255, 206, 86, 0.8)',
+        'rgba(75, 192, 192, 0.8)', 'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 99, 132, 0.8)', 'rgba(255, 159, 64, 0.8)',
+        'rgba(128, 128, 128, 0.8)', 'rgba(0, 102, 204, 0.8)',
+        'rgba(204, 0, 102, 0.8)', 'rgba(102, 204, 0, 0.8)'
+    ]
+
+    chart_data = {
+        "status": {
+            "labels": list(status_counts_for_chart.keys()),
+            "data": list(status_counts_for_chart.values()),
+            "colors": [status_colors.get(status, {}).get('rgba', 'rgba(156, 163, 175, 0.8)') for status in status_counts_for_chart.keys()]
+        },
+        "type": {
+            "labels": list(type_counts.keys()),
+            "data": list(type_counts.values()),
+            "colors": generic_chart_colors
+        },
+        "property": {
+            "labels": list(property_counts.keys()),
+            "data": list(property_counts.values()),
+            "colors": generic_chart_colors
+        },
+        "vendor": {
+            "labels": list(vendor_counts.keys()),
+            "data": list(vendor_counts.values()),
+            "colors": generic_chart_colors
+        },
+        "approved_by_pm": {
+            "labels": list(approved_by_pm.keys()),
+            "data": list(approved_by_pm.values()),
+            "colors": [tag_colors['Approved']['rgba']] * len(approved_by_pm)
+        },
+        "declined_by_pm": {
+            "labels": list(declined_by_pm.keys()),
+            "data": list(declined_by_pm.values()),
+            "colors": [tag_colors['Declined']['rgba']] * len(declined_by_pm)
+        },
+        "goback_by_vendor": {
+            "labels": list(goback_by_vendor.keys()),
+            "data": list(goback_by_vendor.values()),
+            "colors": generic_chart_colors
+        }
     }
     
     return render_template(
         'dashboard.html', title='Dashboard', stats=stats, all_statuses=all_statuses,
-        tag_stats=tag_stats, chart_data=chart_data, status_colors=status_colors
+        tag_stats=tag_stats, chart_data=chart_data, status_colors=status_colors, tag_colors=tag_colors
     )
 
 @main.route('/requests')

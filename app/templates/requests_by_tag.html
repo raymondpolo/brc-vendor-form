@@ -17,12 +17,60 @@
         <table class="w-full text-sm text-left text-gray-500">
             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
-                    <th scope="col" class="px-6 py-3">Request ID</th>
-                    <th scope="col" class="px-6 py-3">Date Submitted</th>
-                    <th scope="col" class="px-6 py-3">WO#</th>
-                    <th scope="col" class="px-6 py-3">Requester</th>
-                    <th scope="col" class="px-6 py-3">Property</th>
-                    <th scope="col" class="px-6 py-3">Assigned Vendor</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">
+                        <div class="flex items-center">
+                            <span>Request ID</span>
+                            <span x-show="sortColumn === 'id'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('date_created')">
+                        <div class="flex items-center">
+                            <span>Date Submitted</span>
+                            <span x-show="sortColumn === 'date_created'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('wo_number')">
+                        <div class="flex items-center">
+                            <span>WO#</span>
+                            <span x-show="sortColumn === 'wo_number'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('requester_name')">
+                        <div class="flex items-center">
+                            <span>Requester</span>
+                            <span x-show="sortColumn === 'requester_name'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property')">
+                        <div class="flex items-center">
+                            <span>Property</span>
+                            <span x-show="sortColumn === 'property'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('vendor_name')">
+                        <div class="flex items-center">
+                            <span>Assigned Vendor</span>
+                            <span x-show="sortColumn === 'vendor_name'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
                     <th scope="col" class="px-6 py-3">Status & Tags</th>
                 </tr>
             </thead>
@@ -77,20 +125,50 @@
         return {
             search: '',
             requests: {{ requests_json|safe }},
-            get filteredRequests() {
-                if (this.search === '') {
-                    return this.requests;
+            sortColumn: 'id',
+            sortDirection: 'desc',
+
+            sortBy(column) {
+                if (this.sortColumn === column) {
+                    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortColumn = column;
+                    this.sortDirection = 'asc';
                 }
-                return this.requests.filter(req => {
+            },
+
+            get filteredRequests() {
+                const filtered = this.requests.filter(req => {
                     const searchLower = this.search.toLowerCase();
                     return (
                         req.id.toString().includes(searchLower) ||
-                        req.wo_number.toLowerCase().includes(searchLower) ||
-                        req.requester_name.toLowerCase().includes(searchLower) ||
-                        req.property.toLowerCase().includes(searchLower) ||
+                        (req.wo_number && req.wo_number.toLowerCase().includes(searchLower)) ||
+                        (req.requester_name && req.requester_name.toLowerCase().includes(searchLower)) ||
+                        (req.property && req.property.toLowerCase().includes(searchLower)) ||
                         (req.vendor_name && req.vendor_name.toLowerCase().includes(searchLower))
                     );
                 });
+
+                if (this.sortColumn) {
+                    filtered.sort((a, b) => {
+                        let valA = a[this.sortColumn];
+                        let valB = b[this.sortColumn];
+
+                        if (this.sortColumn === 'id') {
+                            valA = parseInt(valA, 10);
+                            valB = parseInt(valB, 10);
+                        } else if (typeof valA === 'string') {
+                            valA = valA.toLowerCase();
+                            valB = valB.toLowerCase();
+                        }
+                        
+                        if (valA < valB) return this.sortDirection === 'asc' ? -1 : 1;
+                        if (valA > valB) return this.sortDirection === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+                }
+
+                return filtered;
             }
         }
     }
