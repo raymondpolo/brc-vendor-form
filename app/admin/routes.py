@@ -8,7 +8,6 @@ from itsdangerous import URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.admin import admin
 from app.models import User, Property, WorkOrder, Vendor, AuditLog
 from app.forms import (
     InviteUserForm, AddUserForm, AdminUpdateUserForm, AdminResetPasswordForm,
@@ -191,6 +190,12 @@ def delete_user(user_id):
     if user_to_delete == current_user:
         flash('You cannot delete your own account.', 'danger')
         return redirect(url_for('admin.manage_users'))
+
+    # If the user is a Property Manager, find all WorkOrders they manage
+    # and set the property_manager to None before deleting the user.
+    if user_to_delete.role == 'Property Manager':
+        WorkOrder.query.filter_by(property_manager=user_to_delete.name).update({"property_manager": None})
+        db.session.commit()
 
     if WorkOrder.query.filter_by(user_id=user_to_delete.id).first():
         flash('Cannot delete user. They are associated with existing work orders.', 'danger')
