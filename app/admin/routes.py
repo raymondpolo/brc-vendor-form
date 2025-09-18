@@ -452,6 +452,8 @@ def upload_vendors_csv():
                     company_name = row[0].strip()
                     contact_name = row[1].strip() if len(row) > 1 else None
                     email = row[2].strip() if len(row) > 2 else None
+                    if email == '':
+                        email = None
                     phone = row[3].strip() if len(row) > 3 else None
                     specialty = row[4].strip() if len(row) > 4 else None
                     website = row[5].strip() if len(row) > 5 else None
