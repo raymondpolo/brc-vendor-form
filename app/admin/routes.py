@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.admin import admin
-from app.models import User, Property, WorkOrder, Vendor
+from app.models import User, Property, WorkOrder, Vendor, AuditLog
 from app.forms import (
     InviteUserForm, AddUserForm, AdminUpdateUserForm, AdminResetPasswordForm,
     PropertyForm, PropertyUploadForm, VendorForm, VendorUploadForm
@@ -303,9 +303,25 @@ def edit_property(property_id):
     form.property_manager.choices = [("", "Select Manager...")] + [(pm.name, pm.name) for pm in property_managers]
 
     if form.validate_on_submit():
+        # Find all work orders associated with this property's ID before making changes.
+        work_orders_to_update = WorkOrder.query.filter_by(property_id=prop.id).all()
+        
+        # Now, update the property object with the new form data.
         form.populate_obj(prop)
+        
+        # Loop through the found work orders and update them with the new property details.
+        for wo in work_orders_to_update:
+            wo.property = prop.name
+            wo.address = prop.address
+            wo.property_manager = prop.property_manager
+            db.session.add(AuditLog(
+                text=f"Property details updated automatically due to master property edit.",
+                user_id=current_user.id,
+                work_order_id=wo.id
+            ))
+
         db.session.commit()
-        flash('Property updated successfully.', 'success')
+        flash('Property updated successfully. All associated work orders have been updated.', 'success')
         return redirect(url_for('admin.manage_properties'))
         
     return render_template('edit_property.html', title='Edit Property', form=form, property=prop)

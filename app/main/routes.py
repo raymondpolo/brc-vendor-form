@@ -663,17 +663,25 @@ def new_request():
         date2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         date3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
 
+        selected_property = Property.query.filter_by(name=form.property.data).first()
+
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
             request_type=form.request_type.data, description=form.description.data,
             property=form.property.data, unit=form.unit.data,
-            address=properties_dict.get(form.property.data, {}).get('address', ''),
-            property_manager=properties_dict.get(form.property.data, {}).get('manager', ''),
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
             contact_person=form.contact_person.data, contact_person_phone=form.contact_person_phone.data,
             preferred_date_1=date1, preferred_date_2=date2,
             preferred_date_3=date3, user_id=current_user.id)
         
+        if selected_property:
+            new_order.property_id = selected_property.id
+            new_order.address = selected_property.address
+            new_order.property_manager = selected_property.property_manager
+        else:
+            new_order.address = properties_dict.get(form.property.data, {}).get('address', '')
+            new_order.property_manager = properties_dict.get(form.property.data, {}).get('manager', '')
+
         if form.vendor_assigned.data:
             vendor = Vendor.query.filter(Vendor.company_name.ilike(form.vendor_assigned.data)).first()
             if vendor:
@@ -739,6 +747,14 @@ def edit_request(request_id):
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
         
+        selected_property = Property.query.filter_by(name=form.property.data).first()
+        if selected_property:
+            work_order.property_id = selected_property.id
+            work_order.address = selected_property.address
+            work_order.property_manager = selected_property.property_manager
+        else:
+            work_order.property_id = None
+
         if 'attachments' in request.files:
             for file in request.files.getlist('attachments'):
                 if file.filename:
