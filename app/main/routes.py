@@ -640,6 +640,8 @@ def unassign_vendor(request_id):
         db.session.add(AuditLog(text=f"Vendor '{vendor_name}' unassigned.", user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash(f"Vendor '{vendor_name}' has been unassigned.", 'success')
+    else:
+        flash('No vendor was assigned to this request.', 'info')
     return redirect(url_for('main.view_request', request_id=request_id))
 
 @main.route('/notifications/read/<int:notification_id>')
