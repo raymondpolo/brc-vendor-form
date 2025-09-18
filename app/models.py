@@ -25,7 +25,7 @@ class User(db.Model, UserMixin):
 
     requests = db.relationship('WorkOrder', backref='author', lazy='dynamic')
     notes = db.relationship('Note', backref='author', lazy='dynamic')
-    notifications = db.relationship('Notification', backref='user', lazy='dynamic')
+    notifications = db.relationship('Notification', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     messages_sent = db.relationship('Message',
                                     foreign_keys='Message.sender_id',
                                     backref='author', lazy='dynamic')
