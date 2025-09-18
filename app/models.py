@@ -32,6 +32,7 @@ class User(db.Model, UserMixin):
     messages_received = db.relationship('Message',
                                         foreign_keys='Message.recipient_id',
                                         backref='recipient', lazy='dynamic', cascade="all, delete-orphan")
+    attachments = db.relationship('Attachment', backref='user', lazy='dynamic', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -133,7 +134,7 @@ class Notification(db.Model):
     text = db.Column(db.String(255), nullable=False)
     link = db.Column(db.String(255), nullable=False)
     is_read = db.Column(db.Boolean, default=False, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user__id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
 
 class AuditLog(db.Model):
@@ -150,7 +151,6 @@ class Attachment(db.Model):
     file_type = db.Column(db.String(50), nullable=False, default='Attachment')
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
-    user = db.relationship('User')
     quote = db.relationship('Quote', backref='attachment', uselist=False, cascade="all, delete-orphan")
 
 class Message(db.Model):
