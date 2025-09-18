@@ -134,7 +134,7 @@ class Notification(db.Model):
     text = db.Column(db.String(255), nullable=False)
     link = db.Column(db.String(255), nullable=False)
     is_read = db.Column(db.Boolean, default=False, nullable=False)
-    user__id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
 
 class AuditLog(db.Model):
