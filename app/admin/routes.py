@@ -427,6 +427,9 @@ def delete_vendor(vendor_id):
     if vendor.work_orders.first():
         flash('Cannot delete vendor. They are associated with existing work orders.', 'danger')
         return redirect(url_for('admin.manage_vendors'))
+    if vendor.quotes.first():
+        flash('Cannot delete vendor. They are associated with existing quotes.', 'danger')
+        return redirect(url_for('admin.manage_vendors'))
     
     db.session.delete(vendor)
     db.session.commit()
