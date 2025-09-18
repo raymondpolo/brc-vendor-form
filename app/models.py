@@ -23,15 +23,15 @@ class User(db.Model, UserMixin):
     last_message_read_time = db.Column(db.DateTime)
     signature = db.Column(db.Text, nullable=True)
 
-    requests = db.relationship('WorkOrder', backref='author', lazy='dynamic')
-    notes = db.relationship('Note', backref='author', lazy='dynamic')
+    requests = db.relationship('WorkOrder', backref='author', lazy='dynamic', cascade="all, delete-orphan")
+    notes = db.relationship('Note', backref='author', lazy='dynamic', cascade="all, delete-orphan")
     notifications = db.relationship('Notification', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     messages_sent = db.relationship('Message',
                                     foreign_keys='Message.sender_id',
-                                    backref='author', lazy='dynamic')
+                                    backref='author', lazy='dynamic', cascade="all, delete-orphan")
     messages_received = db.relationship('Message',
                                         foreign_keys='Message.recipient_id',
-                                        backref='recipient', lazy='dynamic')
+                                        backref='recipient', lazy='dynamic', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
