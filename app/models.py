@@ -66,7 +66,7 @@ class Vendor(db.Model):
     contact_name = db.Column(db.String(100), nullable=True)
     email = db.Column(db.String(120), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
-    specialty = db.Column(db.String(100), nullable=True)
+    specialty = db.Column(db.String(255), nullable=True)
     website = db.Column(db.String(255), nullable=True)
 
     work_orders = db.relationship('WorkOrder', backref='vendor', lazy='dynamic')
