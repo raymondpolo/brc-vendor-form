@@ -8,6 +8,7 @@ from itsdangerous import URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 
 from app import db
+from app.admin import admin  # <-- This is the line that was added
 from app.models import User, Property, WorkOrder, Vendor, AuditLog
 from app.forms import (
     InviteUserForm, AddUserForm, AdminUpdateUserForm, AdminResetPasswordForm,
