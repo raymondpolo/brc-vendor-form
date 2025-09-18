@@ -33,6 +33,7 @@ class User(db.Model, UserMixin):
                                         foreign_keys='Message.recipient_id',
                                         backref='recipient', lazy='dynamic', cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    audit_logs = db.relationship('AuditLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -143,7 +144,6 @@ class AuditLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
-    user = db.relationship('User')
 
 class Attachment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
