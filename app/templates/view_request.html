@@ -395,29 +395,8 @@
                 this.results = [];
             },
 
-            unassignVendor() {
-                this.search = '';
-                this.selectedVendorId = '';
-                this.selectedVendorContact = '';
-                this.selectedVendorEmail = '';
-                this.selectedVendorPhone = '';
-                this.selectedVendorSpecialty = '';
-                this.selectedVendorWebsite = '';
-
-                this.initial = {
-                    name: '',
-                    id: '',
-                    contact: '',
-                    email: '',
-                    phone: '',
-                    specialty: '',
-                    website: ''
-                };
-            },
-
             confirmUnassign() {
                 if (confirm('Are you sure you want to unassign this vendor?')) {
-                    this.unassignVendor();
                     this.$refs.vendorForm.action = '{{ url_for('main.unassign_vendor', request_id=work_order.id) }}';
                     this.$refs.vendorForm.submit();
                 }
