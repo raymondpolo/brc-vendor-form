@@ -366,6 +366,20 @@ def restore_request(request_id):
         flash('Invalid request to restore the work order.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
+@main.route('/request/<int:request_id>/permanently-delete', methods=['POST'])
+@login_required
+@role_required(['Super User'])
+def permanently_delete_request(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = DeleteRestoreRequestForm()
+    if form.validate_on_submit():
+        db.session.delete(work_order)
+        db.session.commit()
+        flash(f'Request #{work_order.id} has been permanently deleted.', 'success')
+        return redirect(url_for('main.deleted_requests'))
+    else:
+        flash('Invalid request to permanently delete the work order.', 'danger')
+        return redirect(url_for('main.deleted_requests'))
 
 @main.route('/deleted-requests')
 @login_required
