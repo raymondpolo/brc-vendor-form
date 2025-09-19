@@ -107,7 +107,7 @@
                 </div>
                 <div>
                     <h3 class="font-semibold text-gray-700">Request Type</h3>
-                    <p class="text-gray-600">{{ work_order.request_type }}</p>
+                    <p class="text-gray-600">{{ work_order.request_type_relation.name }}</p>
                 </div>
                 <div>
                     <h3 class="font-semibold text-gray-700">Preferred Dates</h3>
@@ -613,7 +613,7 @@
                             <p>We would like to schedule this request:</p>
                             <p>&nbsp;</p>
                             <p><strong>Work Order #:</strong> {{ work_order.wo_number }}-{% set names = current_user.name.split() %}{{ names[0][0] if names else '' }}{{ names[-1][0] if names|length > 1 else '' }}<br>
-                            <strong>Type of Request:</strong> {{ work_order.request_type }}<br>
+                            <strong>Type of Request:</strong> {{ work_order.request_type_relation.name }}<br>
                             <strong>Description / Instructions:</strong><br>
                             &nbsp;&nbsp;&nbsp;&nbsp;{{ work_order.description }}</p>
                             <p><strong>Property:</strong> {{ work_order.property }}<br>

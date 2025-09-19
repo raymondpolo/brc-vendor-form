@@ -9,10 +9,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.admin import admin
-from app.models import User, Property, WorkOrder, Vendor, AuditLog
+# MODIFIED: Import RequestType
+from app.models import User, Property, WorkOrder, Vendor, AuditLog, RequestType
 from app.forms import (
     InviteUserForm, AddUserForm, AdminUpdateUserForm, AdminResetPasswordForm,
-    PropertyForm, PropertyUploadForm, VendorForm, VendorUploadForm, ReassignRequestForm
+    PropertyForm, PropertyUploadForm, VendorForm, VendorUploadForm, ReassignRequestForm,
+    # MODIFIED: Import RequestTypeForm
+    RequestTypeForm
 )
 from app.decorators import admin_required, role_required
 from app.email import send_notification_email
@@ -523,3 +526,45 @@ def upload_vendors_csv():
         flash('No file or an invalid file type was selected.', 'danger')
         
     return redirect(url_for('admin.manage_vendors'))
+
+# ADDED: Routes for managing request types
+@admin.route('/request-types', methods=['GET', 'POST'])
+@admin_required
+def manage_request_types():
+    form = RequestTypeForm()
+    if form.validate_on_submit():
+        request_type = RequestType(name=form.name.data)
+        db.session.add(request_type)
+        try:
+            db.session.commit()
+            flash('Request type added.', 'success')
+        except IntegrityError:
+            db.session.rollback()
+            flash('That request type already exists.', 'danger')
+        return redirect(url_for('admin.manage_request_types'))
+    request_types = RequestType.query.order_by(RequestType.name).all()
+    return render_template('manage_request_types.html', title='Manage Request Types', form=form, request_types=request_types)
+
+@admin.route('/request-type/<int:request_type_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_request_type(request_type_id):
+    request_type = RequestType.query.get_or_404(request_type_id)
+    form = RequestTypeForm(obj=request_type)
+    if form.validate_on_submit():
+        request_type.name = form.name.data
+        db.session.commit()
+        flash('Request type updated.', 'success')
+        return redirect(url_for('admin.manage_request_types'))
+    return render_template('edit_request_type.html', title='Edit Request Type', form=form, request_type=request_type)
+
+@admin.route('/request-type/<int:request_type_id>/delete', methods=['POST'])
+@admin_required
+def delete_request_type(request_type_id):
+    request_type = RequestType.query.get_or_404(request_type_id)
+    if request_type.work_orders.first():
+        flash('This request type is in use and cannot be deleted.', 'danger')
+    else:
+        db.session.delete(request_type)
+        db.session.commit()
+        flash('Request type deleted.', 'success')
+    return redirect(url_for('admin.manage_request_types'))

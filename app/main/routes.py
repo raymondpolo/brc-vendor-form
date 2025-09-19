@@ -21,18 +21,20 @@ import bleach
 
 from app import db, csrf
 from app.main import main
+# MODIFIED: Import RequestType
 from app.models import (User, WorkOrder, Property, Note, Notification,
-                        AuditLog, Attachment, Vendor, Quote)
+                        AuditLog, Attachment, Vendor, Quote, RequestType)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
                        UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
 
-request_types_list = [
-    'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
-    'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
-]
+# REMOVED: The hardcoded list is no longer needed
+# request_types_list = [
+#     'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
+#     'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
+# ]
 
 def get_requester_initials(name):
     parts = name.split()
@@ -64,7 +66,8 @@ def work_order_to_dict(req):
         'requester_name': req.requester_name,
         'property': req.property,
         'status': req.status,
-        'request_type': req.request_type,
+        # MODIFIED: Get the request type name from the relationship
+        'request_type': req.request_type_relation.name,
         'tag': req.tag,
         'vendor_name': req.vendor.company_name if req.vendor else 'N/A'
     }
@@ -111,7 +114,8 @@ def dashboard():
     }
 
     status_counts_for_chart = Counter(req.status for req in all_work_orders)
-    type_counts = Counter(req.request_type for req in all_work_orders)
+    # MODIFIED: Get the request type name from the relationship
+    type_counts = Counter(req.request_type_relation.name for req in all_work_orders)
     property_counts = Counter(req.property for req in all_work_orders)
     vendor_counts = Counter(req.vendor.company_name for req in all_work_orders if req.vendor)
     
@@ -675,6 +679,8 @@ def new_request():
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
+    # MODIFIED: Populate the request_type choices from the database
+    form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     if form.validate_on_submit():
         date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         date2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
@@ -684,7 +690,8 @@ def new_request():
 
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
-            request_type=form.request_type.data, description=form.description.data,
+            # MODIFIED: Save the request_type_id
+            request_type_id=form.request_type.data, description=form.description.data,
             property=form.property.data, unit=form.unit.data,
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
             contact_person=form.contact_person.data, contact_person_phone=form.contact_person_phone.data,
@@ -749,13 +756,16 @@ def edit_request(request_id):
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
+    # MODIFIED: Populate the request_type choices from the database
+    form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     reassign_form = ReassignRequestForm()
     
     del form.attachments
 
     if form.validate_on_submit():
         work_order.wo_number = form.wo_number.data
-        work_order.request_type = form.request_type.data
+        # MODIFIED: Save the request_type_id
+        work_order.request_type_id = form.request_type.data
         work_order.description = form.description.data
         work_order.property = form.property.data
         work_order.unit = form.unit.data
@@ -792,6 +802,8 @@ def edit_request(request_id):
         print("---------------------------------")
 
     if request.method == 'GET':
+        # MODIFIED: Set the initial value of the dropdown
+        form.request_type.data = work_order.request_type_id
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
@@ -947,10 +959,6 @@ def account():
             flash('Incorrect current password.', 'danger')
         return redirect(url_for('main.account'))
 
-    # Final debug message to confirm success
-    if current_user.signature:
-        flash(Markup(f"<b>DEBUG:</b> Current signature HTML in DB is: <pre>{current_user.signature}</pre>"))
-
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
 
@@ -1017,7 +1025,7 @@ def download_all_work_orders():
             wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor.company_name if wo.vendor else '', 
             wo.date_created.strftime('%Y-%m-%d %H:%M'),
             wo.date_completed.strftime('%Y-%m-%d %H:%M') if wo.date_completed else '',
-            wo.requester_name, wo.request_type, wo.property, wo.unit,
+            wo.requester_name, wo.request_type_relation.name, wo.property, wo.unit,
             wo.address, wo.description
         ])
     
@@ -1051,7 +1059,7 @@ def download_summary_report():
     filtered_orders = base_query.all()
 
     status_counts = Counter(req.status for req in filtered_orders)
-    type_counts = Counter(req.request_type for req in filtered_orders)
+    type_counts = Counter(req.request_type_relation.name for req in filtered_orders)
     property_counts = Counter(req.property for req in filtered_orders)
     
     string_io = io.StringIO()
@@ -1263,3 +1271,45 @@ def get_date_range(range_name, start_str, end_str):
         end_date = datetime.combine(end_date, time.max)
         
     return start_date, end_date
+
+# ADDED: This function was missing from the previous response.
+def send_reminders():
+    """Sends follow-up reminders for work orders."""
+    today = datetime.utcnow().date()
+    work_orders_for_follow_up = WorkOrder.query.filter(
+        WorkOrder.follow_up_date <= today,
+        WorkOrder.tag.like('%Follow-up needed%')
+    ).all()
+
+    for wo in work_orders_for_follow_up:
+        admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
+        for user in admins_and_schedulers:
+            notification = Notification(
+                text=f"Follow-up reminder for Request #{wo.id}",
+                link=url_for('main.view_request', request_id=wo.id),
+                user_id=user.id
+            )
+            db.session.add(notification)
+            
+            email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
+            send_notification_email(
+                subject=f"Follow-up Reminder for Request #{wo.id}",
+                recipients=[user.email],
+                text_body=f"This is a reminder to follow-up on Request #{wo.id}.",
+                html_body=render_template(
+                    'email/notification_email.html',
+                    title="Follow-up Reminder",
+                    user=user,
+                    body_content=email_body,
+                    link=url_for('main.view_request', request_id=wo.id, _external=True)
+                )
+            )
+        
+        # Remove the 'Follow-up needed' tag after sending reminders
+        current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
+        current_tags.discard('Follow-up needed')
+        wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+        wo.follow_up_date = None
+        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id)) # Assuming user_id 1 is a system user
+
+    db.session.commit()

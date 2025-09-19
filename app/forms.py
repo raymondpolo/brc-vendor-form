@@ -4,7 +4,8 @@ from wtforms import StringField, PasswordField, SubmitField, BooleanField, Selec
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional, URL
 from flask_wtf.file import FileAllowed, FileField
 from flask_login import current_user
-from app.models import User, Vendor
+# MODIFIED: Import RequestType
+from app.models import User, Vendor, RequestType
 from wtforms.widgets import HiddenInput
 from wtforms_sqlalchemy.fields import QuerySelectField
 from datetime import datetime
@@ -179,10 +180,8 @@ class AttachmentForm(FlaskForm):
 
 class NewRequestForm(FlaskForm):
     wo_number = StringField('Work Order #', validators=[Optional()])
-    request_type = SelectField('Type of Request', choices=[
-        'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
-        'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
-    ], validators=[DataRequired()])
+    # MODIFIED: Changed to a SelectField that will be populated dynamically
+    request_type = SelectField('Type of Request', coerce=int, validators=[DataRequired()])
     description = TextAreaField('Description / Instructions', validators=[DataRequired()])
     property = StringField('Property', validators=[DataRequired()])
     unit = StringField('Unit #', validators=[Optional()])
@@ -232,6 +231,11 @@ class TagForm(FlaskForm):
     ], validators=[DataRequired()])
     follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
     submit = SubmitField('Add Tag')
+
+# ADDED: Form for adding/editing request types
+class RequestTypeForm(FlaskForm):
+    name = StringField('Request Type Name', validators=[DataRequired()])
+    submit = SubmitField('Save')
 
 def get_requesters():
     return User.query.filter_by(role='Requester').order_by(User.name)

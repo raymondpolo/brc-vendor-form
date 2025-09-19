@@ -81,7 +81,8 @@ class WorkOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     wo_number = db.Column(db.String(100), nullable=True)
     requester_name = db.Column(db.String(100), nullable=False)
-    request_type = db.Column(db.String(100), nullable=False)
+    # The `request_type` column will be removed in the migration and replaced by `request_type_id`
+    # request_type = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=False)
     property = db.Column(db.String(100), nullable=False)
     unit = db.Column(db.String(20), nullable=True)
@@ -106,6 +107,9 @@ class WorkOrder(db.Model):
     deleted_at = db.Column(db.DateTime, nullable=True)
     approved_quote_id = db.Column(db.Integer, db.ForeignKey('quote.id'), nullable=True)
     follow_up_date = db.Column(db.Date, nullable=True)
+    
+    # ADDED: Foreign key to the new RequestType table.
+    request_type_id = db.Column(db.Integer, db.ForeignKey('request_type.id'), nullable=False)
 
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='work_order', lazy=True, cascade="all, delete-orphan")
@@ -179,3 +183,12 @@ class Quote(db.Model):
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=False)
     attachment_id = db.Column(db.Integer, db.ForeignKey('attachment.id'), nullable=False, unique=True)
+
+# ADDED: New model to store request types
+class RequestType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    work_orders = db.relationship('WorkOrder', backref='request_type_relation', lazy='dynamic')
+
+    def __repr__(self):
+        return f"RequestType('{self.name}')"

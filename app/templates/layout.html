@@ -72,6 +72,7 @@
                         <a href="{{ url_for('admin.manage_users') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_users', 'admin.edit_user'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">User Management</a>
                         <a href="{{ url_for('admin.manage_properties') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_properties', 'admin.edit_property'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">Property Management</a>
                         <a href="{{ url_for('admin.manage_vendors') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_vendors', 'admin.edit_vendor'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">Vendor Management</a>
+                        <a href="{{ url_for('admin.manage_request_types') }}" class="block px-4 py-2 rounded-md {% if request.endpoint in ['admin.manage_request_types', 'admin.edit_request_type'] %} text-white bg-gray-700 {% else %} text-gray-400 hover:text-white {% endif %}">Request Types</a>
                     </div>
                 </div>
                 {% endif %}
