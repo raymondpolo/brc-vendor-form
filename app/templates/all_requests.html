@@ -85,7 +85,7 @@
                         <td class="px-6 py-4">
                             <a :href="'/request/' + req.id" class="font-medium text-indigo-600 hover:underline" x-text="'#' + req.id"></a>
                         </td>
-                        <td class="px-6 py-4" x-text="req.date_created"></td>
+                        <td class="px-6 py-4" x-text="new Date(req.date_created).toLocaleDateString()"></td>
                         <td class="px-6 py-4" x-text="req.wo_number"></td>
                         <td class="px-6 py-4" x-text="req.requester_name"></td>
                         <td class="px-6 py-4" x-text="req.property"></td>
