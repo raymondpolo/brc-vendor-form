@@ -99,7 +99,7 @@ class WorkOrder(db.Model):
     preferred_date_1 = db.Column(db.Date, nullable=True)
     preferred_date_2 = db.Column(db.Date, nullable=True)
     preferred_date_3 = db.Column(db.Date, nullable=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
     property_id = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)

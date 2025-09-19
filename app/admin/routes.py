@@ -3,7 +3,7 @@ import csv
 import io
 import json
 from flask import render_template, redirect, url_for, flash, request, current_app, abort
-from flask_login import current_user
+from flask_login import current_user, login_required
 from itsdangerous import URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 
@@ -12,7 +12,7 @@ from app.admin import admin
 from app.models import User, Property, WorkOrder, Vendor, AuditLog
 from app.forms import (
     InviteUserForm, AddUserForm, AdminUpdateUserForm, AdminResetPasswordForm,
-    PropertyForm, PropertyUploadForm, VendorForm, VendorUploadForm
+    PropertyForm, PropertyUploadForm, VendorForm, VendorUploadForm, ReassignRequestForm
 )
 from app.decorators import admin_required, role_required
 from app.email import send_notification_email
@@ -198,14 +198,37 @@ def delete_user(user_id):
         WorkOrder.query.filter_by(property_manager=user_to_delete.name).update({"property_manager": None})
         db.session.commit()
 
-    if WorkOrder.query.filter_by(user_id=user_to_delete.id).first():
-        flash('Cannot delete user. They are associated with existing work orders.', 'danger')
-        return redirect(url_for('admin.manage_users'))
+    # Find all work orders associated with this user
+    work_orders_to_disassociate = WorkOrder.query.filter_by(user_id=user_to_delete.id).all()
+    for wo in work_orders_to_disassociate:
+        # Add an audit log to trace the original requester
+        log_text = f"Original requester '{user_to_delete.name}' has been deleted. The request is now unassigned."
+        audit_log = AuditLog(text=log_text, user_id=current_user.id, work_order_id=wo.id)
+        db.session.add(audit_log)
+        # Disassociate the work order from the user
+        wo.user_id = None
+    
+    db.session.commit()
 
     db.session.delete(user_to_delete)
     db.session.commit()
     flash(f'User {user_to_delete.name} has been deleted.', 'success')
     return redirect(url_for('admin.manage_users'))
+
+@admin.route('/request/<int:request_id>/reassign', methods=['POST'])
+@login_required
+@admin_required
+def reassign_request(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = ReassignRequestForm()
+    if form.validate_on_submit():
+        new_requester = form.requester.data
+        work_order.user_id = new_requester.id
+        work_order.requester_name = new_requester.name
+        db.session.add(AuditLog(text=f'Request reassigned to {new_requester.name}', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+        flash(f'Request has been reassigned to {new_requester.name}.', 'success')
+    return redirect(url_for('main.view_request', request_id=request_id))
 
 
 # --- PROPERTY MANAGEMENT ROUTES ---

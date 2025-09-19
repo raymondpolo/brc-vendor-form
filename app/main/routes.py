@@ -24,7 +24,7 @@ from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
-                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm)
+                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
@@ -263,6 +263,7 @@ def view_request(request_id):
     quote_form = QuoteForm()
     delete_form = DeleteRestoreRequestForm()
     tag_form = TagForm()
+    reassign_form = ReassignRequestForm()
     requester_initials = get_requester_initials(work_order.requester_name)
     quotes = work_order.quotes
 
@@ -322,12 +323,12 @@ def view_request(request_id):
         return redirect(url_for('main.view_request', request_id=work_order.id))
 
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
-    audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.asc()).all()
+    audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
                            requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
-                           delete_form=delete_form, tag_form=tag_form)
+                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form)
 
 
 @main.route('/request/<int:request_id>/delete', methods=['POST'])
@@ -691,6 +692,9 @@ def new_request():
 
         db.session.add(new_order)
         db.session.commit()
+        
+        db.session.add(AuditLog(text='Request created.', user_id=current_user.id, work_order_id=new_order.id))
+        db.session.commit()
 
         for file in form.attachments.data:
             save_attachment(file, new_order.id)
@@ -731,6 +735,7 @@ def edit_request(request_id):
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
+    reassign_form = ReassignRequestForm()
     
     del form.attachments
 
@@ -778,7 +783,7 @@ def edit_request(request_id):
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
     
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
-                           properties=properties, property_data=json.dumps(properties_dict))
+                           properties=properties, property_data=json.dumps(properties_dict), reassign_form=reassign_form)
 
 @main.route('/upload_attachment/<int:request_id>', methods=['POST'])
 @login_required

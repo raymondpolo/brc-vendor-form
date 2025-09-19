@@ -554,25 +554,27 @@
         </div>
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-gray-700 mb-4">History</h3>
-            <ul class="space-y-4">
-                {% for log in audit_logs %}
-                <li class="flex items-start space-x-3">
-                    <div class="flex-shrink-0">
-                        <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                            <svg class="h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+            <div class="overflow-y-auto h-64">
+                <ul class="space-y-4">
+                    {% for log in audit_logs %}
+                    <li class="flex items-start space-x-3">
+                        <div class="flex-shrink-0">
+                            <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                <svg class="h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <p class="text-sm text-gray-600">{{ log.text }} by <strong>{{ log.user.name }}</strong></p>
-                        <p class="text-xs text-gray-400">{{ log.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</p>
-                    </div>
-                </li>
-                {% else %}
-                <li class="text-sm text-gray-500">No history for this request.</li>
-                {% endfor %}
-            </ul>
+                        <div>
+                            <p class="text-sm text-gray-600">{{ log.text }} by <strong>{{ log.user.name }}</strong></p>
+                            <p class="text-xs text-gray-400">{{ log.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</p>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="text-sm text-gray-500">No history for this request.</li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     </div>
 </div>

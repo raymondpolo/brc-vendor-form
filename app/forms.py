@@ -232,3 +232,10 @@ class TagForm(FlaskForm):
     ], validators=[DataRequired()])
     follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
     submit = SubmitField('Add Tag')
+
+def get_requesters():
+    return User.query.filter_by(role='Requester').order_by(User.name)
+
+class ReassignRequestForm(FlaskForm):
+    requester = QuerySelectField('New Requester', query_factory=get_requesters, get_label='name', allow_blank=False, validators=[DataRequired()])
+    submit = SubmitField('Reassign')
