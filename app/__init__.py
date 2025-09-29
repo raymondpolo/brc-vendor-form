@@ -16,7 +16,9 @@ login_manager.login_message_category = 'info'
 mail = Mail()
 migrate = Migrate()
 csrf = CSRFProtect()
-socketio = SocketIO()
+# Set async_mode to 'gevent' to ensure the correct worker is used.
+# Add engineio_logger for detailed WebSocket connection debugging.
+socketio = SocketIO(async_mode='gevent', engineio_logger=True)
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -27,7 +29,10 @@ def create_app(config_class=Config):
     mail.init_app(app)
     migrate.init_app(app, db)
     csrf.init_app(app)
-    socketio.init_app(app)
+    
+    # Initialize SocketIO with the app and add CORS settings.
+    # This is crucial to prevent long-polling delays.
+    socketio.init_app(app, cors_allowed_origins="*")
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -41,6 +46,8 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
     from app import models
+    # It's better to import events here to avoid circular dependencies
+    from app import events 
 
     @app.context_processor
     def inject_notifications():

@@ -179,10 +179,11 @@
         updateTime();
 
         document.addEventListener('DOMContentLoaded', function () {
-            const socket = io();
+            // Initialize Socket.IO connection, explicitly requesting WebSocket transport
+            const socket = io({ transports: ['websocket'] });
 
             socket.on('connect', function() {
-                console.log('Connected to WebSocket server');
+                console.log('Connected to WebSocket server via WebSocket transport.');
             });
 
             socket.on('notification', function(data) {
@@ -195,6 +196,10 @@
                 setTimeout(() => {
                     toast.classList.add('hidden');
                 }, 5000);
+            });
+
+            socket.on('connect_error', (err) => {
+                console.error('Connection Error:', err);
             });
         });
     </script>
