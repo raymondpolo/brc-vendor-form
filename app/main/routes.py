@@ -303,7 +303,10 @@ def view_request(request_id):
         db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
 
-    if note_form.validate_on_submit() and 'post_note' in request.form:
+    # BUG FIX: Removed 'and 'post_note' in request.form'.
+    # This check is unreliable with AJAX submissions where the button name is not always sent.
+    # validate_on_submit() correctly handles POST requests, making the second check redundant and buggy.
+    if note_form.validate_on_submit():
         note_text = note_form.text.data
         note = Note(text=note_text, author=current_user, work_order=work_order)
         db.session.add(note)
@@ -1349,6 +1352,6 @@ def send_reminders():
         current_tags.discard('Follow-up needed')
         wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         wo.follow_up_date = None
-        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id))
+        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id)) # Assuming user_id 1 is a system user
 
     db.session.commit()
