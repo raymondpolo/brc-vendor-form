@@ -6,6 +6,7 @@ from threading import Thread
 import logging
 
 # Set up a logger for this module for better debugging in production.
+# This will help diagnose email sending issues.
 logger = logging.getLogger(__name__)
 
 def send_async_email(app, msg):
@@ -15,6 +16,7 @@ def send_async_email(app, msg):
     """
     with app.app_context():
         try:
+            logger.info(f"Attempting to send email to {msg.recipients} from {msg.sender}...")
             mail.send(msg)
             logger.info(f"Email sent successfully to {msg.recipients}")
         except Exception as e:
