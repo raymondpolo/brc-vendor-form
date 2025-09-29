@@ -31,7 +31,7 @@ def create_app(config_class=Config):
     csrf.init_app(app)
     
     # Initialize SocketIO with the app and add CORS settings.
-    # This is crucial to prevent long-polling delays.
+    # This is crucial to prevent long-polling delays and enable cross-origin communication.
     socketio.init_app(app, cors_allowed_origins="*")
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -46,7 +46,8 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
     from app import models
-    # It's better to import events here to avoid circular dependencies
+    # Import events here to ensure SocketIO handlers are registered
+    # and to avoid circular dependencies.
     from app import events 
 
     @app.context_processor

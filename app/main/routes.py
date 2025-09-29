@@ -28,9 +28,13 @@ from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestFor
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
-from app.events import notify_user
+from app.events import notify_user, broadcast_new_note
 
 def get_requester_initials(name):
+    """
+    Generates initials from a name for display purposes.
+    Example: "John Doe" -> "JD"
+    """
     parts = name.split()
     if len(parts) > 1:
         return (parts[0][0] + parts[-1][0]).upper()
@@ -39,6 +43,10 @@ def get_requester_initials(name):
     return ""
 
 def save_attachment(file, work_order_id, file_type='Attachment'):
+    """
+    Saves an uploaded file to the server and creates an Attachment record in the database.
+    Generates a unique filename to prevent conflicts.
+    """
     if not file or not file.filename:
         return None
     filename = secure_filename(file.filename)
@@ -52,7 +60,7 @@ def save_attachment(file, work_order_id, file_type='Attachment'):
     return attachment
 
 def work_order_to_dict(req):
-    """Helper function to convert a WorkOrder object to a dictionary."""
+    """Helper function to convert a WorkOrder object to a dictionary for JSON serialization."""
     return {
         'id': req.id,
         'date_created': req.date_created.strftime('%m/%d/%Y'),
@@ -70,6 +78,9 @@ def work_order_to_dict(req):
 @main.route('/')
 @login_required
 def index():
+    """
+    Redirects users to the appropriate starting page based on their role.
+    """
     if current_user.role in ['Requester', 'Property Manager']:
         return redirect(url_for('main.my_requests'))
     else:
@@ -78,6 +89,9 @@ def index():
 @main.route('/dashboard')
 @login_required
 def dashboard():
+    """
+    Displays the main dashboard with statistics and charts for administrative users.
+    """
     if current_user.role in ['Requester', 'Property Manager']:
         return redirect(url_for('main.my_requests'))
 
@@ -109,7 +123,6 @@ def dashboard():
     }
 
     status_counts_for_chart = Counter(req.status for req in all_work_orders)
-    # MODIFIED: Get the request type name from the relationship
     type_counts = Counter(req.request_type_relation.name for req in all_work_orders)
     property_counts = Counter(req.property for req in all_work_orders)
     vendor_counts = Counter(req.vendor.company_name for req in all_work_orders if req.vendor)
@@ -194,6 +207,7 @@ def dashboard():
 @login_required
 @admin_required
 def all_requests():
+    """Displays a list of all non-deleted work orders."""
     requests_data = WorkOrder.query.filter_by(is_deleted=False).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
     return render_template('all_requests.html', title='All Requests', 
@@ -202,6 +216,7 @@ def all_requests():
 @main.route('/my-requests')
 @login_required
 def my_requests():
+    """Displays a list of requests created by the current user or managed by them if they are a Property Manager."""
     query = WorkOrder.query.filter_by(is_deleted=False)
     if current_user.role == 'Property Manager':
         query = query.filter(WorkOrder.property_manager == current_user.name)
@@ -216,6 +231,7 @@ def my_requests():
 @main.route('/shared-with-me')
 @login_required
 def shared_requests():
+    """Displays a list of requests that have been shared with the current user."""
     query = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.viewers.contains(current_user))
     requests_data = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
@@ -226,6 +242,7 @@ def shared_requests():
 @login_required
 @admin_required
 def requests_by_status(status):
+    """Filters and displays requests by their status."""
     filtered_requests = WorkOrder.query.filter_by(is_deleted=False, status=status).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in filtered_requests]
     return render_template('requests_by_status.html', title=f'Requests: {status}', 
@@ -235,6 +252,7 @@ def requests_by_status(status):
 @login_required
 @admin_required
 def requests_by_tag(tag_name):
+    """Filters and displays requests by a specific tag."""
     tagged_requests = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in tagged_requests]
     return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', 
@@ -243,11 +261,16 @@ def requests_by_tag(tag_name):
 @main.route('/request/<int:request_id>', methods=['GET', 'POST'])
 @login_required
 def view_request(request_id):
+    """
+    Displays the details of a single work order and handles the submission of new notes.
+    This is the primary endpoint for real-time updates.
+    """
     work_order = WorkOrder.query.get_or_404(request_id)
 
     if work_order.is_deleted and current_user.role != 'Super User':
         abort(404)
 
+    # Authorization check
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -296,6 +319,9 @@ def view_request(request_id):
                     notified_users.add(tagged_user)
         db.session.commit()
 
+        # Broadcast the new note to all clients viewing this request page
+        broadcast_new_note(work_order.id, note)
+
         for user in notified_users:
             notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
                 link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
@@ -318,8 +344,8 @@ def view_request(request_id):
                 )
             )
         db.session.commit()
-        flash('Your note has been added.', 'success')
-        return redirect(url_for('main.view_request', request_id=work_order.id))
+        # Return a JSON response to the AJAX request to indicate success
+        return jsonify({'success': True})
 
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
@@ -334,6 +360,7 @@ def view_request(request_id):
 @login_required
 @role_required(['Super User'])
 def delete_request(request_id):
+    """Soft deletes a work order, making it invisible to most users but recoverable."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
@@ -352,6 +379,7 @@ def delete_request(request_id):
 @login_required
 @role_required(['Super User'])
 def restore_request(request_id):
+    """Restores a soft-deleted work order."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
@@ -369,6 +397,7 @@ def restore_request(request_id):
 @login_required
 @role_required(['Super User'])
 def permanently_delete_request(request_id):
+    """Permanently deletes a work order from the database. This action is irreversible."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
@@ -384,6 +413,7 @@ def permanently_delete_request(request_id):
 @login_required
 @role_required(['Super User'])
 def deleted_requests():
+    """Displays a list of all soft-deleted requests, with options to restore or permanently delete."""
     deleted = WorkOrder.query.filter_by(is_deleted=True).order_by(WorkOrder.deleted_at.desc()).all()
     form = DeleteRestoreRequestForm()
     return render_template('deleted_requests.html', title='Deleted Requests', requests=deleted, form=form)
@@ -393,6 +423,7 @@ def deleted_requests():
 @login_required
 @admin_required
 def change_status(request_id):
+    """Updates the status of a work order and sends notifications to relevant users."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = ChangeStatusForm()
     form.status.choices = [c for c in form.status.choices if c[0] != 'New']
@@ -484,6 +515,7 @@ def change_status(request_id):
 @main.route('/request/<int:request_id>/quote/<int:quote_id>/<action>', methods=['POST'])
 @login_required
 def quote_action(request_id, quote_id, action):
+    """Handles actions on quotes, such as approve, decline, or clear status."""
     work_order = WorkOrder.query.get_or_404(request_id)
     quote = Quote.query.get_or_404(quote_id)
 
@@ -529,21 +561,18 @@ def quote_action(request_id, quote_id, action):
 @main.route('/tag_request/<int:request_id>', methods=['POST'])
 @login_required
 def tag_request(request_id):
+    """Adds or removes tags from a work order based on user permissions."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = TagForm()
     
     can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
     can_super_user = current_user.role == 'Super User'
     
-    # Define roles that can remove any tag vs. roles with restrictions
-    can_remove_any_tag = current_user.role in ['Property Manager', 'Super User']
-
     if request.form.get('action') == 'remove_tag':
         remove_form = DeleteRestoreRequestForm()
         if remove_form.validate_on_submit():
             tag_to_remove = request.form.get('tag_to_remove')
             
-            # Authorization check for removing tags
             if tag_to_remove in ['Approved', 'Declined'] and not (can_pm or can_super_user):
                 flash(f"You do not have permission to remove the '{tag_to_remove}' tag.", 'danger')
                 return redirect(url_for('main.view_request', request_id=request_id))
@@ -559,14 +588,12 @@ def tag_request(request_id):
             flash('Could not remove tag due to a security error.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
-    # Dynamically set choices for the form based on user role
     if current_user.role in ['Admin', 'Scheduler']:
         form.tag.choices = [c for c in form.tag.choices if c[0] not in ['Approved', 'Declined']]
 
     if form.validate_on_submit():
         tag_to_add = form.tag.data
         
-        # This check is now implicitly handled by the form choices, but kept for defense-in-depth
         if tag_to_add in ['Approved', 'Declined'] and not (can_pm or can_super_user):
             flash('You do not have permission to approve or decline requests.', 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
@@ -580,7 +607,6 @@ def tag_request(request_id):
                 return redirect(url_for('main.view_request', request_id=request_id))
             work_order.follow_up_date = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
 
-        # Add logic to handle mutually exclusive tags
         if tag_to_add == 'Approved':
             current_tags.discard('Declined')
         elif tag_to_add == 'Declined':
@@ -605,6 +631,7 @@ def tag_request(request_id):
 @main.route('/cancel_request/<int:request_id>', methods=['POST'])
 @login_required
 def cancel_request(request_id):
+    """Allows the author or property manager to cancel a request."""
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -625,6 +652,7 @@ def cancel_request(request_id):
 @login_required
 @admin_required
 def assign_vendor(request_id):
+    """Assigns a vendor to a work order."""
     work_order = WorkOrder.query.get_or_404(request_id)
     vendor_id = request.form.get('vendor_id')
 
@@ -647,6 +675,7 @@ def assign_vendor(request_id):
 @login_required
 @admin_required
 def unassign_vendor(request_id):
+    """Unassigns a vendor from a work order."""
     work_order = WorkOrder.query.get_or_404(request_id)
     if work_order.vendor:
         vendor_name = work_order.vendor.company_name
@@ -661,6 +690,7 @@ def unassign_vendor(request_id):
 @main.route('/notifications/read/<int:notification_id>')
 @login_required
 def mark_notification_read(notification_id):
+    """Marks a notification as read and redirects to its associated link."""
     notification = Notification.query.get_or_404(notification_id)
     if notification.user_id != current_user.id:
         abort(403)
@@ -671,6 +701,7 @@ def mark_notification_read(notification_id):
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required
 def new_request():
+    """Displays the form for creating a new work order and handles its submission."""
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
@@ -739,6 +770,7 @@ def new_request():
 @main.route('/edit-request/<int:request_id>', methods=['GET', 'POST'])
 @login_required
 def edit_request(request_id):
+    """Displays the form for editing an existing work order and handles its submission."""
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
@@ -809,6 +841,7 @@ def edit_request(request_id):
 @main.route('/upload_attachment/<int:request_id>', methods=['POST'])
 @login_required
 def upload_attachment(request_id):
+    """Handles the uploading of attachments to a work order."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = AttachmentForm()
     if form.validate_on_submit():
@@ -833,6 +866,7 @@ def upload_attachment(request_id):
 @main.route('/download_attachment/<int:attachment_id>')
 @login_required
 def download_attachment(attachment_id):
+    """Allows authorized users to download an attachment."""
     attachment = Attachment.query.get_or_404(attachment_id)
     work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
     
@@ -849,6 +883,7 @@ def download_attachment(attachment_id):
 @main.route('/view_attachment/<int:attachment_id>')
 @login_required
 def view_attachment(attachment_id):
+    """Allows authorized users to view an attachment in the browser."""
     attachment = Attachment.query.get_or_404(attachment_id)
     work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
     
@@ -865,6 +900,7 @@ def view_attachment(attachment_id):
 @main.route('/delete_attachment/<int:attachment_id>', methods=['POST'])
 @login_required
 def delete_attachment(attachment_id):
+    """Deletes an attachment from the server and the database."""
     attachment = Attachment.query.get_or_404(attachment_id)
     if attachment.user_id != current_user.id and current_user.role not in ['Admin', 'Super User']:
         abort(403)
@@ -881,6 +917,7 @@ def delete_attachment(attachment_id):
 @main.route('/account', methods=['GET', 'POST'])
 @login_required
 def account():
+    """Displays the user account page and handles updates to account details and password."""
     update_form = UpdateAccountForm(obj=current_user)
     password_form = ChangePasswordForm()
 
@@ -905,10 +942,8 @@ def account():
 
             def embed_local_images(html_content):
                 upload_folder = current_app.config['UPLOAD_FOLDER']
-                # --- FINAL, MORE ROBUST REGEX ---
                 img_tags = re.findall(r'<img[^>]+src=[\'"](https?://[^/]+/uploads/([^\'"]+))[\'"]', html_content)
                 
-                # img_tags will be a list of tuples, e.g., [('full_url', 'filename.png?v=123')]
                 for full_url, filename_with_params in img_tags:
                     filepath = os.path.join(upload_folder, filename_with_params.split('?')[0])
                     
@@ -923,7 +958,6 @@ def account():
                                 
                             data_uri = f"data:{mime_type};base64,{encoded_string}"
                             
-                            # Replace the full URL with the data URI
                             html_content = html_content.replace(full_url, data_uri, 1)
                         except Exception as e:
                             current_app.logger.error(f"Error embedding image {filename_with_params}: {e}")
@@ -960,6 +994,7 @@ def account():
 @main.route('/upload_image', methods=['POST'])
 @login_required
 def upload_image():
+    """Endpoint for uploading images from the CKEditor in the email signature."""
     if 'upload' in request.files:
         file = request.files['upload']
         if file:
@@ -968,23 +1003,22 @@ def upload_image():
             unique_filename = f"{uuid.uuid4().hex}.{ext}"
             file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
             
-            # --- MODIFICATION START ---
-            # Add a unique timestamp as a query parameter to "bust" the cache
             cache_buster = int(datetime.utcnow().timestamp())
             url = url_for('main.uploaded_file', filename=unique_filename, v=cache_buster, _external=True)
-            # --- MODIFICATION END ---
             
             return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
     return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
 
 @main.route('/uploads/<filename>')
 def uploaded_file(filename):
+    """Serves uploaded files."""
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 @main.route('/reports')
 @login_required
 @admin_required
 def reports_page():
+    """Displays the page for generating reports."""
     form = ReportForm()
     return render_template('reports.html', title='Reports', form=form)
 
@@ -992,6 +1026,7 @@ def reports_page():
 @login_required
 @admin_required
 def download_all_work_orders():
+    """Generates and downloads a CSV report of all work orders within a specified date range."""
     date_type = request.args.get('date_type', 'date_created')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
@@ -1037,6 +1072,7 @@ def download_all_work_orders():
 @login_required
 @admin_required
 def download_summary_report():
+    """Generates and downloads a summary CSV report of work orders by status, type, and property."""
     date_type = request.args.get('date_type', 'date_created')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
@@ -1086,11 +1122,13 @@ def download_summary_report():
 @main.route('/calendar')
 @login_required
 def calendar():
+    """Displays a calendar view of scheduled and follow-up events."""
     return render_template('calendar.html', title='Calendar')
 
 @main.route('/api/events')
 @login_required
 def api_events():
+    """API endpoint to provide event data for the calendar."""
     query = WorkOrder.query.filter(WorkOrder.scheduled_date.isnot(None))
     if current_user.role == 'Requester':
         query = query.filter(WorkOrder.user_id == current_user.id)
@@ -1112,6 +1150,7 @@ def api_events():
 @main.route('/api/vendors/search')
 @login_required
 def search_vendors():
+    """API endpoint for searching vendors, used in the vendor assignment feature."""
     q = request.args.get('q')
     if q:
         vendors = Vendor.query.filter(Vendor.company_name.ilike(f'%{q}%')).all()
@@ -1121,6 +1160,7 @@ def search_vendors():
 @main.route('/api/users/search')
 @login_required
 def api_user_search():
+    """API endpoint for user search, used for @mentions in notes."""
     users = User.query.filter_by(is_active=True).all()
     user_list = [{'key': user.name, 'value': user.name.replace(' ', '')} for user in users]
     return jsonify(user_list)
@@ -1129,6 +1169,7 @@ def api_user_search():
 @login_required
 @admin_required
 def send_work_order_email(request_id):
+    """Handles sending a work order as an email from the request view page."""
     work_order = WorkOrder.query.get_or_404(request_id)
     try:
         data = request.get_json()
@@ -1143,9 +1184,7 @@ def send_work_order_email(request_id):
         recipients = [recipient]
         cc_list = [email.strip() for email in cc.split(',')] if cc else []
 
-        # Create a plain text version of the body by stripping all HTML tags
         text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
-
         text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
         html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
 
@@ -1169,6 +1208,7 @@ def send_work_order_email(request_id):
 @login_required
 @admin_required
 def add_quote(request_id):
+    """Handles the uploading of quotes to a work order."""
     work_order = WorkOrder.query.get_or_404(request_id)
     form = QuoteForm()
     if form.validate_on_submit():
@@ -1198,6 +1238,7 @@ def add_quote(request_id):
 @login_required
 @admin_required
 def delete_quote(quote_id):
+    """Deletes a quote and its associated attachment."""
     quote = Quote.query.get_or_404(quote_id)
     work_order_id = quote.work_order_id
     attachment = Attachment.query.get(quote.attachment_id)
@@ -1207,7 +1248,7 @@ def delete_quote(quote_id):
             os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
         except OSError as e:
             print(f"Error deleting file {attachment.filename}: {e}")
-            pass  # Continue even if file is not found
+            pass
         
         db.session.delete(attachment)
 
@@ -1223,6 +1264,7 @@ def delete_quote(quote_id):
 
 
 def get_date_range(range_name, start_str, end_str):
+    """Helper function to determine the start and end dates for report generation based on user selection."""
     today = datetime.utcnow().date()
     start_date, end_date = None, None
 
@@ -1271,9 +1313,8 @@ def get_date_range(range_name, start_str, end_str):
         
     return start_date, end_date
 
-# ADDED: This function was missing from the previous response.
 def send_reminders():
-    """Sends follow-up reminders for work orders."""
+    """Sends follow-up reminders for work orders that are due."""
     today = datetime.utcnow().date()
     work_orders_for_follow_up = WorkOrder.query.filter(
         WorkOrder.follow_up_date <= today,
@@ -1304,11 +1345,10 @@ def send_reminders():
                 )
             )
         
-        # Remove the 'Follow-up needed' tag after sending reminders
         current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
         current_tags.discard('Follow-up needed')
         wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         wo.follow_up_date = None
-        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id)) # Assuming user_id 1 is a system user
+        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id))
 
     db.session.commit()
