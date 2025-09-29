@@ -1,37 +1,39 @@
+# app/email.py
 from flask import current_app, render_template
 from flask_mail import Message
 from app import mail
 from threading import Thread
 import logging
 
-# Set up a logger for this module
+# Set up a logger for this module for better debugging in production.
 logger = logging.getLogger(__name__)
 
 def send_async_email(app, msg):
     """
     This function runs in a separate thread and needs its own application context
-    to access the Flask app's configuration and extensions.
+    to access the Flask app's configuration and extensions like Flask-Mail.
     """
     with app.app_context():
         try:
             mail.send(msg)
             logger.info(f"Email sent successfully to {msg.recipients}")
         except Exception as e:
-            # Log the full error for debugging. This is crucial for production.
+            # Log the full error for debugging. This is crucial for production environments.
             logger.error(f"Failed to send email to {msg.recipients}. Error: {e}", exc_info=True)
 
 def send_notification_email(subject, recipients, text_body, html_body, attachments=None, cc=None, sender=None):
     """
     Standardized function to send notification emails asynchronously.
+    It creates a background thread to send the email, preventing the main application
+    from blocking and ensuring a responsive user interface.
     """
     # Get the current Flask app instance to pass to the thread.
     app = current_app._get_current_object()
     
     # Use the default sender from config if a specific sender isn't provided.
-    # This now explicitly fetches the sender from the app's config.
     effective_sender = sender or app.config.get('MAIL_DEFAULT_SENDER')
     
-    # Defensive check: if no sender is found, log an error and stop.
+    # Defensive check: if no sender is configured, log an error and stop.
     if not effective_sender:
         logger.error("MAIL_DEFAULT_SENDER is not configured. Cannot send email.")
         return
