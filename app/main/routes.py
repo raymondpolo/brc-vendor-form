@@ -61,12 +61,13 @@ def work_order_to_dict(req):
     """Helper function to convert a WorkOrder object to a dictionary."""
     return {
         'id': req.id,
-        'date_created': req.date_created.strftime('%Y-%m-%d'),
+        'date_created': req.date_created.strftime('%m/%d/%Y'),
         'wo_number': req.wo_number,
         'requester_name': req.requester_name,
         'property': req.property,
+        'unit': req.unit or 'N/A',
+        'property_manager': req.property_manager or 'N/A',
         'status': req.status,
-        # MODIFIED: Get the request type name from the relationship
         'request_type': req.request_type_relation.name,
         'tag': req.tag,
         'vendor_name': req.vendor.company_name if req.vendor else 'N/A'
@@ -1017,7 +1018,7 @@ def download_all_work_orders():
     csv_writer = csv.writer(string_io)
     headers = [
         'ID', 'WO Number', 'Status', 'Tag', 'Vendor Assigned', 'Date Created', 'Date Completed', 'Requester', 'Request Type',
-        'Property', 'Unit', 'Address', 'Description'
+        'Property', 'Unit', 'Property Manager', 'Address', 'Description'
     ]
     csv_writer.writerow(headers)
     for wo in work_orders:
@@ -1026,7 +1027,7 @@ def download_all_work_orders():
             wo.date_created.strftime('%Y-%m-%d %H:%M'),
             wo.date_completed.strftime('%Y-%m-%d %H:%M') if wo.date_completed else '',
             wo.requester_name, wo.request_type_relation.name, wo.property, wo.unit,
-            wo.address, wo.description
+            wo.property_manager, wo.address, wo.description
         ])
     
     output = string_io.getvalue()
@@ -1135,36 +1136,40 @@ def api_user_search():
 @admin_required
 def send_work_order_email(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    data = request.get_json()
-    recipient = data.get('recipient')
-    cc = data.get('cc')
-    subject = data.get('subject')
-    body = data.get('body')
+    try:
+        data = request.get_json()
+        recipient = data.get('recipient')
+        cc = data.get('cc')
+        subject = data.get('subject')
+        body = data.get('body')
 
-    if not recipient:
-        return jsonify({'success': False, 'message': 'Recipient email is required.'}), 400
+        if not recipient:
+            return jsonify({'success': False, 'message': 'Recipient email is required.'}), 400
 
-    recipients = [recipient]
-    cc_list = [email.strip() for email in cc.split(',')] if cc else []
+        recipients = [recipient]
+        cc_list = [email.strip() for email in cc.split(',')] if cc else []
 
-    # Create a plain text version of the body by stripping all HTML tags
-    text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
+        # Create a plain text version of the body by stripping all HTML tags
+        text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
 
-    text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
-    html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
+        text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
+        html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
 
-    send_notification_email(
-        subject=subject,
-        recipients=recipients,
-        cc=cc_list,
-        text_body=text_body,
-        html_body=html_body
-    )
-    
-    db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
-    db.session.commit()
+        send_notification_email(
+            subject=subject,
+            recipients=recipients,
+            cc=cc_list,
+            text_body=text_body,
+            html_body=html_body
+        )
+        
+        db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
 
-    return jsonify({'success': True, 'message': 'Email sent successfully!'})
+        return jsonify({'success': True, 'message': 'Email sent successfully!'})
+    except Exception as e:
+        current_app.logger.error(f"Error in send_work_order_email: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'An internal server error occurred.'}), 500
 
 @main.route('/request/<int:request_id>/add_quote', methods=['POST'])
 @login_required

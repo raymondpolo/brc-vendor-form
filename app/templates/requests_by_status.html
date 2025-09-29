@@ -62,6 +62,33 @@
                             </span>
                         </div>
                     </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('unit')">
+                        <div class="flex items-center">
+                            <span>Unit #</span>
+                            <span x-show="sortColumn === 'unit'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property_manager')">
+                        <div class="flex items-center">
+                            <span>Property Manager</span>
+                            <span x-show="sortColumn === 'property_manager'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('request_type')">
+                        <div class="flex items-center">
+                            <span>Request Type</span>
+                            <span x-show="sortColumn === 'request_type'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('vendor_name')">
                         <div class="flex items-center">
                             <span>Assigned Vendor</span>
@@ -84,6 +111,9 @@
                         <td class="px-6 py-4" x-text="req.wo_number"></td>
                         <td class="px-6 py-4" x-text="req.requester_name"></td>
                         <td class="px-6 py-4" x-text="req.property"></td>
+                        <td class="px-6 py-4" x-text="req.unit"></td>
+                        <td class="px-6 py-4" x-text="req.property_manager"></td>
+                        <td class="px-6 py-4" x-text="req.request_type"></td>
                         <td class="px-6 py-4" x-text="req.vendor_name"></td>
                         <td class="px-6 py-4">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
@@ -97,7 +127,7 @@
                     </tr>
                 </template>
                 <tr x-show="filteredRequests.length === 0">
-                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                    <td colspan="10" class="px-6 py-4 text-center text-gray-500">
                         No requests found matching your search.
                     </td>
                 </tr>
@@ -130,6 +160,9 @@
                         (req.wo_number && req.wo_number.toLowerCase().includes(searchLower)) ||
                         (req.requester_name && req.requester_name.toLowerCase().includes(searchLower)) ||
                         (req.property && req.property.toLowerCase().includes(searchLower)) ||
+                        (req.unit && req.unit.toLowerCase().includes(searchLower)) ||
+                        (req.property_manager && req.property_manager.toLowerCase().includes(searchLower)) ||
+                        (req.request_type && req.request_type.toLowerCase().includes(searchLower)) ||
                         (req.vendor_name && req.vendor_name.toLowerCase().includes(searchLower))
                     );
                 });
