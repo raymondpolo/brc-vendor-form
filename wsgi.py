@@ -1,13 +1,8 @@
-from gevent import monkey
-# Monkey-patching is crucial for gevent to work with standard Python libraries.
-# It makes standard I/O operations (like network calls) non-blocking.
-monkey.patch_all()
+# wsgi.py
+# This file is the entry point for the Gunicorn server.
 
-from app import create_app, socketio
+from app import create_app
 
+# Create the Flask application instance.
+# Gunicorn will automatically look for this 'app' variable.
 app = create_app()
-
-if __name__ == '__main__':
-    # This block is for running with `python wsgi.py`.
-    # For production, Gunicorn will import the `app` object.
-    socketio.run(app)
