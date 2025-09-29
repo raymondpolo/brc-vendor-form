@@ -17,6 +17,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/tributejs"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body class="bg-gray-100">
     <div x-data="{ isSidebarOpen: true }" class="flex h-screen bg-gray-100">
@@ -150,6 +151,9 @@
             </main>
         </div>
     </div>
+    <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white p-4 rounded-lg shadow-lg hidden">
+        <p id="notification-toast-text"></p>
+    </div>
     <script>
         function updateTime() {
             const now = new Date();
@@ -173,6 +177,26 @@
         }
         setInterval(updateTime, 1000);
         updateTime();
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const socket = io();
+
+            socket.on('connect', function() {
+                console.log('Connected to WebSocket server');
+            });
+
+            socket.on('notification', function(data) {
+                const toast = document.getElementById('notification-toast');
+                const toastText = document.getElementById('notification-toast-text');
+                
+                toastText.innerHTML = `<a href="${data.link}" class="hover:underline">${data.text}</a>`;
+                toast.classList.remove('hidden');
+
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 5000);
+            });
+        });
     </script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 # run.py
-from app import create_app, db
+from app import create_app, db, socketio
 from app.models import User, WorkOrder
 from app.main.routes import send_reminders
 
@@ -8,7 +8,7 @@ app = create_app()
 @app.shell_context_processor
 def make_shell_context():
     """Provides a default context for the `flask shell` command."""
-    return {'db': db, 'User': User}
+    return {'db': db, 'User': User, 'socketio': socketio}
 
 @app.cli.command("create-superuser")
 def create_superuser():
@@ -21,4 +21,4 @@ def send_reminders_command():
     send_reminders()
 
 if __name__ == '__main__':
-    app.run()
+    socketio.run(app)

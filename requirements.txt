@@ -16,3 +16,4 @@ Flask-Migrate
 SQLAlchemy-Utils
 WTForms-SQLAlchemy
 bleach
+Flask-SocketIO

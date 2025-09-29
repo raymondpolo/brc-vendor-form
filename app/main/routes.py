@@ -21,7 +21,6 @@ import bleach
 
 from app import db, csrf
 from app.main import main
-# MODIFIED: Import RequestType
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
@@ -29,12 +28,7 @@ from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestFor
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
-
-# REMOVED: The hardcoded list is no longer needed
-# request_types_list = [
-#     'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
-#     'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
-# ]
+from app.events import notify_user
 
 def get_requester_initials(name):
     parts = name.split()
@@ -680,7 +674,6 @@ def new_request():
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
-    # MODIFIED: Populate the request_type choices from the database
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     if form.validate_on_submit():
         date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
@@ -691,7 +684,6 @@ def new_request():
 
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
-            # MODIFIED: Save the request_type_id
             request_type_id=form.request_type.data, description=form.description.data,
             property=form.property.data, unit=form.unit.data,
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
@@ -727,6 +719,11 @@ def new_request():
                 notification = Notification(text=f'New request #{new_order.id} submitted by {current_user.name}.',
                     link=url_for('main.view_request', request_id=new_order.id), user_id=user.id)
                 db.session.add(notification)
+                # Emit a real-time notification
+                notify_user(user.id, {
+                    'text': f'New request #{new_order.id} submitted by {current_user.name}.',
+                    'link': url_for('main.view_request', request_id=new_order.id)
+                })
         db.session.commit()
         flash('Your request has been created!', 'success')
         return redirect(url_for('main.my_requests'))
@@ -757,7 +754,6 @@ def edit_request(request_id):
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
-    # MODIFIED: Populate the request_type choices from the database
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     reassign_form = ReassignRequestForm()
     
@@ -765,7 +761,6 @@ def edit_request(request_id):
 
     if form.validate_on_submit():
         work_order.wo_number = form.wo_number.data
-        # MODIFIED: Save the request_type_id
         work_order.request_type_id = form.request_type.data
         work_order.description = form.description.data
         work_order.property = form.property.data
@@ -803,7 +798,6 @@ def edit_request(request_id):
         print("---------------------------------")
 
     if request.method == 'GET':
-        # MODIFIED: Set the initial value of the dropdown
         form.request_type.data = work_order.request_type_id
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''

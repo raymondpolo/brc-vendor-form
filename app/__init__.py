@@ -7,6 +7,7 @@ from flask_mail import Mail
 from config import Config
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
+from flask_socketio import SocketIO
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -15,6 +16,7 @@ login_manager.login_message_category = 'info'
 mail = Mail()
 migrate = Migrate()
 csrf = CSRFProtect()
+socketio = SocketIO()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -25,6 +27,7 @@ def create_app(config_class=Config):
     mail.init_app(app)
     migrate.init_app(app, db)
     csrf.init_app(app)
+    socketio.init_app(app)
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
