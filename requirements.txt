@@ -4,7 +4,7 @@ Flask-Login
 Flask-WTF
 Werkzeug
 email_validator
-Flask-Mail
+# Flask-Mail is no longer needed
 itsdangerous
 python-dotenv
 gunicorn
@@ -18,3 +18,4 @@ bleach
 Flask-SocketIO
 gevent
 gevent-websocket
+sendgrid
