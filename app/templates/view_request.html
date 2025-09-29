@@ -572,7 +572,6 @@
         </div>
         <div class="p-6 flex-grow flex flex-col overflow-hidden">
             <form id="emailForm" onsubmit="return false;" class="flex-grow flex flex-col">
-                {{ note_form.csrf_token }}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
                     <div class="mb-2">
                         <label for="recipient" class="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
@@ -671,14 +670,16 @@
         const submitEmailBtn = document.getElementById('submitEmailBtn');
         const recipientInput = document.getElementById('recipient');
         const insertSignatureBtn = document.getElementById('insertSignatureBtn');
-        const csrfToken = emailForm.querySelector('input[name="csrf_token"]').value;
+        
+        // BUG FIX: The CSRF token is now reliably sourced from the meta tag in the document's head.
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         const notificationToast = document.getElementById('notificationToast');
         const notificationMessage = document.getElementById('notificationMessage');
         let editor;
 
         function initializeEditor() {
             if (editor) return;
-            // Use the CKEDITOR global from the super-build loaded in layout.html
             CKEDITOR.ClassicEditor
                 .create(document.querySelector('#body'), {
                     toolbar: {
@@ -686,12 +687,11 @@
                             'undo', 'redo',
                             '|', 'bold', 'italic', 'underline', 'link',
                             '|', 'bulletedList', 'numberedList',
-                            '|', 'blockQuote', 'insertTable', // Keep table functionality
+                            '|', 'blockQuote', 'insertTable',
                             '|', 'sourceEditing'
                         ],
                         shouldNotGroupWhenFull: true
                     },
-                    // Remove plugins to keep the editor lightweight but allow signatures
                     removePlugins: [
                         'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage',
                         'RealTimeCollaborativeComments', 'RealTimeCollaborativeTrackChanges', 'RealTimeCollaborativeRevisionHistory',
@@ -866,7 +866,6 @@
             if (noNotesMessage) {
                 noNotesMessage.remove();
             }
-            // Add a small delay and fade-in effect for a smoother UI update
             const newNoteDiv = document.createElement('div');
             newNoteDiv.innerHTML = data.note_html;
             newNoteDiv.classList.add('opacity-0', 'transition-opacity', 'duration-500');
@@ -886,13 +885,13 @@
                     body: new URLSearchParams(formData).toString(),
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': '{{ note_form.csrf_token._value() }}'
+                        'X-CSRFToken': csrfToken
                     }
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        noteTextarea.value = ''; // Clear textarea on successful submission
+                        noteTextarea.value = '';
                     } else {
                         console.error("Failed to post note.");
                     }
