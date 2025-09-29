@@ -1,4 +1,4 @@
-# Vendor Request Form/requirements.txt
+Vendor Request Form/requirements.txt
 Flask
 Flask-SQLAlchemy
 Flask-Login
@@ -17,3 +17,5 @@ SQLAlchemy-Utils
 WTForms-SQLAlchemy
 bleach
 Flask-SocketIO
+gevent
+gevent-websocket

@@ -4,7 +4,7 @@ from flask_login import current_user
 from app import socketio
 
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None): # MODIFIED: Added auth parameter
     """
     Handles a new client connection.
     If the user is authenticated, they join a room specific to their user ID.

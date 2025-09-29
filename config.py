@@ -12,6 +12,11 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///' + os.path.join(instance_dir, 'site.db')  # use instance_dir here
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Add pool recycling to prevent stale connections
+    SQLALCHEMY_POOL_RECYCLE = 280
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_recycle': 280
+    }
     UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
     
     WTF_CSRF_ENABLED = True
