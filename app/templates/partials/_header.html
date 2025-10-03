@@ -1,0 +1,49 @@
+<header class="flex items-center justify-between p-4 bg-white border-b border-gray-200">
+    <div class="flex items-center">
+        <button @click="isSidebarOpen = !isSidebarOpen" class="text-gray-500 focus:outline-none lg:hidden">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6H20M4 12H20M4 18H11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        </button>
+        <h2 class="text-2xl font-semibold text-gray-800 ml-4">{{ title }}</h2>
+    </div>
+
+    <div class="hidden md:block">
+        <span id="current-time" class="text-lg text-gray-600 font-medium whitespace-nowrap"></span>
+    </div>
+
+    <div class="flex items-center justify-end space-x-4">
+        <div x-data="{ notifOpen: false }" class="relative">
+            <button @click="notifOpen = !notifOpen" class="relative p-2 text-gray-500 bg-white rounded-full hover:bg-gray-100 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                {% if unread_notifications %}
+                <span class="absolute top-0 right-0 h-2 w-2 mt-1 mr-2 bg-red-500 rounded-full"></span>
+                {% endif %}
+            </button>
+            <div x-show="notifOpen" @click.away="notifOpen = false" class="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-10">
+                <div class="px-4 py-2 text-sm font-semibold text-gray-700 border-b">Notifications</div>
+                {% for notification in unread_notifications %}
+                    <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        {{ notification.text }}
+                    </a>
+                {% else %}
+                    <p class="px-4 py-2 text-sm text-gray-500">No new notifications.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div x-data="{ dropdownOpen: false }" class="relative">
+            <button @click="dropdownOpen = !dropdownOpen" class="flex items-center space-x-2">
+                <img class="h-10 w-10 rounded-full object-cover" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ current_user.name[0].upper() }}" alt="User" />
+                <div class="hidden md:block">
+                    <p class="font-semibold text-gray-700 text-left">{{ current_user.name }}</p>
+                    <p class="text-sm text-gray-500">{{ current_user.role }}</p>
+                </div>
+                <svg class="h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+            </button>
+            <div x-show="dropdownOpen" @click.away="dropdownOpen = false" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                <a href="{{ url_for('main.account') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Account</a>
+                <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+            </div>
+        </div>
+    </div>
+</header>
