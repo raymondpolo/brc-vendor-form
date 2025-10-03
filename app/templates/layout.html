@@ -25,6 +25,8 @@
             {% include 'partials/_sidebar.html' %}
         {% endif %}
 
+        <div x-show="isSidebarOpen" @click="isSidebarOpen = false" class="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden" x-transition:enter="transition-opacity ease-linear duration-300" x-transition:enter-start="opacity-0" x-transition:leave="transition-opacity ease-linear duration-300" x-transition:leave-end="opacity-0" style="display: none;"></div>
+
         <div class="flex-1 flex flex-col">
             {% if current_user.is_authenticated %}
                 {% include 'partials/_header.html' %}
@@ -48,6 +50,7 @@
         <p id="notification-toast-text"></p>
     </div>
     <script>
+        // JavaScript for clock and socket notifications remains unchanged...
         function updateTime() {
             const now = new Date();
             const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
