@@ -50,6 +50,22 @@
                             class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition duration-300 flex items-center shadow">
                         <i class="fas fa-envelope mr-2"></i> Send as email
                     </button>
+                    <button id="sendFollowUpBtn"
+                            class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition duration-300 flex items-center shadow">
+                        <i class="fas fa-paper-plane mr-2"></i> Send Follow-Up
+                    </button>
+                    {% endif %}
+
+                    {% if current_user == work_order.author or current_user.role == 'Property Manager' and current_user.name == work_order.property_manager or current_user in work_order.viewers %}
+                        {% if work_order.status != 'Completed' %}
+                        <form method="POST" action="{{ url_for('main.mark_as_completed', request_id=work_order.id) }}">
+                            {{ completed_form.hidden_tag() }}
+                            <button type="submit"
+                                    class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition duration-300 flex items-center shadow">
+                                Mark as Completed
+                            </button>
+                        </form>
+                        {% endif %}
                     {% endif %}
                 {% endif %}
 
@@ -639,6 +655,46 @@
     </div>
 </div>
 
+<div id="followUpModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="text-xl font-semibold">Send Follow-Up Email</h3>
+            <button id="closeFollowUpModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div class="p-6">
+            <form id="followUpForm" method="POST" action="{{ url_for('main.send_follow_up', request_id=work_order.id) }}">
+                {{ follow_up_form.hidden_tag() }}
+                <div class="mb-4">
+                    {{ follow_up_form.recipient.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ follow_up_form.recipient(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", value=work_order.author.email) }}
+                </div>
+                <div class="mb-4">
+                    {{ follow_up_form.cc.label(class="block text-sm font-medium text-gray-700") }}
+                    {% set manager_email = '' %}
+                    {% if work_order.property_manager %}
+                        {% for user in all_users if user.name == work_order.property_manager and user.role == 'Property Manager' %}
+                            {% set manager_email = user.email %}
+                        {% endfor %}
+                    {% endif %}
+                    {{ follow_up_form.cc(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", value=manager_email) }}
+                </div>
+                <div class="mb-4">
+                    {{ follow_up_form.subject.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ follow_up_form.subject(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", value="Follow-up on Work Order #" + work_order.id) }}
+                </div>
+                <div class="mb-4">
+                    {{ follow_up_form.body.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ follow_up_form.body(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", rows="6") }}
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancelFollowUpBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+                    {{ follow_up_form.submit(class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div id="attachmentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col">
         <div class="flex justify-between items-center p-4 border-b">
@@ -671,6 +727,11 @@
         const recipientInput = document.getElementById('recipient');
         const insertSignatureBtn = document.getElementById('insertSignatureBtn');
         
+        const followUpModal = document.getElementById('followUpModal');
+        const openFollowUpBtn = document.getElementById('sendFollowUpBtn');
+        const closeFollowUpModalBtn = document.getElementById('closeFollowUpModalBtn');
+        const cancelFollowUpBtn = document.getElementById('cancelFollowUpBtn');
+
         // BUG FIX: The CSRF token is now reliably sourced from the meta tag in the document's head.
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -727,6 +788,16 @@
             setTimeout(() => {
                 emailModal.classList.add('hidden');
             }, 300);
+        }
+
+        if (openFollowUpBtn) {
+            openFollowUpBtn.addEventListener('click', () => followUpModal.classList.remove('hidden'));
+        }
+        if (closeFollowUpModalBtn) {
+            closeFollowUpModalBtn.addEventListener('click', () => followUpModal.classList.add('hidden'));
+        }
+        if (cancelFollowUpBtn) {
+            cancelFollowUpBtn.addEventListener('click', () => followUpModal.classList.add('hidden'));
         }
 
         function showNotification(message, isSuccess) {

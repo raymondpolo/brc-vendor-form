@@ -107,6 +107,7 @@ class WorkOrder(db.Model):
     deleted_at = db.Column(db.DateTime, nullable=True)
     approved_quote_id = db.Column(db.Integer, db.ForeignKey('quote.id'), nullable=True)
     follow_up_date = db.Column(db.Date, nullable=True)
+    last_follow_up_sent = db.Column(db.DateTime, nullable=True)
     
     # ADDED: Foreign key to the new RequestType table.
     request_type_id = db.Column(db.Integer, db.ForeignKey('request_type.id'), nullable=False)

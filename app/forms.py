@@ -161,6 +161,7 @@ class ChangeStatusForm(FlaskForm):
         'Quote Requested',
         'Quote Sent',
         'Scheduled',
+        'Completed',
         'Closed',
         'Cancelled'
     ], validators=[DataRequired()])
@@ -243,3 +244,15 @@ def get_requesters():
 class ReassignRequestForm(FlaskForm):
     requester = QuerySelectField('New Requester', query_factory=get_requesters, get_label='name', allow_blank=False, validators=[DataRequired()])
     submit = SubmitField('Reassign')
+
+class MarkAsCompletedForm(FlaskForm):
+    """An empty form for the 'Mark as Completed' button."""
+    submit = SubmitField('Mark as Completed')
+
+class SendFollowUpForm(FlaskForm):
+    """Form for sending a manual follow-up email."""
+    recipient = StringField('To', validators=[DataRequired(), Email()])
+    cc = StringField('CC', validators=[Optional(), Email()])
+    subject = StringField('Subject', validators=[DataRequired()])
+    body = TextAreaField('Body', validators=[DataRequired()])
+    submit = SubmitField('Send Follow-Up')

@@ -1,0 +1,9 @@
+Hello,
+
+This is an automated follow-up regarding Work Order #{{ work_order.id }} for the property at {{ work_order.property }}. The request has been in the '{{ work_order.status }}' status for more than 3 days.
+
+Please review the request and update its status if necessary.
+
+View the request here: {{ url_for('main.view_request', request_id=work_order.id, _external=True) }}
+
+This is an automated notification from the BRC Vendor Form.

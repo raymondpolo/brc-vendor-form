@@ -85,4 +85,10 @@ def create_app(config_class=Config):
             from app.main.routes import send_reminders
             send_reminders()
 
+        @app.cli.command("send-follow-ups")
+        def send_follow_ups_command():
+            """Sends automated follow-up emails for stalled requests."""
+            from app.main.routes import send_automated_follow_ups
+            send_automated_follow_ups()
+
     return app

@@ -1,0 +1,4 @@
+{{ body_content }}
+
+---
+This is a notification from the BRC Vendor Form.

@@ -18,13 +18,14 @@ from flask import (render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
 import bleach
+from itsdangerous import URLSafeTimedSerializer
 
 from app import db, csrf
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
-                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm)
+                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm, MarkAsCompletedForm, SendFollowUpForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
@@ -97,7 +98,7 @@ def dashboard():
 
     all_statuses = [
         'New', 'Open', 'Pending', 'Quote Requested', 'Quote Sent',
-        'Scheduled', 'Closed', 'Cancelled'
+        'Scheduled', 'Completed', 'Closed', 'Cancelled'
     ]
     
     base_query = WorkOrder.query.filter_by(is_deleted=False)
@@ -288,6 +289,9 @@ def view_request(request_id):
     reassign_form = ReassignRequestForm()
     requester_initials = get_requester_initials(work_order.requester_name)
     quotes = work_order.quotes
+    completed_form = MarkAsCompletedForm()
+    follow_up_form = SendFollowUpForm()
+
 
     if is_admin_staff:
         status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined', 'New']]
@@ -356,7 +360,7 @@ def view_request(request_id):
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
                            requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
-                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form)
+                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form, completed_form=completed_form, follow_up_form=follow_up_form)
 
 
 @main.route('/request/<int:request_id>/delete', methods=['POST'])
@@ -1318,40 +1322,112 @@ def get_date_range(range_name, start_str, end_str):
 
 def send_reminders():
     """Sends follow-up reminders for work orders that are due."""
-    today = datetime.utcnow().date()
-    work_orders_for_follow_up = WorkOrder.query.filter(
-        WorkOrder.follow_up_date <= today,
-        WorkOrder.tag.like('%Follow-up needed%')
-    ).all()
+    app = current_app._get_current_object()
+    with app.app_context():
+        today = datetime.utcnow().date()
+        work_orders_for_follow_up = WorkOrder.query.filter(
+            WorkOrder.follow_up_date <= today,
+            WorkOrder.tag.like('%Follow-up needed%')
+        ).all()
 
-    for wo in work_orders_for_follow_up:
-        admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
-        for user in admins_and_schedulers:
-            notification = Notification(
-                text=f"Follow-up reminder for Request #{wo.id}",
-                link=url_for('main.view_request', request_id=wo.id),
-                user_id=user.id
-            )
-            db.session.add(notification)
-            
-            email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
-            send_notification_email(
-                subject=f"Follow-up Reminder for Request #{wo.id}",
-                recipients=[user.email],
-                text_body=f"This is a reminder to follow-up on Request #{wo.id}.",
-                html_body=render_template(
-                    'email/notification_email.html',
-                    title="Follow-up Reminder",
-                    user=user,
-                    body_content=email_body,
-                    link=url_for('main.view_request', request_id=wo.id, _external=True)
+        for wo in work_orders_for_follow_up:
+            admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
+            for user in admins_and_schedulers:
+                notification = Notification(
+                    text=f"Follow-up reminder for Request #{wo.id}",
+                    link=url_for('main.view_request', request_id=wo.id),
+                    user_id=user.id
                 )
-            )
-        
-        current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
-        current_tags.discard('Follow-up needed')
-        wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
-        wo.follow_up_date = None
-        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id)) # Assuming user_id 1 is a system user
+                db.session.add(notification)
+                
+                email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
+                send_notification_email(
+                    subject=f"Follow-up Reminder for Request #{wo.id}",
+                    recipients=[user.email],
+                    text_body=f"This is a reminder to follow-up on Request #{wo.id}.",
+                    html_body=render_template(
+                        'email/notification_email.html',
+                        title="Follow-up Reminder",
+                        user=user,
+                        body_content=email_body,
+                        link=url_for('main.view_request', request_id=wo.id, _external=True)
+                    )
+                )
+            
+            current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
+            current_tags.discard('Follow-up needed')
+            wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+            wo.follow_up_date = None
+            db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id)) # Assuming user_id 1 is a system user
 
-    db.session.commit()
+        db.session.commit()
+
+@main.route('/request/<int:request_id>/mark_completed', methods=['POST'])
+@login_required
+def mark_as_completed(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = MarkAsCompletedForm()
+
+    if form.validate_on_submit():
+        work_order.status = 'Completed'
+        db.session.add(AuditLog(text=f'Work marked as completed by {current_user.name}.', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+        flash('Request has been marked as completed.', 'success')
+    else:
+        flash('Could not mark the request as completed.', 'danger')
+
+    return redirect(url_for('main.view_request', request_id=request_id))
+
+@main.route('/request/<int:request_id>/send_follow_up', methods=['POST'])
+@login_required
+@role_required(['Admin', 'Scheduler', 'Super User'])
+def send_follow_up(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = SendFollowUpForm()
+
+    if form.validate_on_submit():
+        send_notification_email(
+            subject=form.subject.data,
+            recipients=[form.recipient.data],
+            cc=[form.cc.data] if form.cc.data else None,
+            html_body=render_template('email/manual_follow_up.html', body_content=form.body.data),
+            text_body=render_template('email/manual_follow_up.txt', body_content=form.body.data)
+        )
+        db.session.add(AuditLog(text=f'Manual follow-up sent to {form.recipient.data} by {current_user.name}.', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+        flash('Follow-up email sent.', 'success')
+    else:
+        flash('Could not send follow-up email. Please check the form for errors.', 'danger')
+
+    return redirect(url_for('main.view_request', request_id=request_id))
+
+def send_automated_follow_ups():
+    """Sends automated follow-up emails for stalled work orders."""
+    app = current_app._get_current_object()
+    with app.app_context():
+        three_days_ago = datetime.utcnow() - timedelta(days=3)
+        work_orders = WorkOrder.query.filter(
+            WorkOrder.status.in_(['Open', 'Pending']),
+            WorkOrder.date_created <= three_days_ago,
+            (WorkOrder.last_follow_up_sent == None) | (WorkOrder.last_follow_up_sent <= three_days_ago)
+        ).all()
+
+        for wo in work_orders:
+            if wo.author:
+                recipients = [wo.author.email]
+                cc = []
+                if wo.property_manager:
+                    manager = User.query.filter_by(name=wo.property_manager, role='Property Manager').first()
+                    if manager and manager.email:
+                        cc.append(manager.email)
+
+                send_notification_email(
+                    subject=f"Follow-up on Work Order #{wo.id}",
+                    recipients=recipients,
+                    cc=cc,
+                    html_body=render_template('email/automated_follow_up.html', work_order=wo),
+                    text_body=render_template('email/automated_follow_up.txt', work_order=wo)
+                )
+                wo.last_follow_up_sent = datetime.utcnow()
+                db.session.add(AuditLog(text='Automated follow-up email sent.', user_id=1, work_order_id=wo.id)) # User 1 is system
+                db.session.commit()
