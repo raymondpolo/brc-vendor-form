@@ -1,10 +1,39 @@
 {% extends "layout.html" %}
 {% block content %}
     <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5 mb-6">
-        </div>
+        <a href="{{ url_for('main.all_requests') }}" class="bg-white p-4 rounded-lg shadow-md border-l-4 border-indigo-500 hover:bg-gray-50">
+            <h3 class="text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Total</h3>
+            <p class="mt-1 text-2xl font-bold text-gray-800">{{ stats.get('totalRequests', 0) }}</p>
+        </a>
+        {% for status in all_statuses %}
+        <a href="{{ url_for('main.requests_by_status', status=status) }}" class="bg-white p-4 rounded-lg shadow-md border-l-4 {{ status_colors.get(status, {}).get('border', 'border-gray-500') }} hover:bg-gray-50">
+            <h3 class="text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{{ status }}</h3>
+            <p class="mt-1 text-2xl font-bold text-gray-800">{{ stats.get(status, 0) }}</p>
+        </a>
+        {% endfor %}
+    </div>
 
     <div class="mb-6 border-t pt-4">
+        <h3 class="text-sm font-semibold text-gray-600 mb-2">Tags Overview</h3>
+        <div class="flex flex-wrap gap-4">
+            <a href="{{ url_for('main.requests_by_tag', tag_name='Approved') }}" class="bg-white p-3 rounded-lg shadow-sm flex items-center space-x-3 border-l-4 {{ tag_colors.get('Approved', {}).get('border', 'border-gray-500') }} hover:bg-gray-50">
+                <span class="text-xs font-semibold text-gray-700">Approved:</span>
+                <span class="text-lg font-bold text-gray-800">{{ tag_stats.approved }}</span>
+            </a>
+            <a href="{{ url_for('main.requests_by_tag', tag_name='Declined') }}" class="bg-white p-3 rounded-lg shadow-sm flex items-center space-x-3 border-l-4 {{ tag_colors.get('Declined', {}).get('border', 'border-gray-500') }} hover:bg-gray-50">
+                <span class="text-xs font-semibold text-gray-700">Declined:</span>
+                <span class="text-lg font-bold text-gray-800">{{ tag_stats.declined }}</span>
+            </a>
+            <a href="{{ url_for('main.requests_by_tag', tag_name='Follow-up needed') }}" class="bg-white p-3 rounded-lg shadow-sm flex items-center space-x-3 border-l-4 {{ tag_colors.get('Follow-up needed', {}).get('border', 'border-gray-500') }} hover:bg-gray-50">
+                <span class="text-xs font-semibold text-gray-700">Follow-up Needed:</span>
+                <span class="text-lg font-bold text-gray-800">{{ tag_stats.follow_up }}</span>
+            </a>
+             <a href="{{ url_for('main.requests_by_tag', tag_name='Go-back') }}" class="bg-white p-3 rounded-lg shadow-sm flex items-center space-x-3 border-l-4 {{ tag_colors.get('Go-back', {}).get('border', 'border-gray-500') }} hover:bg-gray-50">
+                <span class="text-xs font-semibold text-gray-700">Go-back:</span>
+                <span class="text-lg font-bold text-gray-800">{{ tag_stats.go_back }}</span>
+            </a>
         </div>
+    </div>
 
     <div class="space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -40,9 +69,6 @@
                 y: { ticks: { precision: 0 } }
             }
         };
-
-        // CORRECTED: New options object for horizontal bar charts.
-        // It inherits the base bar chart options and sets the indexAxis to 'y'.
         const horizontalBarChartOptions = {
             ...barChartOptions,
             indexAxis: 'y',
@@ -77,19 +103,12 @@
             }
         };
 
-        // Row 1
         createChart(document.getElementById('statusChart').getContext('2d'), 'doughnut', chartData.status, pieChartOptions);
-        createChart(document.getElementById('typeChart').getContext('2d'), 'bar', chartData.type, barChartOptions); // Kept as vertical, labels are short
+        createChart(document.getElementById('typeChart').getContext('2d'), 'bar', chartData.type, barChartOptions);
         createChart(document.getElementById('vendorChart').getContext('2d'), 'pie', chartData.vendor, pieChartOptions);
-        
-        // Row 2 - CORRECTED: Switched to horizontal bars
         createChart(document.getElementById('approvedByPmChart').getContext('2d'), 'bar', chartData.approved_by_pm, horizontalBarChartOptions);
         createChart(document.getElementById('declinedByPmChart').getContext('2d'), 'bar', chartData.declined_by_pm, horizontalBarChartOptions);
-
-        // Row 3 - CORRECTED: Switched to horizontal bars
         createChart(document.getElementById('propertyChart').getContext('2d'), 'bar', chartData.property, horizontalBarChartOptions);
-
-        // Row 4 - CORRECTED: Switched to horizontal bars
         createChart(document.getElementById('gobackByVendorChart').getContext('2d'), 'bar', chartData.goback_by_vendor, horizontalBarChartOptions);
     });
 </script>
