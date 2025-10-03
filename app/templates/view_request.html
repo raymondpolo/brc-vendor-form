@@ -110,6 +110,10 @@
                     <p class="text-gray-600">{{ work_order.property_manager or 'N/A' }}</p>
                 </div>
                 <div>
+                    <h3 class="font-semibold text-gray-700">Preferred Vendor</h3>
+                    <p class="text-gray-600">{{ work_order.preferred_vendor or 'N/A' }}</p>
+                </div>
+                <div>
                     <h3 class="font-semibold text-gray-700">Assigned Vendor</h3>
                     <p class="text-gray-600">{{ work_order.vendor.company_name if work_order.vendor else 'N/A' }}</p>
                 </div>
@@ -732,7 +736,6 @@
         const closeFollowUpModalBtn = document.getElementById('closeFollowUpModalBtn');
         const cancelFollowUpBtn = document.getElementById('cancelFollowUpBtn');
 
-        // BUG FIX: The CSRF token is now reliably sourced from the meta tag in the document's head.
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
         const notificationToast = document.getElementById('notificationToast');

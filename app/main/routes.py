@@ -308,9 +308,6 @@ def view_request(request_id):
         db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
 
-    # BUG FIX: Removed 'and 'post_note' in request.form'.
-    # This check is unreliable with AJAX submissions where the button name is not always sent.
-    # validate_on_submit() correctly handles POST requests, making the second check redundant and buggy.
     if note_form.validate_on_submit():
         note_text = note_form.text.data
         note = Note(text=note_text, author=current_user, work_order=work_order)
@@ -327,7 +324,6 @@ def view_request(request_id):
                     notified_users.add(tagged_user)
         db.session.commit()
 
-        # Broadcast the new note to all clients viewing this request page
         broadcast_new_note(work_order.id, note)
 
         for user in notified_users:
@@ -352,7 +348,6 @@ def view_request(request_id):
                 )
             )
         db.session.commit()
-        # Return a JSON response to the AJAX request to indicate success
         return jsonify({'success': True})
 
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
@@ -728,7 +723,8 @@ def new_request():
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
             contact_person=form.contact_person.data, contact_person_phone=form.contact_person_phone.data,
             preferred_date_1=date1, preferred_date_2=date2,
-            preferred_date_3=date3, user_id=current_user.id)
+            preferred_date_3=date3, user_id=current_user.id,
+            preferred_vendor=form.vendor_assigned.data)
         
         if selected_property:
             new_order.property_id = selected_property.id
@@ -737,11 +733,6 @@ def new_request():
         else:
             new_order.address = properties_dict.get(form.property.data, {}).get('address', '')
             new_order.property_manager = properties_dict.get(form.property.data, {}).get('manager', '')
-
-        if form.vendor_assigned.data:
-            vendor = Vendor.query.filter(Vendor.company_name.ilike(form.vendor_assigned.data)).first()
-            if vendor:
-                new_order.vendor_id = vendor.id
 
         db.session.add(new_order)
         db.session.commit()
@@ -809,6 +800,7 @@ def edit_request(request_id):
         work_order.tenant_phone = form.tenant_phone.data
         work_order.contact_person = form.contact_person.data
         work_order.contact_person_phone = form.contact_person_phone.data
+        work_order.preferred_vendor = form.vendor_assigned.data
         
         work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
@@ -839,6 +831,7 @@ def edit_request(request_id):
 
     if request.method == 'GET':
         form.request_type.data = work_order.request_type_id
+        form.vendor_assigned.data = work_order.preferred_vendor
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
