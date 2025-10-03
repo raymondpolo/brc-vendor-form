@@ -267,6 +267,7 @@ def view_request(request_id):
     This is the primary endpoint for real-time updates.
     """
     work_order = WorkOrder.query.get_or_404(request_id)
+    all_users = User.query.all()
 
     if work_order.is_deleted and current_user.role != 'Super User':
         abort(404)
@@ -360,7 +361,7 @@ def view_request(request_id):
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
                            requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
-                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form, completed_form=completed_form, follow_up_form=follow_up_form)
+                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form, completed_form=completed_form, follow_up_form=follow_up_form, all_users=all_users)
 
 
 @main.route('/request/<int:request_id>/delete', methods=['POST'])
