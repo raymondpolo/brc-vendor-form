@@ -312,8 +312,13 @@ def view_request(request_id):
         note_text = note_form.text.data
         note = Note(text=note_text, author=current_user, work_order=work_order)
         db.session.add(note)
-        notified_users = {work_order.author} if work_order.author != current_user else set()
         
+        current_app.logger.info(f"Processing note from user {current_user.id} on request {work_order.id}")
+        notified_users = set()
+        if work_order.author and work_order.author != current_user:
+            notified_users.add(work_order.author)
+        current_app.logger.info(f"Initial notified_users (author): {[user.id for user in notified_users if user]}")
+
         tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
         for name in tagged_names:
             tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
@@ -324,9 +329,16 @@ def view_request(request_id):
                     notified_users.add(tagged_user)
         db.session.commit()
 
+        current_app.logger.info(f"Final notified_users after mentions: {[user.id for user in notified_users if user]}")
+
         broadcast_new_note(work_order.id, note)
 
         for user in notified_users:
+            if not user or not user.email:
+                current_app.logger.warning(f"Skipping notification for invalid user object: {user}")
+                continue
+            current_app.logger.info(f"Sending note notification email to user {user.id} ({user.email})")
+
             notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
                 link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
             db.session.add(notification)
