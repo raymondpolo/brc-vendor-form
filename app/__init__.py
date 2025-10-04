@@ -1,9 +1,9 @@
 # app/__init__.py
 import os
+import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-# from flask_mail import Mail # REMOVED: This is no longer needed.
 from config import Config
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
@@ -13,14 +13,13 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
-# mail = Mail() # REMOVED: This is no longer needed.
 migrate = Migrate()
 csrf = CSRFProtect()
 socketio = SocketIO(async_mode='gevent', engineio_logger=True)
 
 def create_app(config_class=Config):
     """
-    The application factory. This function creates and configures the Flask application.
+    The application factory. This function creates and inits the Flask application.
     """
     app = Flask(__name__)
     app.config.from_object(config_class)
@@ -28,10 +27,20 @@ def create_app(config_class=Config):
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
-    # mail.init_app(app) # REMOVED: This is no longer needed.
     migrate.init_app(app, db)
     csrf.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*")
+
+    # --- ADDED: Explicit Logging Configuration ---
+    # This ensures that app.logger messages are sent to standard output,
+    # where Gunicorn and Render can capture them.
+    if not app.debug:
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        app.logger.addHandler(handler)
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('BRC Vendor Form startup')
+    # ---------------------------------------------
 
     # Ensure the instance and upload folders exist
     os.makedirs(app.instance_path, exist_ok=True)

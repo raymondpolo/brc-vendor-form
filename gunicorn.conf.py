@@ -18,6 +18,10 @@ threads = 4
 worker_connections = 1000
 # The timeout for workers in seconds
 timeout = 120
-# Log to stdout
+
+# --- Logging Configuration ---
+# Log to stdout and stderr
 accesslog = '-'
 errorlog = '-'
+# Set the log level to 'debug' to capture all application and WebSocket logs
+loglevel = 'debug'
