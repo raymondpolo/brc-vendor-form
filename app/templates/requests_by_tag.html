@@ -14,108 +14,34 @@
     </div>
 
     <div class="overflow-x-auto">
-        <table class="w-full text-sm text-left text-gray-500">
-            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+        <table class="w-full text-sm text-left text-gray-500 responsive-table">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 hidden md:table-header-group">
                 <tr>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">
-                        <div class="flex items-center">
-                            <span>Request ID</span>
-                            <span x-show="sortColumn === 'id'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('date_created')">
-                        <div class="flex items-center">
-                            <span>Date Submitted</span>
-                            <span x-show="sortColumn === 'date_created'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('wo_number')">
-                        <div class="flex items-center">
-                            <span>WO#</span>
-                            <span x-show="sortColumn === 'wo_number'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('requester_name')">
-                        <div class="flex items-center">
-                            <span>Requester</span>
-                            <span x-show="sortColumn === 'requester_name'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property')">
-                        <div class="flex items-center">
-                            <span>Property</span>
-                            <span x-show="sortColumn === 'property'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('unit')">
-                        <div class="flex items-center">
-                            <span>Unit #</span>
-                            <span x-show="sortColumn === 'unit'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property_manager')">
-                        <div class="flex items-center">
-                            <span>Property Manager</span>
-                            <span x-show="sortColumn === 'property_manager'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('request_type')">
-                        <div class="flex items-center">
-                            <span>Request Type</span>
-                            <span x-show="sortColumn === 'request_type'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('vendor_name')">
-                        <div class="flex items-center">
-                            <span>Assigned Vendor</span>
-                            <span x-show="sortColumn === 'vendor_name'">
-                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </span>
-                        </div>
-                    </th>
-                    <th scope="col" class="px-6 py-3">Status & Tags</th>
+                    <th scope="col" class="px-6 py-3">Request ID</th>
+                    <th scope="col" class="px-6 py-3">Date Submitted</th>
+                    <th scope="col" class="px-6 py-3">WO#</th>
+                    <th scope="col" class="px-6 py-3">Request Type</th>
+                    <th scope="col" class="px-6 py-3">Property</th>
+                    <th scope="col" class="px-6 py-3">Unit #</th>
+                    <th scope="col" class="px-6 py-3">Status</th>
+                    <th scope="col" class="px-6 py-3">Tags</th>
+                    <th scope="col" class="px-6 py-3">Assigned Vendor</th>
+                    <th scope="col" class="px-6 py-3">Requester</th>
+                    <th scope="col" class="px-6 py-3">Property Manager</th>
                 </tr>
             </thead>
             <tbody>
                 <template x-for="req in filteredRequests" :key="req.id">
-                    <tr class="bg-white border-b hover:bg-gray-50">
-                        <td class="px-6 py-4">
+                    <tr class="block md:table-row border md:border-b mb-4 md:mb-0 rounded-lg shadow-md md:shadow-none">
+                        <td data-label="Request ID" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none">
                             <a :href="'/request/' + req.id" class="font-medium text-indigo-600 hover:underline" x-text="'#' + req.id"></a>
                         </td>
-                        <td class="px-6 py-4" x-text="req.date_created"></td>
-                        <td class="px-6 py-4" x-text="req.wo_number"></td>
-                        <td class="px-6 py-4" x-text="req.requester_name"></td>
-                        <td class="px-6 py-4" x-text="req.property"></td>
-                        <td class="px-6 py-4" x-text="req.unit"></td>
-                        <td class="px-6 py-4" x-text="req.property_manager"></td>
-                        <td class="px-6 py-4" x-text="req.request_type"></td>
-                        <td class="px-6 py-4" x-text="req.vendor_name"></td>
-                        <td class="px-6 py-4">
+                        <td data-label="Date Submitted" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.date_created"></td>
+                        <td data-label="WO#" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.wo_number || 'N/A'"></td>
+                        <td data-label="Request Type" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.request_type"></td>
+                        <td data-label="Property" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.property"></td>
+                        <td data-label="Unit #" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.unit"></td>
+                        <td data-label="Status" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                                   :class="{
                                       'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
@@ -125,24 +51,34 @@
                                   }"
                                   x-text="req.status">
                             </span>
-                            <template x-if="req.tag">
-                                <template x-for="t in req.tag.split(',').filter(Boolean)" :key="t">
-                                     <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                          :class="{
-                                              'bg-green-100 text-green-800': ['Approved', 'Completed'].includes(t),
-                                              'bg-red-100 text-red-800': ['Declined'].includes(t),
-                                              'bg-blue-100 text-blue-800': ['Go-back'].includes(t),
-                                              'bg-purple-100 text-purple-800': !['Approved', 'Completed', 'Declined', 'Go-back'].includes(t)
-                                          }"
-                                          x-text="t">
-                                    </span>
-                                </template>
-                            </template>
                         </td>
+                        <td data-label="Tags" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none">
+                            <div class="flex flex-col space-y-1 items-end md:items-start">
+                                <template x-if="req.tag">
+                                    <template x-for="t in req.tag.split(',').filter(Boolean)" :key="t">
+                                         <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="{
+                                                  'bg-green-100 text-green-800': ['Approved', 'Completed'].includes(t),
+                                                  'bg-red-100 text-red-800': ['Declined'].includes(t),
+                                                  'bg-blue-100 text-blue-800': ['Go-back'].includes(t),
+                                                  'bg-purple-100 text-purple-800': !['Approved', 'Completed', 'Declined', 'Go-back'].includes(t)
+                                              }"
+                                              x-text="t">
+                                        </span>
+                                    </template>
+                                </template>
+                                <template x-if="!req.tag">
+                                    <span>N/A</span>
+                                </template>
+                            </div>
+                        </td>
+                        <td data-label="Assigned Vendor" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.vendor_name"></td>
+                        <td data-label="Requester" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.requester_name"></td>
+                        <td data-label="Property Manager" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left" x-text="req.property_manager"></td>
                     </tr>
                 </template>
                 <tr x-show="filteredRequests.length === 0">
-                    <td colspan="10" class="px-6 py-4 text-center text-gray-500">
+                    <td colspan="11" class="px-6 py-4 text-center text-gray-500">
                         No requests found matching your search.
                     </td>
                 </tr>
@@ -159,6 +95,7 @@
             sortDirection: 'desc',
 
             sortBy(column) {
+                if (window.innerWidth < 768) return;
                 if (this.sortColumn === column) {
                     this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
                 } else {
@@ -170,19 +107,12 @@
             get filteredRequests() {
                 const filtered = this.requests.filter(req => {
                     const searchLower = this.search.toLowerCase();
-                    return (
-                        req.id.toString().includes(searchLower) ||
-                        (req.wo_number && req.wo_number.toLowerCase().includes(searchLower)) ||
-                        (req.requester_name && req.requester_name.toLowerCase().includes(searchLower)) ||
-                        (req.property && req.property.toLowerCase().includes(searchLower)) ||
-                        (req.unit && req.unit.toLowerCase().includes(searchLower)) ||
-                        (req.property_manager && req.property_manager.toLowerCase().includes(searchLower)) ||
-                        (req.request_type && req.request_type.toLowerCase().includes(searchLower)) ||
-                        (req.vendor_name && req.vendor_name.toLowerCase().includes(searchLower))
+                    return Object.values(req).some(val => 
+                        String(val).toLowerCase().includes(searchLower)
                     );
                 });
 
-                if (this.sortColumn) {
+                if (this.sortColumn && window.innerWidth >= 768) {
                     filtered.sort((a, b) => {
                         let valA = a[this.sortColumn];
                         let valB = b[this.sortColumn];
@@ -191,8 +121,8 @@
                             valA = parseInt(valA, 10);
                             valB = parseInt(valB, 10);
                         } else if (typeof valA === 'string') {
-                            valA = valA.toLowerCase();
-                            valB = valB.toLowerCase();
+                            valA = (valA || '').toLowerCase();
+                            valB = (valB || '').toLowerCase();
                         }
                         
                         if (valA < valB) return this.sortDirection === 'asc' ? -1 : 1;

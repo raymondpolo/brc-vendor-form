@@ -16,14 +16,14 @@
                     <th scope="col" class="px-6 py-3 w-20">Request ID</th>
                     <th scope="col" class="px-6 py-3 w-32">Date Submitted</th>
                     <th scope="col" class="px-6 py-3">WO#</th>
-                    <th scope="col" class="px-6 py-3">Requester</th>
+                    <th scope="col" class="px-6 py-3">Request Type</th>
                     <th scope="col" class="px-6 py-3">Property</th>
                     <th scope="col" class="px-6 py-3">Unit #</th>
-                    <th scope="col" class="px-6 py-3">Property Manager</th>
-                    <th scope="col" class="px-6 py-3">Request Type</th>
-                    <th scope="col" class="px-6 py-3">Assigned Vendor</th>
                     <th scope="col" class="px-6 py-3 w-28">Status</th>
                     <th scope="col" class="px-6 py-3 w-32">Tags</th>
+                    <th scope="col" class="px-6 py-3">Assigned Vendor</th>
+                    <th scope="col" class="px-6 py-3">Requester</th>
+                    <th scope="col" class="px-6 py-3">Property Manager</th>
                 </tr>
             </thead>
             <tbody>
@@ -34,12 +34,9 @@
                         </td>
                         <td data-label="Date Submitted" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none whitespace-nowrap" x-text="req.date_created"></td>
                         <td data-label="WO#" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.wo_number || 'N/A'"></td>
-                        <td data-label="Requester" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.requester_name"></td>
+                        <td data-label="Request Type" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.request_type"></td>
                         <td data-label="Property" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.property"></td>
                         <td data-label="Unit #" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.unit"></td>
-                        <td data-label="Property Manager" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.property_manager"></td>
-                        <td data-label="Request Type" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.request_type"></td>
-                        <td data-label="Assigned Vendor" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.vendor_name"></td>
                         <td data-label="Status" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                                   :class="{
@@ -51,7 +48,7 @@
                                   x-text="req.status">
                             </span>
                         </td>
-                        <td data-label="Tags" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left">
+                        <td data-label="Tags" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none">
                             <div class="flex flex-col space-y-1 items-end md:items-start">
                                 <template x-if="req.tag">
                                     <template x-for="t in req.tag.split(',').filter(Boolean)" :key="t">
@@ -71,6 +68,9 @@
                                 </template>
                             </div>
                         </td>
+                        <td data-label="Assigned Vendor" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.vendor_name"></td>
+                        <td data-label="Requester" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left border-b md:border-none" x-text="req.requester_name"></td>
+                        <td data-label="Property Manager" class="block md:table-cell px-6 py-3 md:py-4 text-right md:text-left" x-text="req.property_manager"></td>
                     </tr>
                 </template>
                 <tr x-show="filteredRequests.length === 0">
