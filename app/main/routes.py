@@ -23,7 +23,7 @@ from itsdangerous import URLSafeTimedSerializer
 from app import db, csrf
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
-                        AuditLog, Attachment, Vendor, Quote, RequestType)
+                        AuditLog, Attachment, Vendor, Quote, RequestType, PushSubscription)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
                        UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm, MarkAsCompletedForm, SendFollowUpForm)
 from app.email import send_notification_email
@@ -1425,3 +1425,35 @@ def send_automated_follow_ups():
                 wo.last_follow_up_sent = datetime.utcnow()
                 db.session.add(AuditLog(text='Automated follow-up email sent.', user_id=1, work_order_id=wo.id)) # User 1 is system
                 db.session.commit()
+
+@main.route('/push/vapid_public_key')
+@login_required
+def get_vapid_public_key():
+    """Provides the VAPID public key to the client-side script."""
+    return jsonify({'public_key': current_app.config['VAPID_PUBLIC_KEY']})
+
+@main.route('/push/subscribe', methods=['POST'])
+@login_required
+def subscribe_to_push():
+    """Receives and stores a new push subscription for the current user."""
+    subscription_data = request.get_json()
+    if not subscription_data:
+        return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
+
+    subscription_json = json.dumps(subscription_data)
+    
+    # Check if this exact subscription already exists for this user
+    existing_subscription = PushSubscription.query.filter_by(
+        user_id=current_user.id,
+        subscription_json=subscription_json
+    ).first()
+
+    if not existing_subscription:
+        new_subscription = PushSubscription(
+            user_id=current_user.id,
+            subscription_json=subscription_json
+        )
+        db.session.add(new_subscription)
+        db.session.commit()
+
+    return jsonify({'success': True}), 201

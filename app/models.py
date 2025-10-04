@@ -3,6 +3,7 @@ from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import json
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -34,6 +35,7 @@ class User(db.Model, UserMixin):
                                         backref='recipient', lazy='dynamic', cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    push_subscriptions = db.relationship('PushSubscription', backref='user', lazy='dynamic', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -61,6 +63,14 @@ class User(db.Model, UserMixin):
             print(f'Email: {admin_email}')
             print(f'Password: {admin_password}')
             print('----------------------------------')
+
+class PushSubscription(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subscription_json = db.Column(db.Text, nullable=False)
+
+    def get_subscription_info(self):
+        return json.loads(self.subscription_json)
 
 class Vendor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
