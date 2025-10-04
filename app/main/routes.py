@@ -1438,11 +1438,11 @@ def subscribe_to_push():
     """Receives and stores a new push subscription for the current user."""
     subscription_data = request.get_json()
     if not subscription_data:
+        current_app.logger.error("Push subscription endpoint called without data.")
         return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
 
     subscription_json = json.dumps(subscription_data)
     
-    # Check if this exact subscription already exists for this user
     existing_subscription = PushSubscription.query.filter_by(
         user_id=current_user.id,
         subscription_json=subscription_json
@@ -1455,5 +1455,8 @@ def subscribe_to_push():
         )
         db.session.add(new_subscription)
         db.session.commit()
+        current_app.logger.info(f"New push subscription saved for user {current_user.id}.")
+    else:
+        current_app.logger.info(f"Push subscription for user {current_user.id} already exists.")
 
     return jsonify({'success': True}), 201
