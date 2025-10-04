@@ -14,20 +14,25 @@ def send_async_email(app, message):
     to access the Flask app's configuration.
     """
     with app.app_context():
+        # Defensive logging to get recipient info safely
+        recipient_info = "N/A"
+        if hasattr(message, 'to') and message.to:
+            try:
+                # SendGrid's `to` can be a list of objects or other structures
+                if isinstance(message.to, list) and len(message.to) > 0:
+                    first_recipient = message.to[0]
+                    if hasattr(first_recipient, 'email'):
+                        recipient_info = first_recipient.email
+                elif isinstance(message.to, str):
+                    recipient_info = message.to
+            except (IndexError, AttributeError) as log_e:
+                logger.warning(f"Could not extract recipient email for logging: {log_e}")
+
         try:
             sg = SendGridAPIClient(app.config['SENDGRID_API_KEY'])
             response = sg.send(message)
-            
-            # Defensive logging to prevent crash if message.to is None
-            recipient_info = "N/A"
-            if message.to and isinstance(message.to, list) and len(message.to) > 0:
-                recipient_info = message.to[0].email
-            
             logger.info(f"Email sent to {recipient_info} with status code: {response.status_code}")
         except Exception as e:
-            recipient_info = "N/A"
-            if message.to and isinstance(message.to, list) and len(message.to) > 0:
-                recipient_info = message.to[0].email
             logger.error(f"Failed to send email to {recipient_info}. Error: {e}", exc_info=True)
 
 def send_notification_email(subject, recipients, html_body, text_body=None, attachments=None, cc=None, sender=None):
@@ -36,9 +41,9 @@ def send_notification_email(subject, recipients, html_body, text_body=None, atta
     """
     app = current_app._get_current_object()
 
-    # Do not attempt to send an email with no recipients.
+    # Safeguard: Do not attempt to send an email with no recipients.
     if not recipients:
-        app.logger.warning(f"Attempted to send email with subject '{subject}' but no recipients were provided.")
+        app.logger.warning(f"Attempted to send email with subject '{subject}' but no recipients were provided. Aborting send.")
         return
 
     effective_sender = sender or app.config.get('MAIL_DEFAULT_SENDER')
