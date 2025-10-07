@@ -87,7 +87,7 @@ def _send_web_push_in_thread(app, user_id, title, body, link):
 
 def notify_user(user_id, data):
     """
-    Emits a 'notification' event via WebSocket and triggers a web push notification in a background task.
+    Emits a 'notification' event via WebSocket and triggers a web push notification in a background thread.
     """
     current_app.logger.info(f"Entering notify_user for user_id: {user_id}")
     
@@ -95,17 +95,11 @@ def notify_user(user_id, data):
     socketio.emit('notification', data, room=str(user_id))
     current_app.logger.info(f"Emitted socket notification to user {user_id}.")
     
-    # 2. Web Push Notification using SocketIO's managed background task
-    socketio.start_background_task(
-        target=_send_web_push_in_thread,
-        app=current_app._get_current_object(),
-        user_id=user_id,
-        title="BRC Vendor Form",
-        body=data['text'],
-        link=data['link']
-    )
-    current_app.logger.info(f"Started background task for web push notification for user_id: {user_id}")
-
+    # 2. Web Push Notification in a background thread
+    app = current_app._get_current_object()
+    thread = Thread(target=_send_web_push_in_thread, args=(app, user_id, "BRC Vendor Form", data['text'], data['link']))
+    thread.start()
+    current_app.logger.info(f"Started background thread for web push notification for user_id: {user_id}")
 
 def broadcast_new_note(request_id, note):
     """
