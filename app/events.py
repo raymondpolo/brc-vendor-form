@@ -1,13 +1,16 @@
 # app/events.py
 from flask_socketio import emit, join_room, leave_room
 from flask_login import current_user
-from app import socketio
-from flask import render_template, current_app
+from app import socketio, db
+from flask import render_template, current_app, url_for
 from pywebpush import webpush, WebPushException
-from app.models import User
+from app.models import User, Note, Notification, WorkOrder
+from app.email import send_notification_email
 import json
+import re
 from threading import Thread
 
+@socketio.on('join')
 def on_join(data):
     """
     Handles a client joining a room for a specific work order.
@@ -16,9 +19,8 @@ def on_join(data):
     join_room(room)
     if current_user.is_authenticated:
         current_app.logger.info(f"Client {current_user.name} joined room: {room}")
-    else:
-        current_app.logger.info(f"An anonymous client joined room: {room}")
 
+@socketio.on('leave')
 def on_leave(data):
     """
     Handles a client leaving a room.
@@ -27,9 +29,8 @@ def on_leave(data):
     leave_room(room)
     if current_user.is_authenticated:
         current_app.logger.info(f"Client {current_user.name} left room: {room}")
-    else:
-        current_app.logger.info(f"An anonymous client left room: {room}")
 
+@socketio.on('connect')
 def handle_connect(auth=None):
     """
     Handles a new client connection.
@@ -42,6 +43,7 @@ def handle_connect(auth=None):
         current_app.logger.info('Client connected (unauthenticated)')
 
 
+@socketio.on('disconnect')
 def handle_disconnect():
     """
     Handles a client disconnection.
@@ -78,7 +80,6 @@ def _send_web_push_in_thread(app, user_id, title, body, link):
                 app.logger.error(f"Failed to send push notification to user {user_id}. Reason: {ex}")
                 if ex.response and ex.response.status_code in [404, 410]:
                     app.logger.info(f"Subscription for user {user_id} is expired/invalid. Deleting.")
-                    from app import db
                     db.session.delete(sub)
                     db.session.commit()
             except Exception as e:
@@ -107,3 +108,56 @@ def broadcast_new_note(request_id, note):
     room = f'request_{request_id}'
     note_html = render_template('partials/note.html', note=note)
     socketio.emit('new_note', {'note_html': note_html}, to=room)
+
+@socketio.on('add_note')
+def handle_add_note(data):
+    """
+    Handles a new note submission from a client via WebSocket.
+    """
+    if not current_user.is_authenticated:
+        return
+
+    text = data.get('text')
+    request_id = data.get('request_id')
+
+    if not text or not request_id:
+        return
+
+    work_order = WorkOrder.query.get(request_id)
+    if not work_order:
+        return
+
+    note = Note(text=text, author=current_user, work_order=work_order)
+    db.session.add(note)
+
+    # Find mentioned users
+    notified_users = set()
+    if work_order.author and work_order.author != current_user:
+        notified_users.add(work_order.author)
+
+    tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', text)
+    for name in tagged_names:
+        tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
+        if tagged_user:
+            if tagged_user not in work_order.viewers:
+                work_order.viewers.append(tagged_user)
+            if tagged_user != current_user:
+                notified_users.add(tagged_user)
+    
+    db.session.commit()
+
+    # Broadcast the new note to all clients viewing this request
+    broadcast_new_note(request_id, note)
+
+    # Send notifications to mentioned users
+    for user in notified_users:
+        if user:
+            notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
+            notification_link = url_for('main.view_request', request_id=work_order.id)
+            
+            db_notification = Notification(text=notification_text, link=notification_link, user_id=user.id)
+            db.session.add(db_notification)
+            
+            notify_user(user.id, {'text': notification_text, 'link': notification_link})
+
+    db.session.commit()

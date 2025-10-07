@@ -960,25 +960,18 @@
             noteForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const noteTextarea = document.getElementById('note-textarea');
-                const formData = new FormData(noteForm);
+                const noteText = noteTextarea.value;
 
-                fetch("{{ url_for('main.view_request', request_id=work_order.id) }}", {
-                    method: 'POST',
-                    body: new URLSearchParams(formData).toString(),
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': csrfToken
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        noteTextarea.value = '';
-                    } else {
-                        console.error("Failed to post note.");
-                    }
-                })
-                .catch(error => console.error("Error posting note:", error));
+                if (noteText.trim() === '') {
+                    return; // Don't send empty notes
+                }
+                
+                socket.emit('add_note', {
+                    'text': noteText,
+                    'request_id': requestId
+                });
+
+                noteTextarea.value = ''; // Clear the textarea immediately
             });
         }
 
