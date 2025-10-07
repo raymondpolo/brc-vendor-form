@@ -50,56 +50,55 @@ def handle_disconnect():
     """
     current_app.logger.info('Client disconnected')
 
-def _send_web_push_in_thread(app, user_id, title, body, link):
+def _send_notifications_in_background(app, user_id, data):
     """
-    This function runs in a background thread and requires its own app context.
+    This function runs in a background thread with its own app context
+    to handle both in-app and push notifications.
     """
     with app.app_context():
+        # 1. Send In-App (WebSocket) Notification
+        current_app.logger.info(f"BACKGROUND: Emitting socket notification to user {user_id}.")
+        socketio.emit('notification', data, room=str(user_id))
+        
+        # 2. Send Web Push Notification
         user = User.query.get(user_id)
         if not user:
-            app.logger.warning(f"Attempted to send push to non-existent user ID: {user_id}")
+            app.logger.warning(f"BACKGROUND: Attempted to send push to non-existent user ID: {user_id}")
             return
 
         if not user.push_subscriptions.first():
-            app.logger.info(f"User {user_id} has no push subscriptions. Skipping push notification.")
+            app.logger.info(f"BACKGROUND: User {user_id} has no push subscriptions. Skipping push notification.")
             return
 
         vapid_claims = {"sub": app.config['VAPID_CLAIM_EMAIL']}
-        app.logger.info(f"Attempting to send push to {user.push_subscriptions.count()} device(s) for user {user_id}.")
+        app.logger.info(f"BACKGROUND: Attempting to send push to {user.push_subscriptions.count()} device(s) for user {user_id}.")
 
         for sub in user.push_subscriptions:
             try:
                 webpush(
                     subscription_info=sub.get_subscription_info(),
-                    data=json.dumps({"title": title, "body": body, "url": link}),
+                    data=json.dumps({"title": "BRC Vendor Form", "body": data['text'], "url": data['link']}),
                     vapid_private_key=app.config['VAPID_PRIVATE_KEY'],
                     vapid_claims=vapid_claims
                 )
-                app.logger.info(f"Successfully sent push notification to one device for user {user_id}.")
+                app.logger.info(f"BACKGROUND: Successfully sent push notification to one device for user {user_id}.")
             except WebPushException as ex:
-                app.logger.error(f"Failed to send push notification to user {user_id}. Reason: {ex}")
+                app.logger.error(f"BACKGROUND: Failed to send push notification to user {user_id}. Reason: {ex}")
                 if ex.response and ex.response.status_code in [404, 410]:
-                    app.logger.info(f"Subscription for user {user_id} is expired/invalid. Deleting.")
+                    app.logger.info(f"BACKGROUND: Subscription for user {user_id} is expired/invalid. Deleting.")
                     db.session.delete(sub)
                     db.session.commit()
             except Exception as e:
-                app.logger.error(f"An unexpected error occurred while sending push to user {user_id}: {e}", exc_info=True)
+                app.logger.error(f"BACKGROUND: An unexpected error occurred while sending push to user {user_id}: {e}", exc_info=True)
 
 def notify_user(user_id, data):
     """
-    Emits a 'notification' event via WebSocket and triggers a web push notification in a background thread.
+    Starts a background thread to handle sending all notifications for a user.
     """
-    current_app.logger.info(f"Entering notify_user for user_id: {user_id}")
-    
-    # 1. In-app (WebSocket) notification
-    socketio.emit('notification', data, room=str(user_id))
-    current_app.logger.info(f"Emitted socket notification to user {user_id}.")
-    
-    # 2. Web Push Notification in a background thread
+    current_app.logger.info(f"Dispatching background thread for notifications for user_id: {user_id}")
     app = current_app._get_current_object()
-    thread = Thread(target=_send_web_push_in_thread, args=(app, user_id, "BRC Vendor Form", data['text'], data['link']))
+    thread = Thread(target=_send_notifications_in_background, args=(app, user_id, data))
     thread.start()
-    current_app.logger.info(f"Started background thread for web push notification for user_id: {user_id}")
 
 def broadcast_new_note(request_id, note):
     """
