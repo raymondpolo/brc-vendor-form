@@ -93,7 +93,7 @@
             });
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
 
-            // Request Notification Permission
+            // **CRITICAL FIX #1**: Request Notification Permission
             if ('Notification' in window && Notification.permission !== 'granted') {
                 Notification.requestPermission();
             }
@@ -128,6 +128,7 @@
                 });
             }
 
+            // **CRITICAL FIX #2**: Robust VAPID Key Decoder
             function urlBase64ToUint8Array(base64String) {
                 const padding = '='.repeat((4 - base64String.length % 4) % 4);
                 const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
