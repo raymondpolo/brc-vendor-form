@@ -42,6 +42,10 @@ def create_app(config_class=Config):
         app.logger.info('BRC Vendor Form startup')
     # ---------------------------------------------
 
+    # Register Jinja filter for timezone conversion
+    from .utils import format_datetime_filter
+    app.jinja_env.filters['datetime'] = format_datetime_filter
+
     # Ensure the instance and upload folders exist
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

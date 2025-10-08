@@ -9,6 +9,7 @@ from app.models import User, Vendor, RequestType
 from wtforms.widgets import HiddenInput
 from wtforms_sqlalchemy.fields import QuerySelectField
 from datetime import datetime
+import pytz
 
 # Custom validator to handle empty strings for optional unique fields
 class OptionalUnique(Optional):
@@ -101,6 +102,7 @@ class VendorUploadForm(FlaskForm):
 class UpdateAccountForm(FlaskForm):
     name = StringField('Full Name', validators=[DataRequired(), Length(min=2, max=100)])
     email = StringField('Email', validators=[DataRequired(), Email()])
+    timezone = SelectField('Timezone', choices=[(tz, tz) for tz in pytz.common_timezones], validators=[DataRequired()])
     # The signature field is removed from the form, it will be handled directly in the template
     submit = SubmitField('Update Account')
 

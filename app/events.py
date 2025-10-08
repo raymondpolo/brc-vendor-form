@@ -65,7 +65,7 @@ def _send_web_push_in_background(app, user_id, title, body, link):
             app.logger.info(f"PUSH_THREAD: User {user_id} has no push subscriptions. Skipping.")
             return
 
-        vapid_claims = {"sub": app.config['VAPID_CLAIM_EMAIL']}
+        vapid_claims = {"sub": f"mailto:{app.config['VAPID_CLAIM_EMAIL']}"}
         app.logger.info(f"PUSH_THREAD: Found {user.push_subscriptions.count()} subscription(s) for user {user_id}. Attempting to send.")
 
         # Create a list of subscriptions to iterate over, as we may delete them

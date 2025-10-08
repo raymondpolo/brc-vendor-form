@@ -23,6 +23,7 @@ class User(db.Model, UserMixin):
     is_active = db.Column(db.Boolean, default=False, nullable=False)
     last_message_read_time = db.Column(db.DateTime)
     signature = db.Column(db.Text, nullable=True)
+    timezone = db.Column(db.String(100), nullable=False, default='America/Denver')
 
     requests = db.relationship('WorkOrder', backref='author', lazy='dynamic', cascade="all, delete-orphan")
     notes = db.relationship('Note', backref='author', lazy='dynamic', cascade="all, delete-orphan")

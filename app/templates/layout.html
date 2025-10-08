@@ -69,13 +69,19 @@
     </div>
     <script>
         function updateTime() {
-            const now = new Date();
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-            const timeString = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()} ${now.toLocaleTimeString()}`;
             const timeEl = document.getElementById('current-time');
             if (timeEl) {
-                timeEl.textContent = timeString;
+                const now = new Date();
+                timeEl.textContent = now.toLocaleString('en-US', {
+                    timeZone: 'America/Denver',
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    second: 'numeric'
+                });
             }
         }
         setInterval(updateTime, 1000);
@@ -88,10 +94,68 @@
                 const toast = document.getElementById('notification-toast');
                 const toastText = document.getElementById('notification-toast-text');
                 toastText.innerHTML = `<a href="${data.link}" class="hover:underline">${data.text}</a>`;
-                toast.classList.remove('hidden');
+                toast.classList.remove('hidden', 'bg-red-500');
+                toast.classList.add('bg-green-500');
                 setTimeout(() => toast.classList.add('hidden'), 5000);
             });
-            socket.on('connect_error', (err) => console.error('Connection Error:', err));
+            socket.on('connect_error', (err) => {
+                console.error('Connection Error:', err);
+                const toast = document.getElementById('notification-toast');
+                const toastText = document.getElementById('notification-toast-text');
+                toastText.textContent = 'Connection to server lost. Please refresh the page.';
+                toast.classList.remove('hidden', 'bg-green-500');
+                toast.classList.add('bg-red-500');
+            });
+
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                navigator.serviceWorker.register('/static/js/service-worker.js')
+                    .then(function(swReg) {
+                        console.log('Service Worker is registered', swReg);
+                        swReg.pushManager.getSubscription()
+                            .then(function(subscription) {
+                                if (subscription === null) {
+                                    // Subscribe the user
+                                    fetch('/push/vapid_public_key').then(r => r.json()).then(data => {
+                                        const applicationServerKey = urlBase64ToUint8Array(data.public_key);
+                                        swReg.pushManager.subscribe({
+                                            userVisibleOnly: true,
+                                            applicationServerKey: applicationServerKey
+                                        })
+                                        .then(function(newSubscription) {
+                                            // Send the subscription to the backend
+                                            fetch('/push/subscribe', {
+                                                method: 'POST',
+                                                body: JSON.stringify(newSubscription),
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                                                }
+                                            });
+                                        })
+                                        .catch(e => console.error('Failed to subscribe the user: ', e));
+                                    });
+                                }
+                            });
+                    })
+                    .catch(function(error) {
+                        console.error('Service Worker Error', error);
+                    });
+            }
+
+            function urlBase64ToUint8Array(base64String) {
+                const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                const base64 = (base64String + padding)
+                    .replace(/\-/g, '+')
+                    .replace(/_/g, '/');
+
+                const rawData = window.atob(base64);
+                const outputArray = new Uint8Array(rawData.length);
+
+                for (let i = 0; i < rawData.length; ++i) {
+                    outputArray[i] = rawData.charCodeAt(i);
+                }
+                return outputArray;
+            }
         });
     </script>
 </body>

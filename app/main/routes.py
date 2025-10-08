@@ -937,6 +937,7 @@ def account():
     if 'update_account' in request.form and update_form.validate_on_submit():
         current_user.name = update_form.name.data
         current_user.email = update_form.email.data
+        current_user.timezone = update_form.timezone.data
 
         if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager']:
             allowed_tags = [
@@ -1000,6 +1001,9 @@ def account():
         else:
             flash('Incorrect current password.', 'danger')
         return redirect(url_for('main.account'))
+    
+    if request.method == 'GET':
+        update_form.timezone.data = current_user.timezone
 
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
