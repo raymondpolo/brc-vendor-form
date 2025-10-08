@@ -15,9 +15,9 @@ self.addEventListener('push', event => {
 
     const options = {
         body: data.body,
-        icon: '/static/Logo.png', // Optional: icon to display
+        icon: '/static/Logo.png', // An icon for the notification
         data: {
-            url: data.url // URL to open when notification is clicked
+            url: data.url // The URL to open when the notification is clicked
         }
     };
 
