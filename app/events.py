@@ -65,10 +65,10 @@ def _send_web_push_in_background(app, user_id, title, body, link):
             app.logger.info(f"PUSH_THREAD: User {user_id} has no push subscriptions. Skipping.")
             return
 
+        # **CRITICAL FIX**: The 'sub' claim must be a 'mailto:' URI.
         vapid_claims = {"sub": f"mailto:{app.config['VAPID_CLAIM_EMAIL']}"}
-        app.logger.info(f"PUSH_THREAD: Found {user.push_subscriptions.count()} subscription(s) for user {user_id}. Attempting to send.")
+        app.logger.info(f"PUSH_THREAD: Found {user.push_subscriptions.count()} subscription(s) for user {user_id}. Attempting to send with claims: {vapid_claims}")
 
-        # Create a list of subscriptions to iterate over, as we may delete them
         subscriptions = list(user.push_subscriptions)
         for sub in subscriptions:
             try:
@@ -81,7 +81,6 @@ def _send_web_push_in_background(app, user_id, title, body, link):
                 app.logger.info(f"PUSH_THREAD: Successfully sent push to one device for user {user_id}.")
             except WebPushException as ex:
                 app.logger.error(f"PUSH_THREAD: WebPushException for user {user_id}. Reason: {ex}")
-                # 404 and 410 status codes mean the subscription is no longer valid.
                 if ex.response and ex.response.status_code in [404, 410]:
                     app.logger.info(f"PUSH_THREAD: Subscription for user {user_id} is expired/invalid. Deleting.")
                     db.session.delete(sub)
@@ -92,17 +91,11 @@ def _send_web_push_in_background(app, user_id, title, body, link):
 def notify_user(user_id, data):
     """
     Handles sending notifications.
-    1. Emits a real-time in-app notification via WebSocket.
-    2. Starts a background thread to send a Web Push notification.
     """
-    # --- 1. In-App (WebSocket) Notification ---
-    # This is sent immediately and should restore the toast on desktop.
     current_app.logger.info(f"NOTIFY: Attempting to emit socket notification to user {user_id}.")
     socketio.emit('notification', data, room=str(user_id))
     current_app.logger.info(f"NOTIFY: Socket notification emitted for user {user_id}.")
     
-    # --- 2. Web Push Notification (in a background thread) ---
-    # This runs separately to avoid blocking and to manage its own context.
     app = current_app._get_current_object()
     thread = Thread(target=_send_web_push_in_background, args=(app, user_id, "BRC Vendor Form", data['text'], data['link']))
     thread.start()
@@ -137,7 +130,6 @@ def handle_add_note(data):
     note = Note(text=text, author=current_user, work_order=work_order)
     db.session.add(note)
 
-    # Find mentioned users
     notified_users = set()
     if work_order.author and work_order.author != current_user:
         notified_users.add(work_order.author)
@@ -153,10 +145,8 @@ def handle_add_note(data):
     
     db.session.commit()
 
-    # Broadcast the new note to all clients viewing this request
     broadcast_new_note(request_id, note)
 
-    # Send notifications to mentioned users
     for user in notified_users:
         if user:
             notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
