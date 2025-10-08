@@ -1,11 +1,11 @@
 // app/static/js/service-worker.js
-self.addEventListener('push', function(event) {
+self.addEventListener('push', event => {
     const data = event.data.json();
     const options = {
         body: data.body,
-        icon: '/static/Logo.png',
+        icon: '/static/Logo.png', // Optional: icon to display
         data: {
-            url: data.url
+            url: data.url // URL to open when notification is clicked
         }
     };
     event.waitUntil(
@@ -13,8 +13,9 @@ self.addEventListener('push', function(event) {
     );
 });
 
-self.addEventListener('notificationclick', function(event) {
-    event.notification.close();
+self.addEventListener('notificationclick', event => {
+    event.notification.close(); // Close the notification
+    // Open the URL associated with the notification
     event.waitUntil(
         clients.openWindow(event.notification.data.url)
     );
