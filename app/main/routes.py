@@ -259,12 +259,12 @@ def requests_by_tag(tag_name):
     return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', 
                            requests_json=json.dumps(requests_list), tag_name=tag_name)
 
-@main.route('/request/<int:request_id>', methods=['GET', 'POST'])
+@main.route('/request/<int:request_id>', methods=['GET'])
 @login_required
 def view_request(request_id):
     """
-    Displays the details of a single work order and handles the submission of new notes.
-    This is the primary endpoint for real-time updates.
+    Displays the details of a single work order. Note submission is now handled
+    via WebSocket in events.py.
     """
     work_order = WorkOrder.query.get_or_404(request_id)
     all_users = User.query.all()
@@ -288,12 +288,10 @@ def view_request(request_id):
     delete_form = DeleteRestoreRequestForm()
     tag_form = TagForm()
     reassign_form = ReassignRequestForm()
-    requester_initials = get_requester_initials(work_order.requester_name)
     quotes = work_order.quotes
     completed_form = MarkAsCompletedForm()
     follow_up_form = SendFollowUpForm()
-
-
+    
     if is_admin_staff:
         status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined', 'New']]
     
@@ -308,66 +306,12 @@ def view_request(request_id):
         db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
 
-    if note_form.validate_on_submit():
-        note_text = note_form.text.data
-        note = Note(text=note_text, author=current_user, work_order=work_order)
-        db.session.add(note)
-        
-        current_app.logger.info(f"Processing note from user {current_user.id} on request {work_order.id}")
-        notified_users = set()
-        if work_order.author and work_order.author != current_user:
-            notified_users.add(work_order.author)
-        current_app.logger.info(f"Initial notified_users (author): {[user.id for user in notified_users if user]}")
-
-        tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
-        for name in tagged_names:
-            tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
-            if tagged_user:
-                if tagged_user not in work_order.viewers:
-                    work_order.viewers.append(tagged_user)
-                if tagged_user != current_user:
-                    notified_users.add(tagged_user)
-        db.session.commit()
-
-        current_app.logger.info(f"Final notified_users after mentions: {[user.id for user in notified_users if user]}")
-
-        broadcast_new_note(work_order.id, note)
-
-        for user in notified_users:
-            if not user or not user.email:
-                current_app.logger.warning(f"Skipping notification for invalid user object: {user}")
-                continue
-            current_app.logger.info(f"Sending note notification email to user {user.id} ({user.email})")
-
-            notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
-                link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
-            db.session.add(notification)
-            email_body = f"""
-            <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-            <p><b>Note:</b></p>
-            <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-            """
-            send_notification_email(
-                subject=f"New Note on Request #{work_order.id}",
-                recipients=[user.email],
-                text_body=f"{current_user.name} mentioned you in a note on Request #{work_order.id}",
-                html_body=render_template(
-                    'email/notification_email.html',
-                    title="New Note on Request",
-                    user=user,
-                    body_content=email_body,
-                    link=url_for('main.view_request', request_id=work_order.id, _external=True)
-                )
-            )
-        db.session.commit()
-        return jsonify({'success': True})
-
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
-                           requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
+                           quote_form=quote_form, quotes=quotes,
                            delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form, completed_form=completed_form, follow_up_form=follow_up_form, all_users=all_users)
 
 
@@ -481,7 +425,7 @@ def change_status(request_id):
         work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
 
-        if work_order.author != current_user:
+        if work_order.author and work_order.author != current_user:
             notification = Notification(text=f'Status for Request #{work_order.id} changed to {new_status}.',
                 link=url_for('main.view_request', request_id=work_order.id), user_id=work_order.user_id)
             db.session.add(notification)
