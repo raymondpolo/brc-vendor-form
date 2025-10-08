@@ -291,7 +291,7 @@
             <form method="POST" action="{{ url_for('main.change_status', request_id=work_order.id) }}">
                 {{ status_form.hidden_tag() }}
                 {{ status_form.status.label(class="block text-sm font-medium text-gray-700") }}
-                {{ status_form.status(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm") }}
+                {{ status_form.status(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", **{'@change': 'selectedStatus = $event.target.value'}) }}
                 
                 <div x-show="selectedStatus === 'Scheduled'" class="mt-4">
                     <div x-show="!isEditingDate && '{{ work_order.scheduled_date }}'">
