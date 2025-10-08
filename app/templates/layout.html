@@ -93,6 +93,11 @@
             });
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
 
+            // Request Notification Permission
+            if ('Notification' in window && Notification.permission !== 'granted') {
+                Notification.requestPermission();
+            }
+
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/static/js/service-worker.js').then(function(registration) {
                     console.log('Service Worker registered with scope:', registration.scope);
