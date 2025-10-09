@@ -3,15 +3,17 @@
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <form action="{{ url_for('main.new_request') }}" method="POST" enctype="multipart/form-data" 
           x-data="{ 
-              selectedProperty: '', 
+              selectedProperty: '{{ form.property.data if form.property.data != 'None' else '' }}', 
               currentAddress: '', 
               currentManager: '',
-              propertyData: {{ property_data | tojson | safe }}
+              propertyData: {{ property_data | tojson | safe }},
+              updateDependentFields() {
+                  const propData = this.propertyData[this.selectedProperty];
+                  this.currentAddress = propData?.address || '';
+                  this.currentManager = propData?.manager || '';
+              }
           }"
-          x-init="$watch('selectedProperty', value => {
-              currentAddress = propertyData[value]?.address || '';
-              currentManager = propertyData[value]?.manager || '';
-          })">
+          x-init="updateDependentFields(); $watch('selectedProperty', () => updateDependentFields())">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
