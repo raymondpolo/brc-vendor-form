@@ -778,7 +778,7 @@ def new_request():
         print("----------------------------")
         
     return render_template('request_form.html', title='New Request', form=form,
-        properties=properties, property_data=json.dumps(properties_dict))
+        properties=properties, property_data=properties_dict)
 
 @main.route('/edit-request/<int:request_id>', methods=['GET', 'POST'])
 @login_required
@@ -852,7 +852,7 @@ def edit_request(request_id):
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
     
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
-                           properties=properties, property_data=json.dumps(properties_dict), reassign_form=reassign_form)
+                           properties=properties, property_data=properties_dict, reassign_form=reassign_form)
 
 @main.route('/upload_attachment/<int:request_id>', methods=['POST'])
 @login_required

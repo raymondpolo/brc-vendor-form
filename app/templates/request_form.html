@@ -6,7 +6,7 @@
               selectedProperty: '', 
               currentAddress: '', 
               currentManager: '',
-              propertyData: {{ property_data | tojson }}
+              propertyData: {{ property_data | tojson | safe }}
           }"
           x-init="$watch('selectedProperty', value => {
               currentAddress = propertyData[value]?.address || '';
