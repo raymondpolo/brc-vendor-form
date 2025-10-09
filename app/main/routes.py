@@ -718,31 +718,35 @@ def mark_notification_read(notification_id):
 def new_request():
     """Displays the form for creating a new work order and handles its submission."""
     properties = Property.query.order_by(Property.name).all()
-    properties_dict = {p.id: {"name": p.name, "address": p.address, "manager": p.property_manager} for p in properties}
+    properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
-    form.property_id.choices = [(p.id, p.name) for p in properties]
 
     if form.validate_on_submit():
         date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         date2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         date3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
 
-        selected_property = Property.query.get(form.property_id.data)
+        selected_property = Property.query.filter_by(name=form.property.data).first()
 
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
             request_type_id=form.request_type.data, description=form.description.data,
-            property=selected_property.name, unit=form.unit.data,
+            property=form.property.data, unit=form.unit.data,
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
             contact_person=form.contact_person.data, contact_person_phone=form.contact_person_phone.data,
             preferred_date_1=date1, preferred_date_2=date2,
             preferred_date_3=date3, user_id=current_user.id,
-            preferred_vendor=form.vendor_assigned.data,
-            property_id=selected_property.id,
-            address=selected_property.address,
-            property_manager=selected_property.property_manager
-        )
+            preferred_vendor=form.vendor_assigned.data)
+        
+        if selected_property:
+            new_order.property_id = selected_property.id
+            new_order.address = selected_property.address
+            new_order.property_manager = selected_property.property_manager
+        else:
+            new_order.address = request.form.get('address', '')
+            new_order.property_manager = request.form.get('property_manager', '')
+
 
         db.session.add(new_order)
         db.session.commit()
@@ -793,10 +797,9 @@ def edit_request(request_id):
         return redirect(url_for('main.view_request', request_id=work_order.id))
         
     properties = Property.query.order_by(Property.name).all()
-    properties_dict = {p.id: {"name": p.name, "address": p.address, "manager": p.property_manager} for p in properties}
+    properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
-    form.property_id.choices = [(p.id, p.name) for p in properties]
     reassign_form = ReassignRequestForm()
     
     del form.attachments
@@ -805,11 +808,7 @@ def edit_request(request_id):
         work_order.wo_number = form.wo_number.data
         work_order.request_type_id = form.request_type.data
         work_order.description = form.description.data
-        selected_property = Property.query.get(form.property_id.data)
-        work_order.property = selected_property.name
-        work_order.property_id = selected_property.id
-        work_order.address = selected_property.address
-        work_order.property_manager = selected_property.property_manager
+        work_order.property = form.property.data
         work_order.unit = form.unit.data
         work_order.tenant_name = form.tenant_name.data
         work_order.tenant_phone = form.tenant_phone.data
@@ -820,6 +819,14 @@ def edit_request(request_id):
         work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
+        
+        selected_property = Property.query.filter_by(name=form.property.data).first()
+        if selected_property:
+            work_order.property_id = selected_property.id
+            work_order.address = selected_property.address
+            work_order.property_manager = selected_property.property_manager
+        else:
+            work_order.property_id = None
 
         if 'attachments' in request.files:
             for file in request.files.getlist('attachments'):
@@ -838,7 +845,7 @@ def edit_request(request_id):
 
     if request.method == 'GET':
         form.request_type.data = work_order.request_type_id
-        form.property_id.data = work_order.property_id
+        form.property.data = work_order.property
         form.vendor_assigned.data = work_order.preferred_vendor
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
