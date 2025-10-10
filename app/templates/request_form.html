@@ -1,21 +1,23 @@
-{% extends "layout.html" %}
+{% raw %}{% extends "layout.html" %}
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <form action="{{ url_for('main.new_request') }}" method="POST" enctype="multipart/form-data" x-data="{
         properties: {{ properties_json|safe }},
         selectedPropertyId: '{{ form.property.data or '' }}',
         address: '',
-        manager: ''
-    }"
-    x-init="
-        if (selectedPropertyId) {
-            const prop = properties.find(p => p.id == selectedPropertyId);
+        manager: '',
+        updateFields() {
+            const prop = this.properties.find(p => p.id == this.selectedPropertyId);
             if (prop) {
-                address = prop.address;
-                manager = prop.property_manager;
+                this.address = prop.address;
+                this.manager = prop.property_manager;
+            } else {
+                this.address = '';
+                this.manager = '';
             }
         }
-    ">
+    }"
+    x-init="updateFields()">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -51,16 +53,7 @@
             <div>
                 <label for="{{ form.property.id }}" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
                 <select name="property" id="property" x-model="selectedPropertyId"
-                        @change="
-                            const prop = properties.find(p => p.id == selectedPropertyId);
-                            if (prop) {
-                                address = prop.address;
-                                manager = prop.property_manager;
-                            } else {
-                                address = '';
-                                manager = '';
-                            }
-                        "
+                        @change="updateFields()"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
                     <option value="">Select a Property</option>
                     {% for prop in properties %}
@@ -132,4 +125,4 @@
         flatpickr("input[name='date_3']", { dateFormat: "m/d/Y" });
     });
 </script>
-{% endblock content %}
+{% endblock content %}{% endraw %}
