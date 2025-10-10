@@ -34,27 +34,28 @@
                 <label for="property_search" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
                 <div class="relative mt-1">
                     <input type="text" id="property_search" 
-                           x-model="search" 
+                           x-model="search"
+                           x-ref="property_search"
                            @input.debounce.100ms="filterProperties" 
                            @focus="isOpen = true"
                            @keydown.down.prevent="highlightNext" 
                            @keydown.up.prevent="highlightPrev" 
                            @keydown.enter.prevent="selectHighlighted"
-                           @keydown.escape="isOpen = false"
+                           @keydown.escape.window="isOpen = false"
                            autocomplete="off"
                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                            placeholder="Type to search properties...">
                     
                     <input type="hidden" name="property" x-model="selectedPropertyId">
                     
-                    <div x-show="search.length > 0" @click="clearSearch" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" title="Clear selection">
+                    <div x-show="search.length > 0" @click="clearSearch()" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" title="Clear selection">
                         <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </div>
                 </div>
 
-                <div x-show="isOpen && filteredProperties.length > 0" 
+                <div x-show="isOpen" 
                      class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg"
                      style="display: none;">
                     <ul>
@@ -64,6 +65,9 @@
                                 class="px-4 py-2 cursor-pointer hover:bg-indigo-50">
                                 <span x-text="property.name"></span>
                             </li>
+                        </template>
+                        <template x-if="filteredProperties.length === 0 && search.length > 0">
+                            <li class="px-4 py-2 text-gray-500">No properties found</li>
                         </template>
                     </ul>
                 </div>
@@ -140,16 +144,22 @@
                         this.currentManager = initialProperty.property_manager || '';
                     }
                 }
-                
                 this.$watch('search', (newValue) => {
                     if (!newValue) {
                         this.clearSearch(false);
+                    } else {
+                        const perfectMatch = this.properties.find(p => p.name === newValue);
+                        if (!perfectMatch) {
+                            this.selectedPropertyId = '';
+                            this.currentAddress = '';
+                            this.currentManager = '';
+                        }
                     }
                 });
             },
 
             filterProperties() {
-                if (this.search === '') {
+                if (!this.search) {
                     this.filteredProperties = [];
                     this.isOpen = false;
                     return;
@@ -175,7 +185,7 @@
                 this.currentAddress = '';
                 this.currentManager = '';
                 this.isOpen = false;
-                if(refocus) {
+                if (refocus) {
                     this.$nextTick(() => this.$refs.property_search.focus());
                 }
             },
@@ -184,7 +194,7 @@
                 if (this.highlightedIndex < this.filteredProperties.length - 1) {
                     this.highlightedIndex++;
                 } else {
-                    this.highlightedIndex = 0; // Loop back to the top
+                    this.highlightedIndex = 0;
                 }
             },
 
@@ -192,7 +202,7 @@
                 if (this.highlightedIndex > 0) {
                     this.highlightedIndex--;
                 } else {
-                    this.highlightedIndex = this.filteredProperties.length - 1; // Loop to the bottom
+                    this.highlightedIndex = this.filteredProperties.length - 1;
                 }
             },
 
