@@ -3,18 +3,11 @@
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <h2 class="text-2xl font-bold mb-6 text-gray-800">Edit Request #{{ work_order.id }}</h2>
     <form method="POST" action="{{ url_for('main.edit_request', request_id=work_order.id) }}" enctype="multipart/form-data" 
-          x-data="{ 
-              selectedProperty: '{{ form.property.data }}', 
-              currentAddress: '', 
-              currentManager: '',
-              propertyData: {{ property_data | tojson | safe }},
-              updateDependentFields() {
-                  const propData = this.propertyData[this.selectedProperty];
-                  this.currentAddress = propData?.address || '';
-                  this.currentManager = propData?.manager || '';
-              }
-          }"
-          x-init="updateDependentFields(); $watch('selectedProperty', () => updateDependentFields())">
+          x-data="propertySelector({
+              properties: {{ properties | tojson | safe }},
+              initialPropertyId: '{{ form.property.data }}'
+          })"
+          @submit="if (!selectedPropertyId) { alert('Please select a valid property.'); $event.preventDefault(); }">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -38,20 +31,47 @@
             <div class="md:col-span-2">
                 <label for="{{ form.description.id }}" class="block text-sm font-medium text-gray-700">{{ form.description.label.text }} <span class="text-red-500">*</span></label>
                 {{ form.description(rows="4", class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                 {% if form.description.errors %}
-                    <div class="text-red-500 text-xs mt-1">
-                        {% for error in form.description.errors %}<span>{{ error }}</span>{% endfor %}
-                    </div>
-                {% endif %}
             </div>
             
-            <div>
-                <label for="{{ form.property.id }}" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
-                {{ form.property(
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-                    **{'x-model': 'selectedProperty'}
-                ) }}
+            <div class="relative md:col-span-1" @click.away="isOpen = false">
+                <label for="property_search" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
+                <div class="relative mt-1">
+                    <input type="text" id="property_search" 
+                           x-model="search" 
+                           @input.debounce.100ms="filterProperties" 
+                           @focus="isOpen = true"
+                           @keydown.down.prevent="highlightNext" 
+                           @keydown.up.prevent="highlightPrev" 
+                           @keydown.enter.prevent="selectHighlighted"
+                           @keydown.escape="isOpen = false"
+                           autocomplete="off"
+                           class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                           placeholder="Type to search properties...">
+                    
+                    <input type="hidden" name="property" x-model="selectedPropertyId">
+                    
+                    <div x-show="search.length > 0" @click="clearSearch" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" title="Clear selection">
+                        <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </div>
+                </div>
+
+                <div x-show="isOpen && filteredProperties.length > 0" 
+                     class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg"
+                     style="display: none;">
+                    <ul>
+                        <template x-for="(property, index) in filteredProperties" :key="property.id">
+                            <li @click="selectProperty(property)" 
+                                :class="{ 'bg-indigo-100 text-indigo-900': highlightedIndex === index, 'text-gray-900': highlightedIndex !== index }" 
+                                class="px-4 py-2 cursor-pointer hover:bg-indigo-50">
+                                <span x-text="property.name"></span>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
             </div>
+
             <div>
                 {{ form.unit.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.unit(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
@@ -59,11 +79,11 @@
 
             <div class="md:col-span-2">
                 <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
-                <input type="text" name="address" id="address" x-model="currentAddress" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+                <input type="text" id="address" x-model="currentAddress" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
             <div class="md:col-span-2">
                 <label for="property_manager" class="block text-sm font-medium text-gray-700">Property Manager</label>
-                <input type="text" name="property_manager" id="property_manager" x-model="currentManager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+                <input type="text" id="property_manager" x-model="currentManager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
 
             <div>
@@ -118,6 +138,90 @@
     {% endif %}
 </div>
 <script>
+    function propertySelector(config) {
+        return {
+            search: '',
+            isOpen: false,
+            properties: config.properties,
+            filteredProperties: [],
+            selectedPropertyId: config.initialPropertyId || '',
+            currentAddress: '',
+            currentManager: '',
+            highlightedIndex: -1,
+
+            init() {
+                if (this.selectedPropertyId) {
+                    const initialProperty = this.properties.find(p => p.id == this.selectedPropertyId);
+                    if (initialProperty) {
+                        this.search = initialProperty.name;
+                        this.currentAddress = initialProperty.address || '';
+                        this.currentManager = initialProperty.property_manager || '';
+                    }
+                }
+                
+                this.$watch('search', (newValue) => {
+                    if (!newValue) {
+                        this.clearSearch(false);
+                    }
+                });
+            },
+
+            filterProperties() {
+                if (this.search === '') {
+                    this.filteredProperties = [];
+                    this.isOpen = false;
+                    return;
+                }
+                this.filteredProperties = this.properties.filter(
+                    property => property.name.toLowerCase().includes(this.search.toLowerCase())
+                );
+                this.isOpen = true;
+                this.highlightedIndex = -1;
+            },
+
+            selectProperty(property) {
+                this.search = property.name;
+                this.selectedPropertyId = property.id;
+                this.currentAddress = property.address || '';
+                this.currentManager = property.property_manager || '';
+                this.isOpen = false;
+            },
+
+            clearSearch(refocus = true) {
+                this.search = '';
+                this.selectedPropertyId = '';
+                this.currentAddress = '';
+                this.currentManager = '';
+                this.isOpen = false;
+                if(refocus) {
+                    this.$nextTick(() => this.$refs.property_search.focus());
+                }
+            },
+
+            highlightNext() {
+                if (this.highlightedIndex < this.filteredProperties.length - 1) {
+                    this.highlightedIndex++;
+                } else {
+                    this.highlightedIndex = 0; // Loop back to the top
+                }
+            },
+
+            highlightPrev() {
+                if (this.highlightedIndex > 0) {
+                    this.highlightedIndex--;
+                } else {
+                    this.highlightedIndex = this.filteredProperties.length - 1; // Loop to the bottom
+                }
+            },
+
+            selectHighlighted() {
+                if (this.highlightedIndex >= 0 && this.filteredProperties[this.highlightedIndex]) {
+                    this.selectProperty(this.filteredProperties[this.highlightedIndex]);
+                }
+                this.isOpen = false;
+            }
+        }
+    }
     document.addEventListener('DOMContentLoaded', function() {
         flatpickr("input[name='date_1']", { dateFormat: "m/d/Y" });
         flatpickr("input[name='date_2']", { dateFormat: "m/d/Y" });

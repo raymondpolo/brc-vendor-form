@@ -717,11 +717,14 @@ def mark_notification_read(notification_id):
 @login_required
 def new_request():
     """Displays the form for creating a new work order and handles its submission."""
-    properties = Property.query.order_by(Property.name).all()
-    properties_dict = {p.id: {"name": p.name, "address": p.address, "manager": p.property_manager} for p in properties}
+    properties_query = Property.query.order_by(Property.name).all()
+    properties_for_js = [
+        {"id": p.id, "name": p.name, "address": p.address, "property_manager": p.property_manager} 
+        for p in properties_query
+    ]
     form = NewRequestForm()
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
-    form.property.choices = [(p.id, p.name) for p in properties]
+    form.property.choices = [(p.id, p.name) for p in properties_query]
 
     if form.validate_on_submit():
         date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
@@ -774,7 +777,7 @@ def new_request():
         print("----------------------------")
         
     return render_template('request_form.html', title='New Request', form=form,
-        properties=properties, property_data=properties_dict)
+        properties=properties_for_js)
 
 @main.route('/edit-request/<int:request_id>', methods=['GET', 'POST'])
 @login_required
@@ -792,11 +795,14 @@ def edit_request(request_id):
         flash('This request cannot be edited because it is already closed.', 'warning')
         return redirect(url_for('main.view_request', request_id=work_order.id))
         
-    properties = Property.query.order_by(Property.name).all()
-    properties_dict = {p.id: {"name": p.name, "address": p.address, "manager": p.property_manager} for p in properties}
+    properties_query = Property.query.order_by(Property.name).all()
+    properties_for_js = [
+        {"id": p.id, "name": p.name, "address": p.address, "property_manager": p.property_manager} 
+        for p in properties_query
+    ]
     form = NewRequestForm(obj=work_order)
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
-    form.property.choices = [(p.id, p.name) for p in properties]
+    form.property.choices = [(p.id, p.name) for p in properties_query]
     reassign_form = ReassignRequestForm()
     
     del form.attachments
@@ -845,7 +851,7 @@ def edit_request(request_id):
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
     
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
-                           properties=properties, property_data=properties_dict, reassign_form=reassign_form)
+                           properties=properties_for_js, reassign_form=reassign_form)
 
 @main.route('/upload_attachment/<int:request_id>', methods=['POST'])
 @login_required
