@@ -273,7 +273,7 @@
                 {{ note_form.hidden_tag() }}
                 {{ note_form.text(id="note-textarea", class="w-full rounded-md border-gray-300 shadow-sm", rows="3", placeholder="Add a note... @mention a user to notify them.") }}
                 <div class="mt-3 flex justify-end">
-                    <button type="button" id="post-note-btn" name="post_note" class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Post Note</button>
+                    <button type="submit" name="post_note" class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Post Note</button>
                 </div>
             </form>
             {% endif %}
@@ -955,9 +955,10 @@
             setTimeout(() => newNoteDiv.classList.remove('opacity-0'), 100);
         });
 
-        const postNoteBtn = document.getElementById('post-note-btn');
-        if(postNoteBtn) {
-            postNoteBtn.addEventListener('click', (e) => {
+        const noteForm = document.getElementById('note-form');
+        if(noteForm) {
+            noteForm.addEventListener('submit', (e) => {
+                e.preventDefault();
                 const noteTextarea = document.getElementById('note-textarea');
                 const noteText = noteTextarea.value;
 
