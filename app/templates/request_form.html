@@ -1,4 +1,4 @@
-{% raw %}{% extends "layout.html" %}
+{% extends "layout.html" %}
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <form action="{{ url_for('main.new_request') }}" method="POST" enctype="multipart/form-data" x-data="{
@@ -125,4 +125,4 @@
         flatpickr("input[name='date_3']", { dateFormat: "m/d/Y" });
     });
 </script>
-{% endblock content %}{% endraw %}
+{% endblock content %}
