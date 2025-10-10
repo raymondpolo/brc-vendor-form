@@ -39,8 +39,7 @@
                     <input type="text" id="property_search" 
                            x-model="search"
                            x-ref="property_search"
-                           @input.debounce.100ms="filterProperties" 
-                           @focus="filterProperties"
+                           @focus="isOpen = true"
                            @keydown.down.prevent="highlightNext" 
                            @keydown.up.prevent="highlightPrev" 
                            @keydown.enter.prevent="selectHighlighted"
@@ -145,7 +144,14 @@
             search: '',
             isOpen: false,
             properties: config.properties,
-            filteredProperties: [],
+            get filteredProperties() {
+                if (this.search === '') {
+                    return this.properties;
+                }
+                return this.properties.filter(p =>
+                    p.name.toLowerCase().includes(this.search.toLowerCase())
+                );
+            },
             selectedPropertyId: config.initialPropertyId || '',
             currentAddress: '',
             currentManager: '',
@@ -160,22 +166,15 @@
                         this.currentManager = initialProperty.property_manager || '';
                     }
                 }
-                this.$watch('search', (newValue) => {
-                    const selectedProperty = this.properties.find(p => p.id == this.selectedPropertyId);
-                    if (!selectedProperty || newValue !== selectedProperty.name) {
+                this.$watch('search', () => {
+                    const match = this.properties.find(p => p.name.toLowerCase() === this.search.toLowerCase());
+                    if (!match) {
                         this.selectedPropertyId = '';
                         this.currentAddress = '';
                         this.currentManager = '';
                     }
+                    this.highlightedIndex = -1;
                 });
-            },
-
-            filterProperties() {
-                this.isOpen = true;
-                this.filteredProperties = this.search === ''
-                    ? this.properties
-                    : this.properties.filter(p => p.name.toLowerCase().includes(this.search.toLowerCase()));
-                this.highlightedIndex = -1;
             },
 
             selectProperty(property) {
@@ -188,11 +187,6 @@
 
             clearSearch() {
                 this.search = '';
-                this.selectedPropertyId = '';
-                this.currentAddress = '';
-                this.currentManager = '';
-                this.filteredProperties = [];
-                this.isOpen = false;
                 this.$nextTick(() => this.$refs.property_search.focus());
             },
 
@@ -203,7 +197,6 @@
                     this.highlightedIndex = 0;
                 }
             },
-
             highlightPrev() {
                 if (this.highlightedIndex > 0) {
                     this.highlightedIndex--;
@@ -211,7 +204,6 @@
                     this.highlightedIndex = this.filteredProperties.length - 1;
                 }
             },
-
             selectHighlighted() {
                 if (this.isOpen && this.highlightedIndex >= 0) {
                     this.selectProperty(this.filteredProperties[this.highlightedIndex]);
