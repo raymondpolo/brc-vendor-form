@@ -40,7 +40,7 @@
                            x-model="search"
                            x-ref="property_search"
                            @input.debounce.100ms="filterProperties" 
-                           @focus="isOpen = true"
+                           @focus="filterProperties"
                            @keydown.down.prevent="highlightNext" 
                            @keydown.up.prevent="highlightPrev" 
                            @keydown.enter.prevent="selectHighlighted"
@@ -58,8 +58,7 @@
                     </div>
                 </div>
 
-                <div x-show="isOpen" 
-                     class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                <div x-show="isOpen" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
                     <ul>
                         <template x-for="(property, index) in filteredProperties" :key="property.id">
                             <li @click="selectProperty(property)" 
@@ -162,29 +161,20 @@
                     }
                 }
                 this.$watch('search', (newValue) => {
-                    if (!newValue) {
-                        this.clearSearch(false);
-                    } else {
-                        const perfectMatch = this.properties.find(p => p.name === newValue);
-                        if (!perfectMatch) {
-                            this.selectedPropertyId = '';
-                            this.currentAddress = '';
-                            this.currentManager = '';
-                        }
+                    const selectedProperty = this.properties.find(p => p.id == this.selectedPropertyId);
+                    if (!selectedProperty || newValue !== selectedProperty.name) {
+                        this.selectedPropertyId = '';
+                        this.currentAddress = '';
+                        this.currentManager = '';
                     }
                 });
             },
 
             filterProperties() {
-                if (!this.search) {
-                    this.filteredProperties = [];
-                    this.isOpen = false;
-                    return;
-                }
-                this.filteredProperties = this.properties.filter(
-                    property => property.name.toLowerCase().includes(this.search.toLowerCase())
-                );
                 this.isOpen = true;
+                this.filteredProperties = this.search === ''
+                    ? this.properties
+                    : this.properties.filter(p => p.name.toLowerCase().includes(this.search.toLowerCase()));
                 this.highlightedIndex = -1;
             },
 
@@ -196,15 +186,14 @@
                 this.isOpen = false;
             },
 
-            clearSearch(refocus = true) {
+            clearSearch() {
                 this.search = '';
                 this.selectedPropertyId = '';
                 this.currentAddress = '';
                 this.currentManager = '';
+                this.filteredProperties = [];
                 this.isOpen = false;
-                if (refocus) {
-                    this.$nextTick(() => this.$refs.property_search.focus());
-                }
+                this.$nextTick(() => this.$refs.property_search.focus());
             },
 
             highlightNext() {
@@ -224,10 +213,9 @@
             },
 
             selectHighlighted() {
-                if (this.highlightedIndex >= 0 && this.filteredProperties[this.highlightedIndex]) {
+                if (this.isOpen && this.highlightedIndex >= 0) {
                     this.selectProperty(this.filteredProperties[this.highlightedIndex]);
                 }
-                this.isOpen = false;
             }
         }
     }
