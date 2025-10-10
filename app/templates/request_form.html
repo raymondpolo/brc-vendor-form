@@ -1,12 +1,12 @@
 {% extends "layout.html" %}
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
-    <form action="{{ url_for('main.new_request') }}" method="POST" enctype="multipart/form-data" 
+    <form x-ref="form" action="{{ url_for('main.new_request') }}" method="POST" enctype="multipart/form-data" 
           x-data="propertySelector({
               properties: {{ properties | tojson | safe }},
               initialId: '{{ form.property.data if form.property.data != 'None' else '' }}'
           })"
-          @submit.prevent="submitForm">
+          @submit.prevent="submitForm($event)">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -41,9 +41,9 @@
                            x-model="search"
                            x-ref="property_search_input"
                            @focus="isOpen = true"
-                           @keydown.down.prevent="highlightNext" 
-                           @keydown.up.prevent="highlightPrev" 
-                           @keydown.enter.prevent="selectHighlighted"
+                           @keydown.down.prevent="highlightNext()" 
+                           @keydown.up.prevent="highlightPrev()" 
+                           @keydown.enter.prevent="selectHighlighted()"
                            @keydown.escape.window="isOpen = false"
                            autocomplete="off"
                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
@@ -84,35 +84,7 @@
                 <label for="property_manager" class="block text-sm font-medium text-gray-700">Property Manager</label>
                 <input type="text" x-model="currentManager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
-            <div>
-                <label for="{{ form.tenant_name.id }}" class="block text-sm font-medium text-gray-700">{{ form.tenant_name.label.text }}</label>
-                {{ form.tenant_name(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
             </div>
-            <div>
-                <label for="{{ form.tenant_phone.id }}" class="block text-sm font-medium text-gray-700">{{ form.tenant_phone.label.text }}</label>
-                {{ form.tenant_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-            </div>
-            <div>
-                <label for="{{ form.contact_person.id }}" class="block text-sm font-medium text-gray-700">{{ form.contact_person.label.text }}</label>
-                {{ form.contact_person(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-            </div>
-            <div>
-                <label for="{{ form.contact_person_phone.id }}" class="block text-sm font-medium text-gray-700">{{ form.contact_person_phone.label.text }}</label>
-                {{ form.contact_person_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-            </div>
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700">Preferred Date Range (at least 3) <span class="text-red-500">*</span></label>
-                <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {{ form.date_1(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                    {{ form.date_2(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                    {{ form.date_3(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-                </div>
-            </div>
-            <div class="md:col-span-2">
-                <label for="{{ form.attachments.id }}" class="block text-sm font-medium text-gray-700">{{ form.attachments.label.text }}</label>
-                {{ form.attachments(class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
-            </div>
-        </div>
         <div class="mt-8 flex justify-end space-x-4">
             <a href="{{ url_for('main.index') }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
             <button type="submit" class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Submit Request</button>
@@ -143,7 +115,7 @@
             },
             
             get filteredProperties() {
-                if (this.search === '') return this.properties;
+                if (!this.search) return this.properties;
                 return this.properties.filter(p => p.name.toLowerCase().includes(this.search.toLowerCase()));
             },
 
@@ -164,13 +136,12 @@
             },
 
             submitForm(event) {
-                const selectedOption = Array.from(this.$refs.propertySelect.options).find(opt => opt.value == this.$refs.propertySelect.value);
-                if (!selectedOption || !selectedOption.value) {
+                if (!this.$refs.propertySelect.value) {
                     alert('Please select a valid property from the list.');
                     event.preventDefault();
-                    return false;
+                    return;
                 }
-                event.target.submit();
+                this.$refs.form.submit();
             },
 
             highlightNext() {
@@ -188,11 +159,5 @@
             }
         }
     }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        flatpickr("input[name='date_1']", { dateFormat: "m/d/Y" });
-        flatpickr("input[name='date_2']", { dateFormat: "m/d/Y" });
-        flatpickr("input[name='date_3']", { dateFormat: "m/d/Y" });
-    });
 </script>
 {% endblock content %}
