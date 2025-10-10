@@ -56,8 +56,7 @@
                 </div>
 
                 <div x-show="isOpen" 
-                     class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg"
-                     style="display: none;">
+                     class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
                     <ul>
                         <template x-for="(property, index) in filteredProperties" :key="property.id">
                             <li @click="selectProperty(property)" 
