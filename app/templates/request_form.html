@@ -4,9 +4,9 @@
     <form action="{{ url_for('main.new_request') }}" method="POST" enctype="multipart/form-data" 
           x-data="propertySelector({
               properties: {{ properties | tojson | safe }},
-              initialPropertyId: '{{ form.property.data if form.property.data != 'None' else '' }}'
+              initialId: '{{ form.property.data if form.property.data != 'None' else '' }}'
           })"
-          @submit="if (!selectedPropertyId) { alert('Please select a valid property.'); $event.preventDefault(); }">
+          @submit.prevent="submitForm">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -31,11 +31,15 @@
             </div>
             
             <div class="relative md:col-span-1" @click.away="isOpen = false">
+                <div class="sr-only">
+                    {{ form.property(x_ref="propertySelect") }}
+                </div>
+                
                 <label for="property_search" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
                 <div class="relative mt-1">
                     <input type="text" id="property_search" 
                            x-model="search"
-                           x-ref="property_search"
+                           x-ref="property_search_input"
                            @focus="isOpen = true"
                            @keydown.down.prevent="highlightNext" 
                            @keydown.up.prevent="highlightPrev" 
@@ -45,9 +49,7 @@
                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                            placeholder="Type to search properties...">
                     
-                    <input type="hidden" name="property" x-model="selectedPropertyId">
-                    
-                    <div x-show="search.length > 0" @click="clearSearch()" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" title="Clear selection">
+                    <div x-show="search" @click="clearSearch()" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" title="Clear selection">
                         <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -58,12 +60,12 @@
                     <ul>
                         <template x-for="(property, index) in filteredProperties" :key="property.id">
                             <li @click="selectProperty(property)" 
-                                :class="{ 'bg-indigo-100 text-indigo-900': highlightedIndex === index, 'text-gray-900': highlightedIndex !== index }" 
+                                :class="{ 'bg-indigo-100 text-indigo-900': highlightedIndex === index }" 
                                 class="px-4 py-2 cursor-pointer hover:bg-indigo-50">
                                 <span x-text="property.name"></span>
                             </li>
                         </template>
-                        <template x-if="filteredProperties.length === 0 && search.length > 0">
+                        <template x-if="search && filteredProperties.length === 0">
                             <li class="px-4 py-2 text-gray-500">No properties found</li>
                         </template>
                     </ul>
@@ -76,11 +78,11 @@
             </div>
             <div class="md:col-span-2">
                 <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
-                <input type="text" id="address" x-model="currentAddress" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+                <input type="text" x-model="currentAddress" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
             <div class="md:col-span-2">
                 <label for="property_manager" class="block text-sm font-medium text-gray-700">Property Manager</label>
-                <input type="text" id="property_manager" x-model="currentManager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+                <input type="text" x-model="currentManager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
             <div>
                 <label for="{{ form.tenant_name.id }}" class="block text-sm font-medium text-gray-700">{{ form.tenant_name.label.text }}</label>
@@ -109,14 +111,11 @@
             <div class="md:col-span-2">
                 <label for="{{ form.attachments.id }}" class="block text-sm font-medium text-gray-700">{{ form.attachments.label.text }}</label>
                 {{ form.attachments(class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
-                <p class="mt-1 text-xs text-gray-500">
-                    Allowed file types: jpg, png, jpeg, gif, pdf, doc, docx.
-                </p>
             </div>
         </div>
         <div class="mt-8 flex justify-end space-x-4">
             <a href="{{ url_for('main.index') }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
-            {{ form.submit(class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+            <button type="submit" class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Submit Request</button>
         </div>
     </form>
 </div>
@@ -126,65 +125,61 @@
             search: '',
             isOpen: false,
             properties: config.properties,
-            get filteredProperties() {
-                if (this.search === '') {
-                    return this.properties;
-                }
-                return this.properties.filter(p =>
-                    p.name.toLowerCase().includes(this.search.toLowerCase())
-                );
-            },
-            selectedPropertyId: config.initialPropertyId || '',
+            highlightedIndex: -1,
             currentAddress: '',
             currentManager: '',
-            highlightedIndex: -1,
 
             init() {
-                if (this.selectedPropertyId) {
-                    const initialProperty = this.properties.find(p => p.id == this.selectedPropertyId);
+                const initialId = config.initialId;
+                if (initialId) {
+                    const initialProperty = this.properties.find(p => p.id == initialId);
                     if (initialProperty) {
                         this.search = initialProperty.name;
                         this.currentAddress = initialProperty.address || '';
                         this.currentManager = initialProperty.property_manager || '';
+                        this.$refs.propertySelect.value = initialId;
                     }
                 }
-                this.$watch('search', () => {
-                    const match = this.properties.find(p => p.name.toLowerCase() === this.search.toLowerCase());
-                    if (!match) {
-                        this.selectedPropertyId = '';
-                        this.currentAddress = '';
-                        this.currentManager = '';
-                    }
-                    this.highlightedIndex = -1;
-                });
+            },
+            
+            get filteredProperties() {
+                if (this.search === '') return this.properties;
+                return this.properties.filter(p => p.name.toLowerCase().includes(this.search.toLowerCase()));
             },
 
             selectProperty(property) {
                 this.search = property.name;
-                this.selectedPropertyId = property.id;
                 this.currentAddress = property.address || '';
                 this.currentManager = property.property_manager || '';
+                this.$refs.propertySelect.value = property.id;
                 this.isOpen = false;
             },
 
             clearSearch() {
                 this.search = '';
-                this.$nextTick(() => this.$refs.property_search.focus());
+                this.currentAddress = '';
+                this.currentManager = '';
+                this.$refs.propertySelect.value = '';
+                this.$nextTick(() => this.$refs.property_search_input.focus());
+            },
+
+            submitForm(event) {
+                const selectedOption = Array.from(this.$refs.propertySelect.options).find(opt => opt.value == this.$refs.propertySelect.value);
+                if (!selectedOption || !selectedOption.value) {
+                    alert('Please select a valid property from the list.');
+                    event.preventDefault();
+                    return false;
+                }
+                event.target.submit();
             },
 
             highlightNext() {
-                if (this.highlightedIndex < this.filteredProperties.length - 1) {
-                    this.highlightedIndex++;
-                } else {
-                    this.highlightedIndex = 0;
-                }
+                if (this.highlightedIndex < this.filteredProperties.length - 1) this.highlightedIndex++;
+                else this.highlightedIndex = 0;
             },
             highlightPrev() {
-                if (this.highlightedIndex > 0) {
-                    this.highlightedIndex--;
-                } else {
-                    this.highlightedIndex = this.filteredProperties.length - 1;
-                }
+                if (this.highlightedIndex > 0) this.highlightedIndex--;
+                else this.highlightedIndex = this.filteredProperties.length - 1;
             },
             selectHighlighted() {
                 if (this.isOpen && this.highlightedIndex >= 0) {
