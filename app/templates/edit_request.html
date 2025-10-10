@@ -2,19 +2,20 @@
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
     <h2 class="text-2xl font-bold mb-6 text-gray-800">Edit Request #{{ work_order.id }}</h2>
-    <form x-ref="form" method="POST" action="{{ url_for('main.edit_request', request_id=work_order.id) }}" enctype="multipart/form-data" 
-          x-data="propertySelector({
-              properties: {{ properties | tojson | safe }},
-              initialId: '{{ form.property.data }}'
-          })"
-          @submit.prevent="submitForm">
+    <form method="POST" action="{{ url_for('main.edit_request', request_id=work_order.id) }}" enctype="multipart/form-data"
+          x-data="{
+              property: '{{ work_order.property | e }}',
+              address: '{{ work_order.address | e }}',
+              manager: '{{ work_order.property_manager | e }}'
+          }">
         {{ form.hidden_tag() }}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
             <div>
                 <label for="requester_name" class="block text-sm font-medium text-gray-700">Name of Requester</label>
                 <input type="text" name="requester_name" id="requester_name" value="{{ work_order.author.name if work_order.author else work_order.requester_name }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
-            
+
             <div>
                 {{ form.wo_number.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.wo_number(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
@@ -30,50 +31,24 @@
             <div class="md:col-span-2">
                 <label for="{{ form.description.id }}" class="block text-sm font-medium text-gray-700">{{ form.description.label.text }} <span class="text-red-500">*</span></label>
                 {{ form.description(rows="4", class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
-            </div>
-            
-            <div class="relative md:col-span-1" @click.away="isOpen = false">
-                <div class="sr-only">
-                    {{ form.property(x_ref="propertySelect") }}
-                </div>
-                
-                <label for="property_search" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
-                <div class="relative mt-1">
-                    <input type="text" id="property_search" 
-                           x-model="search"
-                           x-ref="property_search_input"
-                           @focus="isOpen = true"
-                           @keydown.down.prevent="highlightNext" 
-                           @keydown.up.prevent="highlightPrev" 
-                           @keydown.enter.prevent="selectHighlighted"
-                           @keydown.escape.window="isOpen = false"
-                           autocomplete="off"
-                           class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                           placeholder="Type to search properties...">
-                    
-                    <div x-show="search" @click="clearSearch()" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" title="Clear selection">
-                        <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                 {% if form.description.errors %}
+                    <div class="text-red-500 text-xs mt-1">
+                        {% for error in form.description.errors %}<span>{{ error }}</span>{% endfor %}
                     </div>
-                </div>
-
-                <div x-show="isOpen" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                    <ul>
-                        <template x-for="(property, index) in filteredProperties" :key="property.id">
-                            <li @click="selectProperty(property)" 
-                                :class="{ 'bg-indigo-100 text-indigo-900': highlightedIndex === index }" 
-                                class="px-4 py-2 cursor-pointer hover:bg-indigo-50">
-                                <span x-text="property.name"></span>
-                            </li>
-                        </template>
-                        <template x-if="search && filteredProperties.length === 0">
-                            <li class="px-4 py-2 text-gray-500">No properties found</li>
-                        </template>
-                    </ul>
-                </div>
+                {% endif %}
             </div>
 
+            <div>
+                <label for="property" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
+                <input list="properties" name="property" id="property" x-model="property"
+                       @change="address = {{ property_data }}[property]?.address || ''; manager = {{ property_data }}[property]?.manager || ''"
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
+                <datalist id="properties">
+                    {% for prop in properties %}
+                    <option value="{{ prop.name }}">
+                    {% endfor %}
+                </datalist>
+            </div>
             <div>
                 {{ form.unit.label(class="block text-sm font-medium text-gray-700") }}
                 {{ form.unit(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
@@ -81,87 +56,69 @@
 
             <div class="md:col-span-2">
                 <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
-                <input type="text" x-model="currentAddress" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+                <input type="text" name="address" id="address" x-model="address" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
             <div class="md:col-span-2">
                 <label for="property_manager" class="block text-sm font-medium text-gray-700">Property Manager</label>
-                <input type="text" x-model="currentManager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+                <input type="text" name="property_manager" id="property_manager" x-model="manager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
             </div>
+
+            <div>
+                {{ form.tenant_name.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.tenant_name(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.tenant_phone.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.tenant_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.contact_person.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.contact_person(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.contact_person_phone.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.contact_person_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+
+             <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700">Preferred Date Range (at least 3) <span class="text-red-500">*</span></label>
+                <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {{ form.date_1(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                    {{ form.date_2(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                    {{ form.date_3(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                </div>
+            </div>
+
             </div>
         <div class="mt-8 flex justify-end space-x-4">
             <a href="{{ url_for('main.view_request', request_id=work_order.id) }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
-            <button type="submit" class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Save Changes</button>
+            {{ form.submit(value="Save Changes", class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
         </div>
     </form>
-    
+
+    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+    <div class="mt-8 border-t pt-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">Reassign Request</h3>
+        <form method="POST" action="{{ url_for('admin.reassign_request', request_id=work_order.id) }}">
+            {{ reassign_form.hidden_tag() }}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    {{ reassign_form.requester.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ reassign_form.requester(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                </div>
+                <div class="flex items-end">
+                    {{ reassign_form.submit(class="w-full px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </div>
+            </div>
+        </form>
     </div>
+    {% endif %}
+</div>
 <script>
-    function propertySelector(config) {
-        return {
-            search: '',
-            isOpen: false,
-            properties: config.properties,
-            highlightedIndex: -1,
-            currentAddress: '',
-            currentManager: '',
-
-            init() {
-                const initialId = config.initialId;
-                if (initialId) {
-                    const initialProperty = this.properties.find(p => p.id == initialId);
-                    if (initialProperty) {
-                        this.search = initialProperty.name;
-                        this.currentAddress = initialProperty.address || '';
-                        this.currentManager = initialProperty.property_manager || '';
-                        this.$refs.propertySelect.value = initialId;
-                    }
-                }
-            },
-            
-            get filteredProperties() {
-                if (!this.search) return this.properties;
-                return this.properties.filter(p => p.name.toLowerCase().includes(this.search.toLowerCase()));
-            },
-
-            selectProperty(property) {
-                this.search = property.name;
-                this.currentAddress = property.address || '';
-                this.currentManager = property.property_manager || '';
-                this.$refs.propertySelect.value = property.id;
-                this.isOpen = false;
-            },
-
-            clearSearch() {
-                this.search = '';
-                this.currentAddress = '';
-                this.currentManager = '';
-                this.$refs.propertySelect.value = '';
-                this.$nextTick(() => this.$refs.property_search_input.focus());
-            },
-
-            submitForm(event) {
-                if (!this.$refs.propertySelect.value) {
-                    alert('Please select a valid property from the list.');
-                    event.preventDefault();
-                    return;
-                }
-                this.$refs.form.submit();
-            },
-
-            highlightNext() {
-                if (this.highlightedIndex < this.filteredProperties.length - 1) this.highlightedIndex++;
-                else this.highlightedIndex = 0;
-            },
-            highlightPrev() {
-                if (this.highlightedIndex > 0) this.highlightedIndex--;
-                else this.highlightedIndex = this.filteredProperties.length - 1;
-            },
-            selectHighlighted() {
-                if (this.isOpen && this.highlightedIndex >= 0) {
-                    this.selectProperty(this.filteredProperties[this.highlightedIndex]);
-                }
-            }
-        }
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+        flatpickr("input[name='date_1']", { dateFormat: "m/d/Y" });
+        flatpickr("input[name='date_2']", { dateFormat: "m/d/Y" });
+        flatpickr("input[name='date_3']", { dateFormat: "m/d/Y" });
+    });
 </script>
 {% endblock content %}
