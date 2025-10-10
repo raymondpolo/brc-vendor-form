@@ -183,10 +183,9 @@ class AttachmentForm(FlaskForm):
 
 class NewRequestForm(FlaskForm):
     wo_number = StringField('Work Order #', validators=[Optional()])
-    # MODIFIED: Changed to a SelectField that will be populated dynamically
     request_type = SelectField('Type of Request', coerce=int, validators=[DataRequired()])
     description = TextAreaField('Description / Instructions', validators=[DataRequired()])
-    property = StringField('Property', validators=[DataRequired()])
+    property = SelectField('Property', coerce=int, validators=[DataRequired()])
     unit = StringField('Unit #', validators=[Optional()])
     address = StringField('Address')
     property_manager = StringField('Property Manager')
