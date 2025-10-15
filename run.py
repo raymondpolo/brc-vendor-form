@@ -6,7 +6,7 @@ app = create_app()
 
 # Import the events module here to register the Socket.IO event handlers.
 # This MUST be done AFTER the app is created to avoid circular imports.
-import app.events
+import events
 
 if __name__ == '__main__':
     # This block is for local development only.
