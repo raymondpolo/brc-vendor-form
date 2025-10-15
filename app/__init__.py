@@ -48,6 +48,18 @@ def create_app(config_class=Config):
     # This avoids the circular import error.
     from app import models, events
 
+    # Register context processors
+    @app.context_processor
+    def inject_notifications():
+        from flask_login import current_user
+        from app.models import Notification
+        if current_user.is_authenticated:
+            unread_notifications = Notification.query.filter_by(
+                user_id=current_user.id, is_read=False
+            ).order_by(Notification.timestamp.desc()).all()
+            return dict(unread_notifications=unread_notifications)
+        return dict(unread_notifications=[])
+
     with app.app_context():
         # Create a default superuser if one doesn't exist
         try:
