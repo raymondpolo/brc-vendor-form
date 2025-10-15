@@ -46,8 +46,8 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    # Import models and events to ensure they are registered
-    from app import models, events
+    # Import models to ensure they are known to SQLAlchemy
+    from app import models
 
     # Register context processors
     @app.context_processor
