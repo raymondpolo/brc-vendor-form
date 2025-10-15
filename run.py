@@ -5,6 +5,7 @@ from app import create_app, socketio
 app = create_app()
 
 # Import the events module here to register the Socket.IO event handlers.
+# This MUST be done AFTER the app is created to avoid circular imports.
 import app.events
 
 if __name__ == '__main__':

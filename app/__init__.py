@@ -44,8 +44,7 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    # Import models and events here, AFTER the app and extensions are initialized
-    # This avoids the circular import error.
+    # Import models to ensure they are known to SQLAlchemy
     from app import models
 
     # Register context processors
