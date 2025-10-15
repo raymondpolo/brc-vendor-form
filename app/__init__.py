@@ -14,7 +14,6 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
 migrate = Migrate()
 csrf = CSRFProtect()
-# Configure Socket.IO with a message queue for production scalability
 socketio = SocketIO(async_mode='gevent', engineio_logger=True, message_queue=os.environ.get('REDIS_URL'))
 
 def create_app(config_class=Config):
@@ -29,7 +28,6 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     migrate.init_app(app, db)
     csrf.init_app(app)
-    # Pass the message queue URL to the init_app method as well
     socketio.init_app(app, cors_allowed_origins="*", message_queue=os.environ.get('REDIS_URL'))
 
     # Ensure the instance and upload folders exist
@@ -89,5 +87,8 @@ def create_app(config_class=Config):
             """Sends automated follow-up emails for stalled requests."""
             from app.main.routes import send_automated_follow_ups
             send_automated_follow_ups()
+
+    # Import and register the event handlers after the app is fully configured
+    from . import events
 
     return app
