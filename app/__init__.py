@@ -14,7 +14,8 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
 migrate = Migrate()
 csrf = CSRFProtect()
-socketio = SocketIO(async_mode='gevent', engineio_logger=True)
+# Configure Socket.IO with a message queue for production scalability
+socketio = SocketIO(async_mode='gevent', engineio_logger=True, message_queue=os.environ.get('REDIS_URL'))
 
 def create_app(config_class=Config):
     """
@@ -28,7 +29,8 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     migrate.init_app(app, db)
     csrf.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*")
+    # Pass the message queue URL to the init_app method as well
+    socketio.init_app(app, cors_allowed_origins="*", message_queue=os.environ.get('REDIS_URL'))
 
     # Ensure the instance and upload folders exist
     os.makedirs(app.instance_path, exist_ok=True)
@@ -44,8 +46,8 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    # Import models to ensure they are known to SQLAlchemy
-    from app import models
+    # Import models and events to ensure they are registered
+    from app import models, events
 
     # Register context processors
     @app.context_processor
@@ -81,5 +83,11 @@ def create_app(config_class=Config):
             """Sends follow-up reminders."""
             from app.main.routes import send_reminders
             send_reminders()
+
+        @app.cli.command("send-follow-ups")
+        def send_follow_ups_command():
+            """Sends automated follow-up emails for stalled requests."""
+            from app.main.routes import send_automated_follow_ups
+            send_automated_follow_ups()
 
     return app

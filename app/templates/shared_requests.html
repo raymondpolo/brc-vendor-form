@@ -6,11 +6,11 @@
     </div>
 
     <div class="mb-4">
-        <input type="text" x-model="search" placeholder="Search by ID, WO#, Property, Requester, Vendor..."
+        <input type="text" x-model="search" placeholder="Search across all columns..."
                class="w-full md:w-1/2 lg:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
     </div>
 
-    <div class="overflow-x-auto">
+    <div class="hidden md:block overflow-x-auto">
         <table class="w-full text-sm text-left text-gray-500">
             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
@@ -43,7 +43,7 @@
                     </th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('requester_name')">
                         <div class="flex items-center">
-                            <span>Original Requester</span>
+                            <span>Requester</span>
                             <span x-show="sortColumn === 'requester_name'">
                                 <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
                                 <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -54,6 +54,33 @@
                         <div class="flex items-center">
                             <span>Property</span>
                             <span x-show="sortColumn === 'property'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('unit')">
+                        <div class="flex items-center">
+                            <span>Unit #</span>
+                            <span x-show="sortColumn === 'unit'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property_manager')">
+                        <div class="flex items-center">
+                            <span>Property Manager</span>
+                            <span x-show="sortColumn === 'property_manager'">
+                                <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </span>
+                        </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('request_type')">
+                        <div class="flex items-center">
+                            <span>Request Type</span>
+                            <span x-show="sortColumn === 'request_type'">
                                 <svg x-show="sortDirection === 'asc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
                                 <svg x-show="sortDirection === 'desc'" class="w-4 h-4 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                             </span>
@@ -77,6 +104,7 @@
                             </span>
                         </div>
                     </th>
+                    <th scope="col" class="px-6 py-3">Tags</th>
                 </tr>
             </thead>
             <tbody>
@@ -89,6 +117,9 @@
                         <td class="px-6 py-4" x-text="req.wo_number"></td>
                         <td class="px-6 py-4" x-text="req.requester_name"></td>
                         <td class="px-6 py-4" x-text="req.property"></td>
+                        <td class="px-6 py-4" x-text="req.unit"></td>
+                        <td class="px-6 py-4" x-text="req.property_manager"></td>
+                        <td class="px-6 py-4" x-text="req.request_type"></td>
                         <td class="px-6 py-4" x-text="req.vendor_name"></td>
                         <td class="px-6 py-4">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
@@ -101,15 +132,73 @@
                                   x-text="req.status">
                             </span>
                         </td>
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col space-y-1 items-start">
+                                <template x-if="req.tag">
+                                    <template x-for="t in req.tag.split(',').filter(Boolean)" :key="t">
+                                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="{
+                                                  'bg-green-100 text-green-800': ['Approved', 'Completed'].includes(t),
+                                                  'bg-red-100 text-red-800': ['Declined'].includes(t),
+                                                  'bg-blue-100 text-blue-800': ['Go-back'].includes(t),
+                                                  'bg-purple-100 text-purple-800': !['Approved', 'Completed', 'Declined', 'Go-back'].includes(t)
+                                              }"
+                                              x-text="t">
+                                        </span>
+                                    </template>
+                                </template>
+                            </div>
+                        </td>
                     </tr>
                 </template>
                 <tr x-show="filteredRequests.length === 0">
-                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                    <td colspan="11" class="px-6 py-4 text-center text-gray-500">
                         No requests found matching your search.
                     </td>
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 md:hidden">
+        <template x-for="req in filteredRequests" :key="req.id">
+            <a :href="'/request/' + req.id" class="bg-white p-4 rounded-lg shadow space-y-3 block">
+                <div class="flex items-center justify-between">
+                    <div class="font-bold text-lg text-indigo-600" x-text="'#' + req.id"></div>
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                          :class="{
+                              'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
+                              'bg-green-100 text-green-800': ['Completed', 'Approved'].includes(req.status),
+                              'bg-red-100 text-red-800': ['Cancelled', 'Quote Declined'].includes(req.status),
+                              'bg-yellow-100 text-yellow-800': !['New', 'Open', 'Completed', 'Approved', 'Cancelled', 'Quote Declined'].includes(req.status)
+                          }"
+                          x-text="req.status">
+                    </span>
+                </div>
+
+                <div class="border-t border-gray-200 pt-3 space-y-2 text-sm text-gray-700">
+                    <div class="flex justify-between">
+                        <span class="font-semibold text-gray-500">Property:</span>
+                        <span class="text-right" x-text="req.property + (req.unit ? ' #' + req.unit : '')"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-semibold text-gray-500">Date:</span>
+                        <span x-text="req.date_created"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-semibold text-gray-500">Requester:</span>
+                        <span x-text="req.requester_name"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-semibold text-gray-500">Vendor:</span>
+                        <span x-text="req.vendor_name"></span>
+                    </div>
+                </div>
+            </a>
+        </template>
+        <div x-show="filteredRequests.length === 0" class="text-center text-gray-500 py-10">
+            No requests found matching your search.
+        </div>
     </div>
 </div>
 
@@ -133,13 +222,8 @@
             get filteredRequests() {
                 const filtered = this.requests.filter(req => {
                     const searchLower = this.search.toLowerCase();
-                    return (
-                        req.id.toString().includes(searchLower) ||
-                        (req.wo_number && req.wo_number.toLowerCase().includes(searchLower)) ||
-                        (req.requester_name && req.requester_name.toLowerCase().includes(searchLower)) ||
-                        (req.property && req.property.toLowerCase().includes(searchLower)) ||
-                        (req.status && req.status.toLowerCase().includes(searchLower)) ||
-                        (req.vendor_name && req.vendor_name.toLowerCase().includes(searchLower))
+                    return Object.values(req).some(val => 
+                        String(val).toLowerCase().includes(searchLower)
                     );
                 });
 
@@ -151,6 +235,9 @@
                         if (this.sortColumn === 'id') {
                             valA = parseInt(valA, 10);
                             valB = parseInt(valB, 10);
+                        } else if (this.sortColumn === 'date_created') {
+                            valA = new Date(valA);
+                            valB = new Date(valB);
                         } else if (typeof valA === 'string') {
                             valA = valA.toLowerCase();
                             valB = valB.toLowerCase();
