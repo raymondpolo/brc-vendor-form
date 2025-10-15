@@ -3,31 +3,41 @@ import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-from flask_mail import Mail
+# from flask_mail import Mail # REMOVED: This is no longer needed.
 from config import Config
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
+from flask_socketio import SocketIO
 
 db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
-mail = Mail()
+# mail = Mail() # REMOVED: This is no longer needed.
 migrate = Migrate()
 csrf = CSRFProtect()
+socketio = SocketIO(async_mode='gevent', engineio_logger=True)
 
 def create_app(config_class=Config):
+    """
+    The application factory. This function creates and configures the Flask application.
+    """
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
-    mail.init_app(app)
+    # mail.init_app(app) # REMOVED: This is no longer needed.
     migrate.init_app(app, db)
     csrf.init_app(app)
+    socketio.init_app(app, cors_allowed_origins="*")
 
+    # Ensure the instance and upload folders exist
+    os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+    # Register blueprints
     from app.auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint, url_prefix='/auth')
 
@@ -37,8 +47,10 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    from app import models
+    # Import models and events to ensure they are registered
+    from app import models, events
 
+    # Register context processors
     @app.context_processor
     def inject_notifications():
         from flask_login import current_user
@@ -49,12 +61,28 @@ def create_app(config_class=Config):
             ).order_by(Notification.timestamp.desc()).all()
             return dict(unread_notifications=unread_notifications)
         return dict(unread_notifications=[])
-    
+
     with app.app_context():
+        # Create a default superuser if one doesn't exist
         try:
             models.User.create_default_superuser()
         except Exception as e:
             app.logger.info(f"Could not create superuser (this is normal on first run): {e}")
 
+        # Register shell context processor and CLI commands within the app context
+        @app.shell_context_processor
+        def make_shell_context():
+            return {'db': db, 'User': models.User, 'WorkOrder': models.WorkOrder, 'socketio': socketio}
+
+        @app.cli.command("create-superuser")
+        def create_superuser():
+            """Creates the default superuser."""
+            models.User.create_default_superuser()
+
+        @app.cli.command("send-reminders")
+        def send_reminders_command():
+            """Sends follow-up reminders."""
+            from app.main.routes import send_reminders
+            send_reminders()
 
     return app

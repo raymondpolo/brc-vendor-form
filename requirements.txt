@@ -1,11 +1,10 @@
-# Vendor Request Form/requirements.txt
 Flask
 Flask-SQLAlchemy
 Flask-Login
 Flask-WTF
 Werkzeug
 email_validator
-Flask-Mail
+# Flask-Mail is no longer needed
 itsdangerous
 python-dotenv
 gunicorn
@@ -16,3 +15,7 @@ Flask-Migrate
 SQLAlchemy-Utils
 WTForms-SQLAlchemy
 bleach
+Flask-SocketIO
+gevent
+gevent-websocket
+sendgrid
