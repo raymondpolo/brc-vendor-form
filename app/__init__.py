@@ -18,7 +18,7 @@ def create_app(config_class=Config):
     login_manager.login_message_category = 'info'
     migrate.init_app(app, db)
     csrf.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*", message_queue=app.config.get('REDIS_URL'))
+    socketio.init_app(app, cors_allowed_origins="*", message_queue=os.environ.get('REDIS_URL'))
 
     # Ensure the instance and upload folders exist
     os.makedirs(app.instance_path, exist_ok=True)
@@ -36,9 +36,6 @@ def create_app(config_class=Config):
 
     # Import models to ensure they are registered with SQLAlchemy
     from app import models
-
-    # Import event handlers to register them with Socket.IO
-    from app import events
 
     # Register context processors
     @app.context_processor
