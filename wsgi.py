@@ -9,4 +9,4 @@ app = create_app()
 
 # Import the events module here to register the Socket.IO event handlers.
 # This MUST be done AFTER the app is created to avoid circular imports.
-from app import events
+import app.events
