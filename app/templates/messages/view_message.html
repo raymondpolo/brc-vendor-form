@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-4 border-b pb-4">
+        <h3 class="text-lg font-semibold text-gray-800">View Message</h3>
+        <div>
+            <a href="{{ url_for('main.messages') }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                &larr; Back to Inbox
+            </a>
+            <a href="{{ url_for('main.compose_message', recipient_email=message.sender_email, work_order_id=message.work_order_id, subject='Re: ' + message.subject) }}" class="ml-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                Reply
+            </a>
+        </div>
+    </div>
+
+    <div class="space-y-4 text-sm">
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">From:</span>
+            <span class="text-gray-800">{{ message.author.name if message.author else message.sender_email }} ({{ message.sender_email }})</span>
+        </div>
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">To:</span>
+            <span class="text-gray-800">
+                {% if message.recipient %}
+                    {{ message.recipient.name }} ({{ message.recipient_email }})
+                {% else %}
+                    {{ message.recipient_email }}
+                {% endif %}
+            </span>
+        </div>
+        {% if message.cc %}
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">CC:</span>
+            <span class="text-gray-800">{{ message.cc }}</span>
+        </div>
+        {% endif %}
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">Date:</span>
+            <span class="text-gray-800">{{ message.timestamp.strftime('%m/%d/%Y at %I:%M %p') }}</span>
+        </div>
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">Subject:</span>
+            <span class="text-gray-800 font-semibold">{{ message.subject }}</span>
+        </div>
+        {% if message.work_order %}
+        <div class="flex items-baseline">
+            <span class="font-medium text-gray-500 w-24">Related To:</span>
+            <a href="{{ url_for('main.view_request', request_id=message.work_order.id) }}" class="text-indigo-600 hover:underline">
+                Request #{{ message.work_order.id }}
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="mt-6 border-t pt-6">
+        <p class="text-gray-800 whitespace-pre-wrap">{{ message.body }}</p>
+    </div>
+
+    {% if message.attachments %}
+    <div class="mt-6 border-t pt-6">
+        <h4 class="text-md font-semibold text-gray-800 mb-4">Attachments</h4>
+        <div class="space-y-3">
+            {% for attachment in message.attachments %}
+                <div class="flex items-center text-sm">
+                    <svg class="h-5 w-5 text-gray-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-indigo-600 hover:underline">{{ attachment.filename }}</a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock content %}

@@ -1,0 +1,23 @@
+# Environment variables
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Instance folder (contains the database)
+/instance/
+
+# Uploads folder (ignore contents, not the folder itself)
+/uploads/*
+!/uploads/.gitkeep
+
+# Virtual environment
+venv/

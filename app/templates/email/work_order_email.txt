@@ -1,0 +1,8 @@
+{{ body }}
+
+---
+Work Order Details:
+ID: #{{ work_order.id }}
+Property: {{ work_order.property }}
+Unit: {{ work_order.unit or 'N/A' }}
+Address: {{ work_order.address }}

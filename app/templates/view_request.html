@@ -1,0 +1,863 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+    /* This style block ensures the CKEditor instance respects the flexbox layout and becomes scrollable */
+    .email-editor-container .ck.ck-editor {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    .email-editor-container .ck.ck-editor__main > .ck-editor__editable {
+        max-height: calc(90vh - 370px); /* Adjust 350px if needed to account for other elements */
+        overflow-y: auto !important;
+    }
+    /* Hide the CKEditor resizer handle to prevent resizing */
+    .ck-editor__resize-handle {
+        display: none !important;
+    }
+</style>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <div class="lg:col-span-2 space-y-6">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            {% if work_order.is_deleted %}
+            <div class="p-4 mb-4 text-sm text-yellow-700 bg-yellow-100 rounded-lg" role="alert">
+                <span class="font-medium">This request was deleted on {{ work_order.deleted_at.strftime('%m/%d/%Y') }}.</span>
+            </div>
+            {% endif %}
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">{{ title }}</h1>
+                    <p class="text-sm text-gray-500">Created on: {{ work_order.date_created.strftime('%m/%d/%Y %I:%M %p') }} by {{ work_order.requester_name }}</p>
+                </div>
+                <span class="px-3 py-1 text-sm font-semibold rounded-full"
+                    style="background-color: #e0e7ff; color: #4338ca;">
+                    {{ work_order.status }}
+                </span>
+            </div>
+
+            <div class="flex items-center space-x-2 border-t pt-4 mt-4">
+                {% if not work_order.is_deleted %}
+                    {% if work_order.author == current_user or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                    <a href="{{ url_for('main.edit_request', request_id=work_order.id) }}"
+                       class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-300 flex items-center shadow">
+                       <i class="fas fa-edit mr-2"></i> Edit Request
+                    </a>
+                    {% endif %}
+                    
+                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                    <button id="sendEmailBtn"
+                            class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition duration-300 flex items-center shadow">
+                        <i class="fas fa-envelope mr-2"></i> Send as email
+                    </button>
+                    {% endif %}
+                {% endif %}
+
+                {% if current_user.role == 'Super User' %}
+                    {% if work_order.is_deleted %}
+                    <form method="POST" action="{{ url_for('main.restore_request', request_id=work_order.id) }}">
+                        {{ delete_form.hidden_tag() }}
+                        <button type="submit"
+                                class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition duration-300 flex items-center shadow">
+                            <i class="fas fa-undo mr-2"></i> Restore Request
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('main.delete_request', request_id=work_order.id) }}" onsubmit="return confirm('Are you sure you want to delete this request?');">
+                        {{ delete_form.hidden_tag() }}
+                        <button type="submit"
+                                class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition duration-300 flex items-center shadow">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                              <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                            </svg> Delete Request
+                        </button>
+                    </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div class="col-span-1 md:col-span-2">
+                    <h3 class="font-semibold text-gray-700 mb-1">Description</h3>
+                    <p class="text-gray-600 bg-gray-50 p-3 rounded-md">{{ work_order.description }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Property</h3>
+                    <p class="text-gray-600">{{ work_order.property }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Unit</h3>
+                    <p class="text-gray-600">{{ work_order.unit or 'N/A' }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Property Manager</h3>
+                    <p class="text-gray-600">{{ work_order.property_manager or 'N/A' }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Assigned Vendor</h3>
+                    <p class="text-gray-600">{{ work_order.vendor.company_name if work_order.vendor else 'N/A' }}</p>
+                </div>
+                 <div>
+                    <h3 class="font-semibold text-gray-700">Work Order #</h3>
+                    <p class="text-gray-600">{{ work_order.wo_number or 'N/A' }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Address</h3>
+                    <p class="text-gray-600">{{ work_order.address }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Request Type</h3>
+                    <p class="text-gray-600">{{ work_order.request_type_relation.name }}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700">Preferred Dates</h3>
+                    <ul class="list-disc list-inside text-gray-600">
+                        <li>{{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}</li>
+                        <li>{{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}</li>
+                        <li>{{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Tags</h3>
+            <div class="flex flex-wrap items-center gap-2">
+                {% if work_order.tag %}
+                    {% for t in work_order.tag.split(',') %}
+                        {% if t %}
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 flex items-center">
+                            {{ t }}
+                            {% if (t in ['Approved', 'Declined'] and current_user.role in ['Property Manager', 'Super User']) or (t not in ['Approved', 'Declined'] and current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager']) %}
+                            <form method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}" class="ml-1">
+                                {{ delete_form.hidden_tag() }}
+                                <input type="hidden" name="action" value="remove_tag">
+                                <input type="hidden" name="tag_to_remove" value="{{ t }}">
+                                <button type="submit" class="text-blue-500 hover:text-blue-700">&times;</button>
+                            </form>
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                <p class="text-sm text-gray-500">No tags yet.</p>
+                {% endif %}
+            </div>
+            {% if current_user.role in ['Admin', 'Scheduler', 'Property Manager', 'Super User'] %}
+            <form method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}" class="mt-4 flex items-center gap-2">
+                {{ tag_form.hidden_tag() }}
+                {{ tag_form.tag(class="block w-full rounded-md border-gray-300 shadow-sm") }}
+                {{ tag_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+            </form>
+            {% endif %}
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Quotes</h3>
+            <div class="space-y-4">
+                {% for quote in quotes %}
+                <div class="grid grid-cols-12 gap-4 items-center text-sm border-b border-gray-100 py-2 {% if quote.status == 'Approved' %}bg-green-100{% elif quote.status == 'Declined' %}bg-red-100{% endif %}">
+                    <div class="col-span-12 sm:col-span-3 font-medium text-gray-900 truncate">
+                        {{ quote.vendor.company_name }}:
+                    </div>
+                    <div class="col-span-12 sm:col-span-5 min-w-0">
+                        <a href="#" class="view-attachment-btn text-indigo-600 hover:underline truncate inline-block w-full" 
+                           data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}" 
+                           data-filename="{{ quote.attachment.filename }}"
+                           title="{{ quote.attachment.filename }}">
+                           {{ quote.attachment.filename }}
+                        </a>
+                    </div>
+                    <div class="col-span-12 sm:col-span-4 flex items-center justify-start sm:justify-end space-x-4">
+                        {% if quote.status != 'Pending' %}
+                        <span class="text-xs font-semibold {% if quote.status == 'Approved' %}text-green-800{% else %}text-red-800{% endif %}">{{ quote.status }}</span>
+                        {% endif %}
+                        <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-500 hover:text-indigo-600" title="Download Quote">
+                           <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        </a>
+                        {% if current_user.role in ['Property Manager', 'Super User'] %}
+                        <form action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='approve') }}" method="POST">
+                            {{ delete_form.hidden_tag() }}
+                            <button type="submit" class="text-green-500 hover:text-green-700 font-bold" title="Approve Quote">✓</button>
+                        </form>
+                        <form action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='decline') }}" method="POST">
+                            {{ delete_form.hidden_tag() }}
+                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold" title="Decline Quote">✗</button>
+                        </form>
+                        {% if quote.status != 'Pending' %}
+                        <form action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" method="POST">
+                            {{ delete_form.hidden_tag() }}
+                            <button type="submit" class="text-gray-500 hover:text-gray-700 font-bold" title="Clear Status">⟲</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                        {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                        <form action="{{ url_for('main.delete_quote', quote_id=quote.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this quote?');">
+                            {{ delete_form.hidden_tag() }}
+                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold" title="Delete Quote">&times;</button>
+                        </form>
+                        {% endif %}
+                        <span class="text-xs text-gray-500 w-20 text-left">{{ quote.date_sent.strftime('%m/%d/%Y') }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-500">No quotes have been uploaded yet.</p>
+                {% endfor %}
+            </div>
+            {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
+            <form method="POST" action="{{ url_for('main.add_quote', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-6 border-t pt-4 space-y-4">
+                {{ quote_form.hidden_tag() }}
+                <div>
+                    {{ quote_form.vendor.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ quote_form.vendor(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm") }}
+                </div>
+                <div>
+                    {{ quote_form.quote_file.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ quote_form.quote_file(class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+                </div>
+                
+                {% if quote_form.errors %}
+                    <div class="text-red-500 text-xs mt-1">
+                        {% for field, errors in quote_form.errors.items() %}
+                            {% for error in errors %}<span>{{ error }}</span><br>{% endfor %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                <div>
+                {{ quote_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </div>
+            </form>
+            {% endif %}
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Notes</h3>
+            <div class="space-y-4">
+                {% for note in work_order.notes %}
+                <div class="flex space-x-3">
+                    <div class="flex-shrink-0">
+                        <img class="h-8 w-8 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ note.author.name[0].upper() }}" alt="">
+                    </div>
+                    <div>
+                        <div class="text-sm">
+                            <a href="#" class="font-medium text-gray-900">{{ note.author.name }}</a>
+                        </div>
+                        <div class="mt-1 text-sm text-gray-700">
+                            <p>{{ note.text }}</p>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span>{{ note.date_posted.strftime('%m/%d/%Y at %I:%M %p') }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-500">No notes yet.</p>
+                {% endfor %}
+            </div>
+            {% if not work_order.is_deleted %}
+            <form method="POST" class="mt-6">
+                {{ note_form.hidden_tag() }}
+                {{ note_form.text(id="note-textarea", class="w-full rounded-md border-gray-300 shadow-sm", rows="3", placeholder="Add a note... @mention a user to notify them.") }}
+                <div class="mt-3 flex justify-end">
+                    <button type="submit" name="post_note" class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Post Note</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="lg:col-span-1 space-y-6">
+        {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
+        <div x-data="{ 
+                selectedStatus: '{{ work_order.status }}',
+                isEditingDate: {{ 'false' if work_order.scheduled_date else 'true' }}
+             }" 
+             class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Update Status</h3>
+            <form method="POST" action="{{ url_for('main.change_status', request_id=work_order.id) }}">
+                {{ status_form.hidden_tag() }}
+                {{ status_form.status.label(class="block text-sm font-medium text-gray-700") }}
+                {{ status_form.status(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", **{'x-model': 'selectedStatus'}) }}
+                
+                <div x-show="selectedStatus === 'Scheduled'" class="mt-4">
+                    <div x-show="!isEditingDate && '{{ work_order.scheduled_date }}'">
+                        <label class="block text-sm font-medium text-gray-700">Scheduled Date</label>
+                        <div class="flex items-center justify-between mt-1">
+                            <p class="text-gray-800">{{ work_order.scheduled_date.strftime('%m/%d/%Y') if work_order.scheduled_date }}</p>
+                            <button type="button" @click="isEditingDate = true" class="text-sm text-indigo-600 hover:underline">Change</button>
+                        </div>
+                    </div>
+
+                    <div x-show="isEditingDate || !'{{ work_order.scheduled_date }}'">
+                        {{ status_form.scheduled_date.label(class="block text-sm font-medium text-gray-700") }}
+                        {{ status_form.scheduled_date(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm") }}
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" name="update_status" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Update Status</button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+        <div x-data="{
+            isEditing: false,
+            rawInitial: {
+                name: '{{ work_order.vendor.company_name if work_order.vendor else '' }}',
+                id: '{{ work_order.vendor.id if work_order.vendor else '' }}',
+                contact: '{{ work_order.vendor.contact_name if work_order.vendor else '' }}',
+                email: '{{ work_order.vendor.email if work_order.vendor else '' }}',
+                phone: '{{ work_order.vendor.phone if work_order.vendor else '' }}',
+                specialty: '{{ work_order.vendor.specialty if work_order.vendor else '' }}',
+                website: '{{ work_order.vendor.website if work_order.vendor else '' }}'
+            },
+            initial: {},
+            search: '',
+            selectedVendorId: '',
+            selectedVendorContact: '',
+            selectedVendorEmail: '',
+            selectedVendorPhone: '',
+            selectedVendorSpecialty: '',
+            selectedVendorWebsite: '',
+            results: [],
+            normalize(value) {
+                if (!value || value === 'None' || value === 'null') {
+                    return '';
+                }
+                return value;
+            },
+            init() {
+                this.initial = {
+                    name: this.normalize(this.rawInitial.name),
+                    id: this.normalize(this.rawInitial.id),
+                    contact: this.normalize(this.rawInitial.contact),
+                    email: this.normalize(this.rawInitial.email),
+                    phone: this.normalize(this.rawInitial.phone),
+                    specialty: this.normalize(this.rawInitial.specialty),
+                    website: this.normalize(this.rawInitial.website)
+                };
+                this.search = this.initial.name;
+                this.selectedVendorId = this.initial.id;
+                this.selectedVendorContact = this.initial.contact;
+                this.selectedVendorEmail = this.initial.email;
+                this.selectedVendorPhone = this.initial.phone;
+                this.selectedVendorSpecialty = this.initial.specialty;
+                this.selectedVendorWebsite = this.initial.website;
+            },
+            searchVendors() {
+                if (this.search.length < 2) {
+                    this.results = [];
+                    return;
+                }
+                fetch(`/api/vendors/search?q=${this.search}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        this.results = data;
+                    });
+            },
+            selectVendor(vendor) {
+                this.search = vendor.company_name;
+                this.selectedVendorId = vendor.id;
+                this.selectedVendorContact = this.normalize(vendor.contact_name);
+                this.selectedVendorEmail = this.normalize(vendor.email);
+                this.selectedVendorPhone = this.normalize(vendor.phone);
+                this.selectedVendorSpecialty = this.normalize(vendor.specialty);
+                this.selectedVendorWebsite = this.normalize(vendor.website);
+                this.results = [];
+            },
+            cancelEditing() {
+                this.isEditing = false;
+                this.search = this.initial.name;
+                this.selectedVendorId = this.initial.id;
+                this.selectedVendorContact = this.initial.contact;
+                this.selectedVendorEmail = this.initial.email;
+                this.selectedVendorPhone = this.initial.phone;
+                this.selectedVendorSpecialty = this.initial.specialty;
+                this.selectedVendorWebsite = this.initial.website;
+                this.results = [];
+            }
+        }"
+        x-init="init()"
+        class="bg-white p-6 rounded-lg shadow-md">
+
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Assign Vendor</h3>
+
+            <div x-show="!isEditing">
+                <div class="flex items-center space-x-2">
+                    <input type="text" :value="initial.name" readonly class="block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
+                    <button type="button" @click.prevent="isEditing = true" class="px-3 py-2 border rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                        Assign
+                    </button>
+                </div>
+                <div x-show="initial.id" class="mt-4 border-t pt-4 space-y-2 text-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div>
+                                <span class="font-semibold text-gray-600">Contact:</span>
+                                <span class="text-gray-800" x-text="initial.contact || 'N/A'"></span>
+                            </div>
+                            <div>
+                                <span class="font-semibold text-gray-600">Email:</span>
+                                <span class="text-gray-800" x-text="initial.email || 'N/A'"></span>
+                            </div>
+                            <div>
+                                <span class="font-semibold text-gray-600">Phone:</span>
+                                <span class="text-gray-800" x-text="initial.phone || 'N/A'"></span>
+                            </div>
+                            <div>
+                                <span class="font-semibold text-gray-600">Specialty:</span>
+                                <span class="text-gray-800" x-text="initial.specialty || 'N/A'"></span>
+                            </div>
+                            <div>
+                                <span class="font-semibold text-gray-600">Website:</span>
+                                <template x-if="initial.website">
+                                    <a :href="initial.website" target="_blank"
+                                    class="text-indigo-600 hover:underline"
+                                    x-text="initial.website"></a>
+                                </template>
+                                <template x-if="!initial.website">
+                                    <span class="text-gray-800">N/A</span>
+                                </template>
+                            </div>
+                        </div>
+                        <div>
+                            <form method="POST" action="{{ url_for('main.unassign_vendor', request_id=work_order.id) }}" onsubmit="return confirm('Are you sure you want to unassign this vendor?');">
+                                {{ assign_vendor_form.csrf_token }}
+                                <button type="submit"
+                                        class="text-gray-400 hover:text-red-600 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="isEditing">
+                <form x-ref="vendorForm" method="POST" action="{{ url_for('main.assign_vendor', request_id=work_order.id) }}">
+                    {{ assign_vendor_form.csrf_token }}
+                    <input type="hidden" name="vendor_id" x-model="selectedVendorId">
+
+                    <div class="relative">
+                        <div class="flex items-center space-x-2">
+                            <input type="text" x-model="search" @input.debounce.300ms="searchVendors()"
+                                class="block w-full rounded-md border-gray-300 shadow-sm">
+                            <button type="button" @click.prevent="cancelEditing()"
+                                    class="px-3 py-2 border rounded-md text-sm font-medium bg-gray-200 text-gray-800">
+                                Cancel
+                            </button>
+                        </div>
+
+                        <div x-show="results.length > 0"
+                            class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
+                            <ul>
+                                <template x-for="vendor in results" :key="vendor.id">
+                                    <li @click="selectVendor(vendor)"
+                                        class="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                                        x-text="vendor.company_name">
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div x-show="selectedVendorId" class="mt-4 border-t pt-4 space-y-2 text-sm">
+                        <div>
+                            <span class="font-semibold text-gray-600">Contact:</span>
+                            <span class="text-gray-800" x-text="selectedVendorContact || 'N/A'"></span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-gray-600">Email:</span>
+                            <span class="text-gray-800" x-text="selectedVendorEmail || 'N/A'"></span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-gray-600">Phone:</span>
+                            <span class="text-gray-800" x-text="selectedVendorPhone || 'N/A'"></span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-gray-600">Specialty:</span>
+                            <span class="text-gray-800" x-text="selectedVendorSpecialty || 'N/A'"></span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-gray-600">Website:</span>
+                            <template x-if="selectedVendorWebsite">
+                                <a :href="selectedVendorWebsite" target="_blank"
+                                class="text-indigo-600 hover:underline"
+                                x-text="selectedVendorWebsite"></a>
+                            </template>
+                            <template x-if="!selectedVendorWebsite">
+                                <span class="text-gray-800">N/A</span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" name="submit"
+                                class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                            Select Vendor
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Attachments</h3>
+            <ul class="space-y-2">
+                {% for attachment in work_order.attachments %}
+                    {% if attachment.file_type != 'Quote' %}
+                    <li class="flex items-center justify-between text-sm">
+                        <div class="flex items-center min-w-0">
+                             <a href="#" class="view-attachment-btn text-indigo-600 hover:underline truncate"
+                                data-url="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}"
+                                data-filename="{{ attachment.filename }}"
+                                title="{{ attachment.filename }}">
+                                {{ attachment.filename }}
+                             </a>
+                        </div>
+                        <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
+                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-400 hover:text-indigo-600">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            </a>
+                            {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                            <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
+                                {{ delete_form.hidden_tag() }}
+                                <button type="submit" class="text-red-500 hover:text-red-700 font-bold">&times;</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endif %}
+                {% else %}
+                <li class="text-sm text-gray-500">No general attachments.</li>
+                {% endfor %}
+            </ul>
+            {% if not work_order.is_deleted %}
+            <form method="POST" action="{{ url_for('main.upload_attachment', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-4 border-t pt-4">
+                {{ attachment_form.hidden_tag() }}
+                {{ attachment_form.file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+                <p class="mt-1 text-xs text-gray-500">
+                    Allowed file types: jpg, png, jpeg, gif, pdf, doc, docx.
+                </p>
+                <div class="mt-3">
+                    <button type="submit" name="upload_attachment" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Upload</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">History</h3>
+            <div class="overflow-y-auto h-64">
+                <ul class="space-y-4">
+                    {% for log in audit_logs %}
+                    <li class="flex items-start space-x-3">
+                        <div class="flex-shrink-0">
+                            <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                <svg class="h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">{{ log.text }} by <strong>{{ log.user.name }}</strong></p>
+                            <p class="text-xs text-gray-400">{{ log.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</p>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="text-sm text-gray-500">No history for this request.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="emailModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="text-xl font-semibold">Send Work Request as Email</h3>
+            <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div class="p-6 flex-grow flex flex-col overflow-hidden">
+            <form id="emailForm" onsubmit="return false;" class="flex-grow flex flex-col">
+                {{ note_form.csrf_token }}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                    <div class="mb-2">
+                        <label for="recipient" class="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
+                        <input type="email" id="recipient" name="recipient" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="mb-2">
+                        <label for="cc" class="block text-sm font-medium text-gray-700 mb-1">CC (comma-separated)</label>
+                        <input type="text" id="cc" name="cc" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label for="subject" class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                    <input type="text" id="subject" name="subject"
+                           value="Work Request #{{ work_order.id }} - {{ work_order.property }}{% if work_order.unit %}, {{ work_order.unit }}{% endif %}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4 flex flex-col min-h-0">
+                    <label for="body" class="block text-sm font-medium text-gray-700 mb-1">Message Body</label>
+                    <div class="email-editor-container min-h-0 flex-grow">
+                        <textarea id="body">
+                            <p>Hi Team,</p>
+                            <p>&nbsp;</p>
+                            <p>We would like to schedule this request:</p>
+                            <p>&nbsp;</p>
+                            <p><strong>Work Order #:</strong> {{ work_order.wo_number }}-{% set names = current_user.name.split() %}{{ names[0][0] if names else '' }}{{ names[-1][0] if names|length > 1 else '' }}<br>
+                            <strong>Type of Request:</strong> {{ work_order.request_type_relation.name }}<br>
+                            <strong>Description / Instructions:</strong><br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;{{ work_order.description }}</p>
+                            <p><strong>Property:</strong> {{ work_order.property }}<br>
+                            <strong>Unit:</strong> {{ work_order.unit or 'N/A' }}<br>
+                            <strong>Address:</strong> {{ work_order.address }}<br>
+                            {% if work_order.tenant_name %}
+                            <strong>Tenant Name:</strong> {{ work_order.tenant_name }}<br>
+                            <strong>Tenant Phone:</strong> {{ work_order.tenant_phone or 'N/A' }}<br>
+                            {% endif %}
+                            {% if work_order.contact_person %}
+                            <strong>Contact Person:</strong> {{ work_order.contact_person }}<br>
+                            <strong>Contact Person Phone:</strong> {{ work_order.contact_person_phone or 'N/A' }}<br>
+                            {% endif %}
+                            <strong>Preferred Dates:</strong><br>
+                            - {{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}<br>
+                            - {{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}<br>
+                            - {{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</p>
+                        </textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 -mt-4">
+                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager'] and current_user.signature %}
+                    <button type="button" id="insertSignatureBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Insert Signature</button>
+                    {% endif %}
+                    <button type="button" id="cancelSendBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button type="submit" id="submitEmailBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center">
+                        <i class="fas fa-paper-plane mr-2"></i> Send
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="attachmentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 id="attachmentModalTitle" class="text-xl font-semibold">View Attachment</h3>
+            <button id="closeAttachmentModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div class="p-6 flex-grow">
+            <iframe id="attachmentFrame" class="w-full h-full" frameborder="0"></iframe>
+        </div>
+    </div>
+</div>
+
+<div id="notificationToast" class="fixed bottom-5 right-5 p-4 rounded-lg text-white shadow-lg hidden transition-opacity duration-300">
+    <span id="notificationMessage"></span>
+</div>
+
+{% if current_user.is_authenticated and current_user.signature %}
+<div id="user-signature" class="hidden">{{ current_user.signature|safe }}</div>
+{% endif %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
+        const emailModal = document.getElementById('emailModal');
+        const openModalBtn = document.getElementById('sendEmailBtn');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const cancelSendBtn = document.getElementById('cancelSendBtn');
+        const emailForm = document.getElementById('emailForm');
+        const submitEmailBtn = document.getElementById('submitEmailBtn');
+        const recipientInput = document.getElementById('recipient');
+        const insertSignatureBtn = document.getElementById('insertSignatureBtn');
+        const csrfToken = emailForm.querySelector('input[name="csrf_token"]').value;
+        const notificationToast = document.getElementById('notificationToast');
+        const notificationMessage = document.getElementById('notificationMessage');
+        let editor;
+
+        function initializeEditor() {
+            if (editor) return;
+            // Use the CKEDITOR global from the super-build loaded in layout.html
+            CKEDITOR.ClassicEditor
+                .create(document.querySelector('#body'), {
+                    toolbar: {
+                        items: [
+                            'undo', 'redo',
+                            '|', 'bold', 'italic', 'underline', 'link',
+                            '|', 'bulletedList', 'numberedList',
+                            '|', 'blockQuote', 'insertTable', // Keep table functionality
+                            '|', 'sourceEditing'
+                        ],
+                        shouldNotGroupWhenFull: true
+                    },
+                    // Remove plugins to keep the editor lightweight but allow signatures
+                    removePlugins: [
+                        'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage',
+                        'RealTimeCollaborativeComments', 'RealTimeCollaborativeTrackChanges', 'RealTimeCollaborativeRevisionHistory',
+                        'PresenceList', 'Comments', 'TrackChanges', 'TrackChangesData', 'RevisionHistory',
+                        'Pagination', 'WProofreader', 'MathType', 'SlashCommand', 'Template', 'DocumentOutline',
+                        'FormatPainter', 'TableOfContents', 'PasteFromOfficeEnhanced', 'ExportPdf', 'ExportWord',
+                        'MultiLevelList', 'TodoList', 'CaseChange',
+                        'Heading', 'MediaEmbed', 'SimpleUploadAdapter'
+                    ]
+                })
+                .then(newEditor => {
+                    editor = newEditor;
+                })
+                .catch(error => {
+                    console.error('CKEditor Initialization Error:', error);
+                });
+        }
+        
+        function showModal() {
+            emailModal.classList.remove('hidden');
+            setTimeout(() => {
+                emailModal.classList.remove('opacity-0', 'scale-95');
+                initializeEditor();
+            }, 100);
+        }
+
+        function hideModal() {
+            if (editor) {
+                editor.destroy().catch(error => console.error(error));
+                editor = null;
+            }
+            emailModal.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => {
+                emailModal.classList.add('hidden');
+            }, 300);
+        }
+
+        function showNotification(message, isSuccess) {
+            notificationMessage.textContent = message;
+            notificationToast.className = 'fixed bottom-5 right-5 p-4 rounded-lg text-white shadow-lg transition-opacity duration-300';
+            notificationToast.classList.add(isSuccess ? 'bg-green-500' : 'bg-red-500');
+            notificationToast.classList.remove('hidden');
+            setTimeout(() => {
+                notificationToast.classList.add('hidden');
+            }, 4000);
+        }
+        if (openModalBtn) {
+            openModalBtn.addEventListener('click', () => {
+                {% if work_order.vendor and work_order.vendor.email %}
+                    recipientInput.value = '{{ work_order.vendor.email }}';
+                {% endif %}
+                showModal();
+            });
+        }
+        if (insertSignatureBtn) {
+            insertSignatureBtn.addEventListener('click', () => {
+                if (editor) {
+                    const signatureContainer = document.getElementById('user-signature');
+                    if (signatureContainer) {
+                        const signature = signatureContainer.innerHTML;
+                        const viewFragment = editor.data.processor.toView(`<p>&nbsp;</p>${signature}`);
+                        const modelFragment = editor.data.toModel(viewFragment);
+                        editor.model.insertContent(modelFragment, editor.model.document.selection);
+                    }
+                }
+            });
+        }
+        closeModalBtn.addEventListener('click', hideModal);
+        cancelSendBtn.addEventListener('click', hideModal);
+        window.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !emailModal.classList.contains('hidden')) {
+                hideModal();
+            }
+        });
+        submitEmailBtn.addEventListener('click', async function (event) {
+            event.preventDefault();
+            const originalButtonContent = submitEmailBtn.innerHTML;
+            submitEmailBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Sending...`;
+            submitEmailBtn.disabled = true;
+            const data = {
+                recipient: document.getElementById('recipient').value,
+                cc: document.getElementById('cc').value,
+                subject: document.getElementById('subject').value,
+                body: editor.getData()
+            };
+            try {
+                const response = await fetch(`{{ url_for('main.send_work_order_email', request_id=work_order.id) }}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    showNotification(result.message, true);
+                    hideModal();
+                } else {
+                    showNotification(result.message || 'An unknown error occurred.', false);
+                }
+            } catch (error) {
+                showNotification('A network error occurred. Please try again.', false);
+            } finally {
+                submitEmailBtn.innerHTML = originalButtonContent;
+                submitEmailBtn.disabled = false;
+            }
+        });
+        const attachmentModal = document.getElementById('attachmentModal');
+        const closeAttachmentModalBtn = document.getElementById('closeAttachmentModalBtn');
+        const attachmentFrame = document.getElementById('attachmentFrame');
+        const attachmentModalTitle = document.getElementById('attachmentModalTitle');
+        document.querySelectorAll('.view-attachment-btn').forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const attachmentUrl = this.dataset.url;
+                const attachmentFilename = this.dataset.filename;
+                attachmentModalTitle.textContent = attachmentFilename;
+                attachmentFrame.src = attachmentUrl;
+                attachmentModal.classList.remove('hidden');
+                setTimeout(() => {
+                   attachmentModal.classList.remove('opacity-0', 'scale-95');
+                }, 10);
+            });
+        });
+        function hideAttachmentModal() {
+            attachmentModal.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => {
+                attachmentModal.classList.add('hidden');
+                attachmentFrame.src = '';
+            }, 300);
+        }
+        closeAttachmentModalBtn.addEventListener('click', hideAttachmentModal);
+
+        var tribute = new Tribute({
+            values: function(text, cb) {
+                fetch('/api/users/search')
+                    .then(response => response.json())
+                    .then(data => cb(data))
+                    .catch(error => cb([]));
+            },
+            selectTemplate: function(item) {
+                if (typeof item === 'undefined') return null;
+                return `@${item.original.key} `;
+            },
+            lookup: 'value',
+            fillAttr: 'key',
+            allowSpaces: false,
+            menuItemTemplate: function(item) {
+                return item.string;
+            },
+            trigger: '@',
+            noMatchTemplate: function () {
+                return '<li class="no-match">No matches found</li>';
+            }
+        });
+
+        tribute.attach(document.getElementById('note-textarea'));
+    });
+</script>
+{% endblock content %}

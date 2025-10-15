@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md">
+    <div class="flex justify-between items-center mb-4 border-b pb-4">
+        <div>
+            <h3 class="text-lg font-semibold text-gray-700">{{ title }}</h3>
+            <p class="text-sm text-gray-500">Your personal and shared message center.</p>
+        </div>
+        <a href="{{ url_for('main.compose_message') }}" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+            New Message
+        </a>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="mb-4 border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+            <a href="{{ url_for('main.messages', box='inbox') }}" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
+                {% if box == 'inbox' %}
+                    border-indigo-500 text-indigo-600
+                {% else %}
+                    border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300
+                {% endif %}">
+                Inbox
+            </a>
+            <a href="{{ url_for('main.messages', box='sent') }}" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
+                {% if box == 'sent' %}
+                    border-indigo-500 text-indigo-600
+                {% else %}
+                    border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300
+                {% endif %}">
+                Sent
+            </a>
+        </nav>
+    </div>
+
+    <!-- Message List -->
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left text-gray-500">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3">{{ 'From' if box == 'inbox' else 'To' }}</th>
+                    <th scope="col" class="px-6 py-3">Subject</th>
+                    <th scope="col" class="px-6 py-3">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for msg in messages %}
+                <tr class="bg-white border-b hover:bg-gray-50 {% if box == 'inbox' and msg.recipient_id == current_user.id and not msg.is_read %}font-bold text-gray-900{% endif %}">
+                    <td class="px-6 py-4">
+                        <a href="{{ url_for('main.view_message', message_id=msg.id) }}" class="hover:underline">
+                            {% if box == 'inbox' %}
+                                {{ msg.author.name if msg.author else msg.sender_email }}
+                            {% else %}
+                                {{ msg.recipient.name if msg.recipient else msg.recipient_email }}
+                            {% endif %}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4">
+                        <a href="{{ url_for('main.view_message', message_id=msg.id) }}" class="hover:underline flex items-center">
+                            <span>{{ msg.subject }}</span>
+                            {% if msg.attachments %}
+                                <svg class="h-4 w-4 ml-2 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                </svg>
+                            {% endif %}
+                            {% if msg.work_order %}
+                                <span class="text-xs text-gray-500 font-normal ml-2">(Re: Request #{{ msg.work_order.id }})</span>
+                            {% endif %}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4">{{ msg.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="text-center py-10 text-gray-500">
+                        No messages in this folder.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock content %}

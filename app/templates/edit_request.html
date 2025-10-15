@@ -1,0 +1,124 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-6 text-gray-800">Edit Request #{{ work_order.id }}</h2>
+    <form method="POST" action="{{ url_for('main.edit_request', request_id=work_order.id) }}" enctype="multipart/form-data" 
+          x-data="{ 
+              property: '{{ work_order.property | e }}', 
+              address: '{{ work_order.address | e }}', 
+              manager: '{{ work_order.property_manager | e }}' 
+          }">
+        {{ form.hidden_tag() }}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div>
+                <label for="requester_name" class="block text-sm font-medium text-gray-700">Name of Requester</label>
+                <input type="text" name="requester_name" id="requester_name" value="{{ work_order.author.name if work_order.author else work_order.requester_name }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+            </div>
+            
+            <div>
+                {{ form.wo_number.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.wo_number(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.request_type.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.request_type(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                <label for="preferred_vendor" class="block text-sm font-medium text-gray-700">Preferred Vendor (Optional)</label>
+                <input type="text" name="preferred_vendor" id="preferred_vendor" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <div class="md:col-span-2">
+                <label for="{{ form.description.id }}" class="block text-sm font-medium text-gray-700">{{ form.description.label.text }} <span class="text-red-500">*</span></label>
+                {{ form.description(rows="4", class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                 {% if form.description.errors %}
+                    <div class="text-red-500 text-xs mt-1">
+                        {% for error in form.description.errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div>
+                <label for="property" class="block text-sm font-medium text-gray-700">Property <span class="text-red-500">*</span></label>
+                <input list="properties" name="property" id="property" x-model="property" 
+                       @change="address = {{ property_data }}[property]?.address || ''; manager = {{ property_data }}[property]?.manager || ''" 
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
+                <datalist id="properties">
+                    {% for prop in properties %}
+                    <option value="{{ prop.name }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div>
+                {{ form.unit.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.unit(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+                <input type="text" name="address" id="address" x-model="address" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+            </div>
+            <div class="md:col-span-2">
+                <label for="property_manager" class="block text-sm font-medium text-gray-700">Property Manager</label>
+                <input type="text" name="property_manager" id="property_manager" x-model="manager" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly>
+            </div>
+
+            <div>
+                {{ form.tenant_name.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.tenant_name(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.tenant_phone.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.tenant_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.contact_person.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.contact_person(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                {{ form.contact_person_phone.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.contact_person_phone(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+            </div>
+
+             <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700">Preferred Date Range (at least 3) <span class="text-red-500">*</span></label>
+                <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {{ form.date_1(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                    {{ form.date_2(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                    {{ form.date_3(class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                </div>
+            </div>
+            
+            </div>
+        <div class="mt-8 flex justify-end space-x-4">
+            <a href="{{ url_for('main.view_request', request_id=work_order.id) }}" class="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</a>
+            {{ form.submit(value="Save Changes", class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+        </div>
+    </form>
+    
+    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+    <div class="mt-8 border-t pt-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">Reassign Request</h3>
+        <form method="POST" action="{{ url_for('admin.reassign_request', request_id=work_order.id) }}">
+            {{ reassign_form.hidden_tag() }}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    {{ reassign_form.requester.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ reassign_form.requester(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm") }}
+                </div>
+                <div class="flex items-end">
+                    {{ reassign_form.submit(class="w-full px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                </div>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        flatpickr("input[name='date_1']", { dateFormat: "m/d/Y" });
+        flatpickr("input[name='date_2']", { dateFormat: "m/d/Y" });
+        flatpickr("input[name='date_3']", { dateFormat: "m/d/Y" });
+    });
+</script>
+{% endblock content %}
