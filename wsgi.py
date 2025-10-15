@@ -7,4 +7,5 @@ from app import create_app
 # Gunicorn will automatically look for this 'app' variable.
 app = create_app()
 
-# The events module is now imported within create_app(), so it's not needed here.
+# Import the events module here to register the Socket.IO event handlers.
+import app.events

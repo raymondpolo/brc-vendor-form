@@ -4,7 +4,8 @@ from app import create_app, socketio
 # Create the Flask application instance using the factory pattern.
 app = create_app()
 
-# The events module is now imported within create_app(), so it's not needed here.
+# Import the events module here to register the Socket.IO event handlers.
+import app.events
 
 if __name__ == '__main__':
     # This block is for local development only.

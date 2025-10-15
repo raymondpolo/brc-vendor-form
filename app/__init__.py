@@ -44,7 +44,8 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    # Import models to ensure they are known to SQLAlchemy
+    # Import models and events here, AFTER the app and extensions are initialized
+    # This avoids the circular import error.
     from app import models
 
     # Register context processors
@@ -81,9 +82,5 @@ def create_app(config_class=Config):
             """Sends follow-up reminders."""
             from app.main.routes import send_reminders
             send_reminders()
-
-    # Import events after the app and extensions are fully configured.
-    # This is the key to breaking the circular import.
-    from . import events
 
     return app
