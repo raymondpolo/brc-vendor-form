@@ -46,7 +46,7 @@ def create_app(config_class=Config):
 
     # Import models and events here, AFTER the app and extensions are initialized
     # This avoids the circular import error.
-    from app import models
+    from app import models, events
 
     # Register context processors
     @app.context_processor
