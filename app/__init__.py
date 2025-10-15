@@ -23,7 +23,7 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Initialize extensions with the app
+    # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
     migrate.init_app(app, db)
@@ -44,7 +44,7 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    # Import models to ensure they are known to SQLAlchemy
+    # Import models to ensure they are registered
     from app import models
 
     # Register context processors
@@ -66,7 +66,7 @@ def create_app(config_class=Config):
         except Exception as e:
             app.logger.info(f"Could not create superuser (this is normal on first run): {e}")
 
-        # Register shell context processor and CLI commands
+        # Register shell context processor and CLI commands within the app context
         @app.shell_context_processor
         def make_shell_context():
             return {'db': db, 'User': models.User, 'WorkOrder': models.WorkOrder, 'socketio': socketio}
@@ -87,8 +87,5 @@ def create_app(config_class=Config):
             """Sends automated follow-up emails for stalled requests."""
             from app.main.routes import send_automated_follow_ups
             send_automated_follow_ups()
-
-    # Import Socket.IO events after the app and extensions are initialized
-    from . import events
 
     return app
