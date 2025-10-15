@@ -3,7 +3,6 @@ import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-# from flask_mail import Mail # REMOVED: This is no longer needed.
 from config import Config
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
@@ -13,7 +12,6 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
-# mail = Mail() # REMOVED: This is no longer needed.
 migrate = Migrate()
 csrf = CSRFProtect()
 socketio = SocketIO(async_mode='gevent', engineio_logger=True)
@@ -28,7 +26,6 @@ def create_app(config_class=Config):
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
-    # mail.init_app(app) # REMOVED: This is no longer needed.
     migrate.init_app(app, db)
     csrf.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*")
@@ -47,20 +44,9 @@ def create_app(config_class=Config):
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
 
-    # Import models and events to ensure they are registered
+    # Import models and events here, AFTER the app and extensions are initialized
+    # This avoids the circular import error.
     from app import models, events
-
-    # Register context processors
-    @app.context_processor
-    def inject_notifications():
-        from flask_login import current_user
-        from app.models import Notification
-        if current_user.is_authenticated:
-            unread_notifications = Notification.query.filter_by(
-                user_id=current_user.id, is_read=False
-            ).order_by(Notification.timestamp.desc()).all()
-            return dict(unread_notifications=unread_notifications)
-        return dict(unread_notifications=[])
 
     with app.app_context():
         # Create a default superuser if one doesn't exist
