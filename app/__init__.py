@@ -37,9 +37,6 @@ def create_app(config_class=Config):
     # Import models to ensure they are registered with SQLAlchemy
     from app import models
 
-    # Import event handlers to register them with Socket.IO
-    from app import events
-
     # Register context processors
     @app.context_processor
     def inject_notifications():
@@ -80,5 +77,8 @@ def create_app(config_class=Config):
             """Sends automated follow-up emails for stalled requests."""
             from app.main.routes import send_automated_follow_ups
             send_automated_follow_ups()
+
+    # CORRECTED: Use a relative import to load the event handlers
+    from . import events
 
     return app
