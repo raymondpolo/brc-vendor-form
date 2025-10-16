@@ -38,7 +38,6 @@ def create_app(config_class=Config):
     from app import models
 
     # Import event handlers to register them with Socket.IO
-    # This now works because 'events' will import from 'extensions', not 'app'
     from app import events
 
     # Register context processors

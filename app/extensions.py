@@ -5,6 +5,7 @@ from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
 from flask_socketio import SocketIO
 
+# Create extension instances
 db = SQLAlchemy()
 login_manager = LoginManager()
 migrate = Migrate()
