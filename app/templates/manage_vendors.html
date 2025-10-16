@@ -1,10 +1,11 @@
 {% extends "layout.html" %}
+
 {% block content %}
-<div class="space-y-8">
-    <div class="bg-white p-6 rounded-lg shadow-md" x-data="vendorManager()">
-        
+<div class="space-y-8" x-data="vendorManager()">
+    <div class="bg-white p-6 rounded-lg shadow-md">
+
         <h3 class="text-lg font-semibold text-gray-700 mb-4">Manage Vendors</h3>
-        
+
         <div class="mb-8 border-b pb-6">
             <h4 class="text-md font-medium text-gray-600 mb-2">Add New Vendor</h4>
             <form method="POST" action="{{ url_for('admin.add_vendor') }}">
@@ -58,59 +59,42 @@
         {% endif %}
 
         <h4 class="text-md font-medium text-gray-600 mb-2">Existing Vendors</h4>
-        
+
         <div class="mb-4">
             <input type="text" x-model="search" placeholder="Filter by name, specialty, contact..."
                    class="w-full md:w-1/2 lg:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left text-gray-500">
-                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3">Company Name</th>
-                        <th scope="col" class="px-6 py-3">Contact</th>
-                        <th scope="col" class="px-6 py-3">Email</th>
-                        <th scope="col" class="px-6 py-3">Phone</th>
-                        <th scope="col" class="px-6 py-3">Specialty</th>
-                        <th scope="col" class="px-6 py-3">Website</th>
-                        <th scope="col" class="px-6 py-3">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="vendor in vendors.filter(v => search === '' || v.company_name.toLowerCase().includes(search.toLowerCase()) || (v.contact_name && v.contact_name.toLowerCase().includes(search.toLowerCase())) || (v.specialty && v.specialty.toLowerCase().includes(search.toLowerCase())))" :key="vendor.id">
-                        <tr class="bg-white border-b hover:bg-gray-50">
-                            <td class="px-6 py-4 font-medium text-gray-900" x-text="vendor.company_name"></td>
-                            <td class="px-6 py-4" x-text="vendor.contact_name || 'N/A'"></td>
-                            <td class="px-6 py-4" x-text="vendor.email || 'N/A'"></td>
-                            <td class="px-6 py-4" x-text="vendor.phone || 'N/A'"></td>
-                            <td class="px-6 py-4" x-text="vendor.specialty || 'N/A'"></td>
-                            <td class="px-6 py-4">
-                                <template x-if="vendor.website">
-                                    <a :href="vendor.website" target="_blank" class="text-indigo-600 hover:underline">Visit</a>
-                                </template>
-                                <template x-if="!vendor.website">
-                                    <span class="text-gray-400">N/A</span>
-                                </template>
-                            </td>
-                            <td class="px-6 py-4 flex items-center space-x-4">
-                                <a :href="`/admin/edit_vendor/${vendor.id}`" class="font-medium text-indigo-600 hover:text-indigo-900">Edit</a>
-                                {% if current_user.role == 'Super User' %}
-                                <form :action="`/admin/delete_vendor/${vendor.id}`" method="POST" onsubmit="return confirm('Are you sure you want to delete this vendor?');">
-                                    {{ vendor_form.hidden_tag() }}
-                                    <button type="submit" class="font-medium text-red-600 hover:text-red-900">Delete</button>
-                                </form>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    </template>
-                    <tr x-show="vendors.filter(v => search === '' || v.company_name.toLowerCase().includes(search.toLowerCase()) || (v.contact_name && v.contact_name.toLowerCase().includes(search.toLowerCase())) || (v.specialty && v.specialty.toLowerCase().includes(search.toLowerCase()))).length === 0">
-                        <td colspan="7" class="px-6 py-4 text-center text-gray-500">
-                            No vendors found matching your search.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="vendor in filteredVendors" :key="vendor.id">
+                <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                    <h5 class="font-bold text-lg text-gray-800" x-text="vendor.company_name"></h5>
+                    <p class="text-sm text-gray-600"><strong>Contact:</strong> <span x-text="vendor.contact_name || 'N/A'"></span></p>
+                    <p class="text-sm text-gray-600"><strong>Email:</strong> <span x-text="vendor.email || 'N/A'"></span></p>
+                    <p class="text-sm text-gray-600"><strong>Phone:</strong> <span x-text="vendor.phone || 'N/A'"></span></p>
+                    <p class="text-sm text-gray-600"><strong>Specialty:</strong> <span x-text="vendor.specialty || 'N/A'"></span></p>
+                    <div class="text-sm text-gray-600">
+                        <strong>Website:</strong>
+                        <template x-if="vendor.website">
+                            <a :href="vendor.website" target="_blank" class="text-indigo-600 hover:underline">Visit</a>
+                        </template>
+                        <template x-if="!vendor.website">
+                            <span class="text-gray-400">N/A</span>
+                        </template>
+                    </div>
+                    <div class="mt-4 flex items-center space-x-4">
+                        <a :href="`/admin/edit_vendor/${vendor.id}`" class="font-medium text-indigo-600 hover:text-indigo-900">Edit</a>
+                        {% if current_user.role == 'Super User' %}
+                        <form :action="`/admin/delete_vendor/${vendor.id}`" method="POST" onsubmit="return confirm('Are you sure you want to delete this vendor?');">
+                            <button type="submit" class="font-medium text-red-600 hover:text-red-900">Delete</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div x-show="filteredVendors.length === 0" class="text-center text-gray-500 py-10">
+             No vendors found matching your search.
         </div>
     </div>
 </div>
@@ -119,7 +103,18 @@
     function vendorManager() {
         return {
             search: '',
-            vendors: {{ vendors_json|safe }}
+            vendors: {{ vendors_json|safe }},
+            get filteredVendors() {
+                const searchLower = this.search.toLowerCase();
+                if (!searchLower) {
+                    return this.vendors;
+                }
+                return this.vendors.filter(v => {
+                    return v.company_name.toLowerCase().includes(searchLower) ||
+                           (v.contact_name && v.contact_name.toLowerCase().includes(searchLower)) ||
+                           (v.specialty && v.specialty.toLowerCase().includes(searchLower));
+                });
+            }
         }
     }
 </script>

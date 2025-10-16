@@ -1,10 +1,10 @@
 {% extends "layout.html" %}
+
 {% block content %}
-<div class="space-y-8">
-    <div class="bg-white p-6 rounded-lg shadow-md" x-data="propertyManager()">
-        
+<div class="space-y-8" x-data="propertyManager()">
+    <div class="bg-white p-6 rounded-lg shadow-md">
         <h3 class="text-lg font-semibold text-gray-700 mb-4">Manage Properties</h3>
-        
+
         <div class="mb-8 border-b pb-6">
             <h4 class="text-md font-medium text-gray-600 mb-2">Add New Property</h4>
             <form method="POST" action="{{ url_for('admin.add_property') }}">
@@ -46,45 +46,31 @@
         {% endif %}
 
         <h4 class="text-md font-medium text-gray-600 mb-2">Existing Properties</h4>
-        
+
         <div class="mb-4">
             <input type="text" x-model="search" placeholder="Filter by property name or address..."
                    class="w-full md:w-1/2 lg:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left text-gray-500">
-                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3">Property Name</th>
-                        <th scope="col" class="px-6 py-3">Address</th>
-                        <th scope="col" class="px-6 py-3">Property Manager</th>
-                        <th scope="col" class="px-6 py-3">Actions</th>
-                    </tr>
-                </thead>
-                <tbody x-ref="propertiesTable">
-                    <template x-for="prop in properties.filter(p => search === '' || p.name.toLowerCase().includes(search.toLowerCase()) || p.address.toLowerCase().includes(search.toLowerCase()))" :key="prop.id">
-                        <tr class="bg-white border-b hover:bg-gray-50">
-                            <td class="px-6 py-4 font-medium text-gray-900" x-text="prop.name"></td>
-                            <td class="px-6 py-4" x-text="prop.address"></td>
-                            <td class="px-6 py-4" x-text="prop.property_manager || 'N/A'"></td>
-                            <td class="px-6 py-4 flex items-center space-x-4">
-                                <a :href="`/admin/edit_property/${prop.id}`" class="font-medium text-indigo-600 hover:text-indigo-900">Edit</a>
-                                {% if current_user.role == 'Super User' %}
-                                <form :action="`/admin/delete_property/${prop.id}`" method="POST" onsubmit="return confirm('Are you sure you want to delete this property? This action cannot be undone.');">
-                                    <button type="submit" class="font-medium text-red-600 hover:text-red-900">Delete</button>
-                                </form>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    </template>
-                    <tr x-show="properties.filter(p => search === '' || p.name.toLowerCase().includes(search.toLowerCase()) || p.address.toLowerCase().includes(search.toLowerCase())).length === 0">
-                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                            No properties found matching your search.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="prop in filteredProperties" :key="prop.id">
+                <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                    <h5 class="font-bold text-lg text-gray-800" x-text="prop.name"></h5>
+                    <p class="text-sm text-gray-600" x-text="prop.address"></p>
+                    <p class="text-sm text-gray-600"><strong>Manager:</strong> <span x-text="prop.property_manager || 'N/A'"></span></p>
+                    <div class="mt-4 flex items-center space-x-4">
+                        <a :href="`/admin/edit_property/${prop.id}`" class="font-medium text-indigo-600 hover:text-indigo-900">Edit</a>
+                        {% if current_user.role == 'Super User' %}
+                        <form :action="`/admin/delete_property/${prop.id}`" method="POST" onsubmit="return confirm('Are you sure you want to delete this property? This action cannot be undone.');">
+                            <button type="submit" class="font-medium text-red-600 hover:text-red-900">Delete</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div x-show="filteredProperties.length === 0" class="text-center text-gray-500 py-10">
+            No properties found matching your search.
         </div>
     </div>
 </div>
@@ -93,7 +79,16 @@
     function propertyManager() {
         return {
             search: '',
-            properties: {{ properties_json|safe }}
+            properties: {{ properties_json|safe }},
+            get filteredProperties() {
+                const searchLower = this.search.toLowerCase();
+                if (!searchLower) {
+                    return this.properties;
+                }
+                return this.properties.filter(p => {
+                    return p.name.toLowerCase().includes(searchLower) || p.address.toLowerCase().includes(searchLower);
+                });
+            }
         }
     }
 </script>
