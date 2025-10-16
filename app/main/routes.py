@@ -66,6 +66,7 @@ def work_order_to_dict(req):
         'requester_name': req.requester_name,
         'property': req.property,
         'unit': req.unit,
+        'address': req.address,
         'property_manager': req.property_manager,
         'status': req.status,
         # MODIFIED: Get the request type name from the relationship
@@ -1156,21 +1157,49 @@ def calendar():
 @main.route('/api/events')
 @login_required
 def api_events():
-    query = WorkOrder.query.filter(WorkOrder.scheduled_date.isnot(None))
+    status_colors = {
+        'Scheduled': '#8B5CF6',  # purple
+        'New': '#3B82F6',        # blue
+        'Open': '#10B981',       # green
+        'Pending': '#F59E0B',    # yellow
+        'Follow-up': '#EF4444'   # red
+    }
+
+    query = WorkOrder.query.filter(WorkOrder.scheduled_date.isnot(None), WorkOrder.is_deleted==False)
     if current_user.role == 'Requester':
         query = query.filter(WorkOrder.user_id == current_user.id)
     events = query.all()
-    event_list = [{'title': f"Request #{event.id}",
-                   'start': event.scheduled_date.strftime('%Y-%m-%d'),
-                   'url': url_for('main.view_request', request_id=event.id)}
-                  for event in events]
-    follow_up_events = WorkOrder.query.filter(WorkOrder.follow_up_date.isnot(None)).all()
+
+    event_list = []
+    for event in events:
+        event_list.append({
+            'title': f"#{event.id} - {event.property}",
+            'start': event.scheduled_date.strftime('%Y-%m-%d'),
+            'url': url_for('main.view_request', request_id=event.id),
+            'color': status_colors.get(event.status, '#6B7280'), # Default to gray
+            'extendedProps': {
+                'requester': event.requester_name,
+                'status': event.status,
+                'type': 'Scheduled'
+            }
+        })
+
+    follow_up_events_query = WorkOrder.query.filter(WorkOrder.follow_up_date.isnot(None), WorkOrder.is_deleted==False)
+    if current_user.role == 'Requester':
+         follow_up_events_query = follow_up_events_query.filter(WorkOrder.user_id == current_user.id)
+    follow_up_events = follow_up_events_query.all()
+
     for event in follow_up_events:
         event_list.append({
-            'title': f"Follow-up for Request #{event.id}",
+            'title': f"Follow-up for #{event.id}",
             'start': event.follow_up_date.strftime('%Y-%m-%d'),
             'url': url_for('main.view_request', request_id=event.id),
-            'color': 'red'
+            'color': status_colors.get('Follow-up'),
+            'extendedProps': {
+                'requester': event.requester_name,
+                'status': event.status,
+                'type': 'Follow-up'
+            }
         })
     return jsonify(event_list)
     
