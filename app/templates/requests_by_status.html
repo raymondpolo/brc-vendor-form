@@ -19,11 +19,17 @@
         <table class="w-full text-sm text-left text-gray-500">
             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">ID</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">Request ID</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('date_created')">Date</th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('requester_name')">Requester</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('wo_number')">Work Order #</th>
+                    <th scope="col" class="px-6 py-3">Status</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('request_type')">Request Type</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property')">Property</th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('vendor_name')">Vendor</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('unit')">Unit</th>
+                    <th scope="col" class="px-6 py-3">Address</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('vendor_name')">Assigned Vendor</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property_manager')">Property Manager</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('requester_name')">Requester</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,13 +39,27 @@
                             <a :href="'/request/' + req.id" class="font-medium text-indigo-600 hover:underline" x-text="'#' + req.id"></a>
                         </td>
                         <td class="px-6 py-4" x-text="req.date_created"></td>
-                        <td class="px-6 py-4" x-text="req.requester_name"></td>
+                        <td class="px-6 py-4" x-text="req.wo_number || 'N/A'"></td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {% if status == 'New' %} bg-blue-100 text-blue-800
+                                {% elif status == 'Completed' %} bg-green-100 text-green-800
+                                {% elif status == 'Cancelled' %} bg-red-100 text-red-800
+                                {% else %} bg-yellow-100 text-yellow-800 {% endif %}">
+                                {{ status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4" x-text="req.request_type"></td>
                         <td class="px-6 py-4" x-text="req.property"></td>
-                        <td class="px-6 py-4" x-text="req.vendor_name"></td>
+                        <td class="px-6 py-4" x-text="req.unit || 'N/A'"></td>
+                        <td class="px-6 py-4" x-text="req.address"></td>
+                        <td class="px-6 py-4" x-text="req.vendor_name || 'N/A'"></td>
+                        <td class="px-6 py-4" x-text="req.property_manager || 'N/A'"></td>
+                        <td class="px-6 py-4" x-text="req.requester_name"></td>
                     </tr>
                 </template>
                 <tr x-show="filteredRequests.length === 0">
-                    <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                    <td colspan="11" class="px-6 py-4 text-center text-gray-500">
                         No requests found matching your search.
                     </td>
                 </tr>
@@ -49,7 +69,7 @@
 
     <div class="grid grid-cols-1 gap-4 md:hidden">
         <template x-for="req in filteredRequests" :key="req.id">
-            {{ request_card('req') }}
+            {% raw %}{% from 'partials/_request_card.html' import request_card %}{{ request_card('req') }}{% endraw %}
         </template>
         <div x-show="filteredRequests.length === 0" class="text-center text-gray-500 py-10">
             No requests found matching your search.
