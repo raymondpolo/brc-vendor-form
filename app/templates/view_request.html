@@ -1,16 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
 <style>
-    /* Custom utility to provide a balanced vertical padding between py-1 and py-2 */
-    .py-1\.5 {
-        padding-top: 0.375rem;
-        padding-bottom: 0.375rem;
-    }
-    .lg\:py-1\.5 {
-        padding-top: 0.375rem;
-        padding-bottom: 0.375rem;
-    }
-    
     /* This style block ensures the CKEditor instance respects the flexbox layout and becomes scrollable */
     .email-editor-container .ck.ck-editor {
         display: flex;
@@ -37,11 +27,10 @@
             {% endif %}
             <div class="flex justify-between items-start mb-4">
                 <div>
-                    <h1 class="text-3xl font-bold text-gray-800">{{ title }}</h1>
-                    <p class="text-sm text-gray-500">Created on: {{ work_order.date_created.strftime('%m/%d/%Y %I:%M %p') }} by {{ work_order.requester_name }}</p>
+                    <h1 class="text-2xl md:text-3xl font-bold text-text">{{ title }}</h1>
+                    <p class="text-sm text-text-secondary">Created on: {{ work_order.date_created.strftime('%m/%d/%Y %I:%M %p') }} by {{ work_order.requester_name }}</p>
                 </div>
-                <span class="px-3 py-1 text-sm font-semibold rounded-full"
-                    style="background-color: #e0e7ff; color: #4338ca;">
+                <span class="px-3 py-1 text-sm font-semibold rounded-full bg-brand-light text-brand-dark bg-opacity-50">
                     {{ work_order.status }}
                 </span>
             </div>
@@ -102,44 +91,44 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div class="col-span-1 md:col-span-2">
-                    <h3 class="font-semibold text-gray-700 mb-1">Description</h3>
-                    <p class="text-gray-600 bg-gray-50 p-3 rounded-md">{{ work_order.description }}</p>
+                    <h3 class="font-semibold text-text mb-1">Description</h3>
+                    <p class="text-text-secondary bg-surface-subtle p-3 rounded-md">{{ work_order.description }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Property</h3>
-                    <p class="text-gray-600">{{ work_order.property }}</p>
+                    <h3 class="font-semibold text-text">Property</h3>
+                    <p class="text-text-secondary">{{ work_order.property }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Unit</h3>
-                    <p class="text-gray-600">{{ work_order.unit or 'N/A' }}</p>
+                    <h3 class="font-semibold text-text">Unit</h3>
+                    <p class="text-text-secondary">{{ work_order.unit or 'N/A' }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Property Manager</h3>
-                    <p class="text-gray-600">{{ work_order.property_manager or 'N/A' }}</p>
+                    <h3 class="font-semibold text-text">Property Manager</h3>
+                    <p class="text-text-secondary">{{ work_order.property_manager or 'N/A' }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Preferred Vendor</h3>
-                    <p class="text-gray-600">{{ work_order.preferred_vendor or 'N/A' }}</p>
+                    <h3 class="font-semibold text-text">Preferred Vendor</h3>
+                    <p class="text-text-secondary">{{ work_order.preferred_vendor or 'N/A' }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Assigned Vendor</h3>
-                    <p class="text-gray-600">{{ work_order.vendor.company_name if work_order.vendor else 'N/A' }}</p>
+                    <h3 class="font-semibold text-text">Assigned Vendor</h3>
+                    <p class="text-text-secondary">{{ work_order.vendor.company_name if work_order.vendor else 'N/A' }}</p>
                 </div>
                  <div>
-                    <h3 class="font-semibold text-gray-700">Work Order #</h3>
-                    <p class="text-gray-600">{{ work_order.wo_number or 'N/A' }}</p>
+                    <h3 class="font-semibold text-text">Work Order #</h3>
+                    <p class="text-text-secondary">{{ work_order.wo_number or 'N/A' }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Address</h3>
-                    <p class="text-gray-600">{{ work_order.address }}</p>
+                    <h3 class="font-semibold text-text">Address</h3>
+                    <p class="text-text-secondary">{{ work_order.address }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Request Type</h3>
-                    <p class="text-gray-600">{{ work_order.request_type_relation.name }}</p>
+                    <h3 class="font-semibold text-text">Request Type</h3>
+                    <p class="text-text-secondary">{{ work_order.request_type_relation.name }}</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-700">Preferred Dates</h3>
-                    <ul class="list-disc list-inside text-gray-600">
+                    <h3 class="font-semibold text-text">Preferred Dates</h3>
+                    <ul class="list-disc list-inside text-text-secondary">
                         <li>{{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}</li>
                         <li>{{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}</li>
                         <li>{{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</li>
@@ -149,7 +138,7 @@
         </div>
 
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Tags</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">Tags</h3>
             <div class="flex flex-wrap items-center gap-2">
                 {% if work_order.tag %}
                     {% for t in work_order.tag.split(',') %}
@@ -168,28 +157,28 @@
                         {% endif %}
                     {% endfor %}
                 {% else %}
-                <p class="text-sm text-gray-500">No tags yet.</p>
+                <p class="text-sm text-text-secondary">No tags yet.</p>
                 {% endif %}
             </div>
             {% if current_user.role in ['Admin', 'Scheduler', 'Property Manager', 'Super User'] %}
             <form method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}" class="mt-4 flex items-center gap-2">
                 {{ tag_form.hidden_tag() }}
                 {{ tag_form.tag(class="block w-full rounded-md border-gray-300 shadow-sm") }}
-                {{ tag_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                {{ tag_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark") }}
             </form>
             {% endif %}
         </div>
 
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Quotes</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">Quotes</h3>
             <div class="space-y-4">
                 {% for quote in quotes %}
-                <div class="grid grid-cols-12 gap-4 items-center text-sm border-b border-gray-100 py-2 {% if quote.status == 'Approved' %}bg-green-100{% elif quote.status == 'Declined' %}bg-red-100{% endif %}">
-                    <div class="col-span-12 sm:col-span-3 font-medium text-gray-900 truncate">
+                <div class="grid grid-cols-12 gap-4 items-center text-sm border-b border-gray-100 py-2 {% if quote.status == 'Approved' %}bg-green-50{% elif quote.status == 'Declined' %}bg-red-50{% endif %}">
+                    <div class="col-span-12 sm:col-span-3 font-medium text-text truncate">
                         {{ quote.vendor.company_name }}:
                     </div>
                     <div class="col-span-12 sm:col-span-5 min-w-0">
-                        <a href="#" class="view-attachment-btn text-indigo-600 hover:underline truncate inline-block w-full" 
+                        <a href="#" class="view-attachment-btn text-brand hover:underline truncate inline-block w-full" 
                            data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}" 
                            data-filename="{{ quote.attachment.filename }}"
                            title="{{ quote.attachment.filename }}">
@@ -200,7 +189,7 @@
                         {% if quote.status != 'Pending' %}
                         <span class="text-xs font-semibold {% if quote.status == 'Approved' %}text-green-800{% else %}text-red-800{% endif %}">{{ quote.status }}</span>
                         {% endif %}
-                        <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-500 hover:text-indigo-600" title="Download Quote">
+                        <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-500 hover:text-brand" title="Download Quote">
                            <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                         </a>
                         {% if current_user.role in ['Property Manager', 'Super User'] %}
@@ -229,18 +218,18 @@
                     </div>
                 </div>
                 {% else %}
-                <p class="text-sm text-gray-500">No quotes have been uploaded yet.</p>
+                <p class="text-sm text-text-secondary">No quotes have been uploaded yet.</p>
                 {% endfor %}
             </div>
             {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
             <form method="POST" action="{{ url_for('main.add_quote', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-6 border-t pt-4 space-y-4">
                 {{ quote_form.hidden_tag() }}
                 <div>
-                    {{ quote_form.vendor.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ quote_form.vendor.label(class="block text-sm font-medium text-text") }}
                     {{ quote_form.vendor(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm") }}
                 </div>
                 <div>
-                    {{ quote_form.quote_file.label(class="block text-sm font-medium text-gray-700") }}
+                    {{ quote_form.quote_file.label(class="block text-sm font-medium text-text") }}
                     {{ quote_form.quote_file(class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
                 </div>
                 
@@ -253,19 +242,19 @@
                 {% endif %}
                 
                 <div>
-                {{ quote_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700") }}
+                {{ quote_form.submit(class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark") }}
                 </div>
             </form>
             {% endif %}
         </div>
 
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Notes</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">Notes</h3>
             <div id="notes-list" class="space-y-4">
                 {% for note in work_order.notes %}
                     {% include 'partials/note.html' %}
                 {% else %}
-                <p id="no-notes-message" class="text-sm text-gray-500">No notes yet.</p>
+                <p id="no-notes-message" class="text-sm text-text-secondary">No notes yet.</p>
                 {% endfor %}
             </div>
             {% if not work_order.is_deleted %}
@@ -273,7 +262,7 @@
                 {{ note_form.hidden_tag() }}
                 {{ note_form.text(id="note-textarea", class="w-full rounded-md border-gray-300 shadow-sm", rows="3", placeholder="Add a note... @mention a user to notify them.") }}
                 <div class="mt-3 flex justify-end">
-                    <button type="submit" name="post_note" class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Post Note</button>
+                    <button type="submit" name="post_note" class="px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Post Note</button>
                 </div>
             </form>
             {% endif %}
@@ -287,29 +276,29 @@
                 isEditingDate: {{ 'false' if work_order.scheduled_date else 'true' }}
              }" 
              class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Update Status</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">Update Status</h3>
             <form method="POST" action="{{ url_for('main.change_status', request_id=work_order.id) }}">
                 {{ status_form.hidden_tag() }}
-                {{ status_form.status.label(class="block text-sm font-medium text-gray-700") }}
+                {{ status_form.status.label(class="block text-sm font-medium text-text") }}
                 {{ status_form.status(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", **{'x-model': 'selectedStatus'}) }}
                 
                 <div x-show="selectedStatus === 'Scheduled'" class="mt-4">
                     <div x-show="!isEditingDate && '{{ work_order.scheduled_date }}'">
-                        <label class="block text-sm font-medium text-gray-700">Scheduled Date</label>
+                        <label class="block text-sm font-medium text-text">Scheduled Date</label>
                         <div class="flex items-center justify-between mt-1">
-                            <p class="text-gray-800">{{ work_order.scheduled_date.strftime('%m/%d/%Y') if work_order.scheduled_date }}</p>
-                            <button type="button" @click="isEditingDate = true" class="text-sm text-indigo-600 hover:underline">Change</button>
+                            <p class="text-text">{{ work_order.scheduled_date.strftime('%m/%d/%Y') if work_order.scheduled_date }}</p>
+                            <button type="button" @click="isEditingDate = true" class="text-sm text-brand hover:underline">Change</button>
                         </div>
                     </div>
 
                     <div x-show="isEditingDate || !'{{ work_order.scheduled_date }}'">
-                        {{ status_form.scheduled_date.label(class="block text-sm font-medium text-gray-700") }}
+                        {{ status_form.scheduled_date.label(class="block text-sm font-medium text-text") }}
                         {{ status_form.scheduled_date(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm") }}
                     </div>
                 </div>
 
                 <div class="mt-4">
-                    <button type="submit" name="update_status" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Update Status</button>
+                    <button type="submit" name="update_status" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Update Status</button>
                 </div>
             </form>
         </div>
@@ -396,12 +385,12 @@
         x-init="init()"
         class="bg-white p-6 rounded-lg shadow-md">
 
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Assign Vendor</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">Assign Vendor</h3>
 
             <div x-show="!isEditing">
                 <div class="flex items-center space-x-2">
-                    <input type="text" :value="initial.name" readonly class="block w-full rounded-md border-gray-300 shadow-sm bg-gray-100">
-                    <button type="button" @click.prevent="isEditing = true" class="px-3 py-2 border rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                    <input type="text" :value="initial.name" readonly class="block w-full rounded-md border-gray-300 shadow-sm bg-surface-subtle">
+                    <button type="button" @click.prevent="isEditing = true" class="px-3 py-2 border rounded-md text-sm font-medium bg-brand text-white hover:bg-brand-dark">
                         Assign
                     </button>
                 </div>
@@ -409,30 +398,30 @@
                     <div class="flex justify-between items-start">
                         <div>
                             <div>
-                                <span class="font-semibold text-gray-600">Contact:</span>
-                                <span class="text-gray-800" x-text="initial.contact || 'N/A'"></span>
+                                <span class="font-semibold text-text-secondary">Contact:</span>
+                                <span class="text-text" x-text="initial.contact || 'N/A'"></span>
                             </div>
                             <div>
-                                <span class="font-semibold text-gray-600">Email:</span>
-                                <span class="text-gray-800" x-text="initial.email || 'N/A'"></span>
+                                <span class="font-semibold text-text-secondary">Email:</span>
+                                <span class="text-text" x-text="initial.email || 'N/A'"></span>
                             </div>
                             <div>
-                                <span class="font-semibold text-gray-600">Phone:</span>
-                                <span class="text-gray-800" x-text="initial.phone || 'N/A'"></span>
+                                <span class="font-semibold text-text-secondary">Phone:</span>
+                                <span class="text-text" x-text="initial.phone || 'N/A'"></span>
                             </div>
                             <div>
-                                <span class="font-semibold text-gray-600">Specialty:</span>
-                                <span class="text-gray-800" x-text="initial.specialty || 'N/A'"></span>
+                                <span class="font-semibold text-text-secondary">Specialty:</span>
+                                <span class="text-text" x-text="initial.specialty || 'N/A'"></span>
                             </div>
                             <div>
-                                <span class="font-semibold text-gray-600">Website:</span>
+                                <span class="font-semibold text-text-secondary">Website:</span>
                                 <template x-if="initial.website">
                                     <a :href="initial.website" target="_blank"
-                                    class="text-indigo-600 hover:underline"
+                                    class="text-brand hover:underline"
                                     x-text="initial.website"></a>
                                 </template>
                                 <template x-if="!initial.website">
-                                    <span class="text-gray-800">N/A</span>
+                                    <span class="text-text">N/A</span>
                                 </template>
                             </div>
                         </div>
@@ -473,7 +462,7 @@
                             <ul>
                                 <template x-for="vendor in results" :key="vendor.id">
                                     <li @click="selectVendor(vendor)"
-                                        class="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                                        class="px-4 py-2 cursor-pointer hover:bg-surface-subtle"
                                         x-text="vendor.company_name">
                                     </li>
                                 </template>
@@ -483,30 +472,30 @@
 
                     <div x-show="selectedVendorId" class="mt-4 border-t pt-4 space-y-2 text-sm">
                         <div>
-                            <span class="font-semibold text-gray-600">Contact:</span>
-                            <span class="text-gray-800" x-text="selectedVendorContact || 'N/A'"></span>
+                            <span class="font-semibold text-text-secondary">Contact:</span>
+                            <span class="text-text" x-text="selectedVendorContact || 'N/A'"></span>
                         </div>
                         <div>
-                            <span class="font-semibold text-gray-600">Email:</span>
-                            <span class="text-gray-800" x-text="selectedVendorEmail || 'N/A'"></span>
+                            <span class="font-semibold text-text-secondary">Email:</span>
+                            <span class="text-text" x-text="selectedVendorEmail || 'N/A'"></span>
                         </div>
                         <div>
-                            <span class="font-semibold text-gray-600">Phone:</span>
-                            <span class="text-gray-800" x-text="selectedVendorPhone || 'N/A'"></span>
+                            <span class="font-semibold text-text-secondary">Phone:</span>
+                            <span class="text-text" x-text="selectedVendorPhone || 'N/A'"></span>
                         </div>
                         <div>
-                            <span class="font-semibold text-gray-600">Specialty:</span>
-                            <span class="text-gray-800" x-text="selectedVendorSpecialty || 'N/A'"></span>
+                            <span class="font-semibold text-text-secondary">Specialty:</span>
+                            <span class="text-text" x-text="selectedVendorSpecialty || 'N/A'"></span>
                         </div>
                         <div>
-                            <span class="font-semibold text-gray-600">Website:</span>
+                            <span class="font-semibold text-text-secondary">Website:</span>
                             <template x-if="selectedVendorWebsite">
                                 <a :href="selectedVendorWebsite" target="_blank"
-                                class="text-indigo-600 hover:underline"
+                                class="text-brand hover:underline"
                                 x-text="selectedVendorWebsite"></a>
                             </template>
                             <template x-if="!selectedVendorWebsite">
-                                <span class="text-gray-800">N/A</span>
+                                <span class="text-text">N/A</span>
                             </template>
                         </div>
                     </div>
@@ -522,13 +511,13 @@
         </div>
         {% endif %}
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Attachments</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">Attachments</h3>
             <ul class="space-y-2">
                 {% for attachment in work_order.attachments %}
                     {% if attachment.file_type != 'Quote' %}
                     <li class="flex items-center justify-between text-sm">
                         <div class="flex items-center min-w-0">
-                             <a href="#" class="view-attachment-btn text-indigo-600 hover:underline truncate"
+                             <a href="#" class="view-attachment-btn text-brand hover:underline truncate"
                                 data-url="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}"
                                 data-filename="{{ attachment.filename }}"
                                 title="{{ attachment.filename }}">
@@ -536,7 +525,7 @@
                              </a>
                         </div>
                         <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
-                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-400 hover:text-indigo-600">
+                            <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-400 hover:text-brand">
                                 <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                             </a>
                             {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
@@ -549,42 +538,42 @@
                     </li>
                     {% endif %}
                 {% else %}
-                <li class="text-sm text-gray-500">No general attachments.</li>
+                <li class="text-sm text-text-secondary">No general attachments.</li>
                 {% endfor %}
             </ul>
             {% if not work_order.is_deleted %}
             <form method="POST" action="{{ url_for('main.upload_attachment', request_id=work_order.id) }}" enctype="multipart/form-data" class="mt-4 border-t pt-4">
                 {{ attachment_form.hidden_tag() }}
                 {{ attachment_form.file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
-                <p class="mt-1 text-xs text-gray-500">
+                <p class="mt-1 text-xs text-text-subtle">
                     Allowed file types: jpg, png, jpeg, gif, pdf, doc, docx.
                 </p>
                 <div class="mt-3">
-                    <button type="submit" name="upload_attachment" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Upload</button>
+                    <button type="submit" name="upload_attachment" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Upload</button>
                 </div>
             </form>
             {% endif %}
         </div>
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">History</h3>
+            <h3 class="text-lg font-semibold text-text mb-4">History</h3>
             <div class="overflow-y-auto h-64">
                 <ul class="space-y-4">
                     {% for log in audit_logs %}
                     <li class="flex items-start space-x-3">
                         <div class="flex-shrink-0">
-                            <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                                <svg class="h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <div class="h-8 w-8 rounded-full bg-surface-subtle flex items-center justify-center">
+                                <svg class="h-5 w-5 text-text-subtle" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
                         </div>
                         <div>
-                            <p class="text-sm text-gray-600">{{ log.text }} by <strong>{{ log.user.name }}</strong></p>
-                            <p class="text-xs text-gray-400">{{ log.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</p>
+                            <p class="text-sm text-text-secondary">{{ log.text }} by <strong>{{ log.user.name }}</strong></p>
+                            <p class="text-xs text-text-subtle">{{ log.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</p>
                         </div>
                     </li>
                     {% else %}
-                    <li class="text-sm text-gray-500">No history for this request.</li>
+                    <li class="text-sm text-text-secondary">No history for this request.</li>
                     {% endfor %}
                 </ul>
             </div>
