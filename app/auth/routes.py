@@ -7,6 +7,7 @@ from app.auth import auth
 from app.models import User
 from app.forms import LoginForm, RequestResetForm, ResetPasswordForm, SetPasswordForm
 from app.email import send_notification_email
+from app.extensions import db
 
 @auth.route('/login', methods=['GET', 'POST'])
 def login():

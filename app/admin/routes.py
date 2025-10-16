@@ -19,6 +19,7 @@ from app.forms import (
 )
 from app.decorators import admin_required, role_required
 from app.email import send_notification_email
+from app.extensions import db
 
 @admin.route('/')
 @admin_required
