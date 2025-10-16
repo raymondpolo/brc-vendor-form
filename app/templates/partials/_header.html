@@ -1,0 +1,49 @@
+<header class="flex items-center justify-between p-4 bg-surface border-b border-gray-200">
+    <div class="flex items-center">
+        <button @click="isSidebarOpen = !isSidebarOpen" class="text-text-secondary focus:outline-none lg:hidden">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6H20M4 12H20M4 18H11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        </button>
+        <h2 class="text-xl font-semibold text-text ml-4">{{ title }}</h2>
+    </div>
+
+    <div class="flex items-center justify-end space-x-4">
+        <div class="hidden md:flex items-center space-x-2 text-sm text-text-secondary">
+             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span id="current-time"></span>
+        </div>
+        
+        <div x-data="{ notifOpen: false }" class="relative">
+            <button @click="notifOpen = !notifOpen" class="relative p-2 text-text-secondary rounded-full hover:bg-surface-subtle hover:text-text">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                {% if unread_notifications %}
+                <span class="absolute top-0 right-0 h-2 w-2 mt-1 mr-2 bg-red-500 rounded-full"></span>
+                {% endif %}
+            </button>
+            <div x-show="notifOpen" @click.away="notifOpen = false" class="absolute right-0 mt-2 w-72 md:w-80 bg-surface rounded-md shadow-lg py-1 z-10" style="display: none;">
+                <div class="px-4 py-2 text-sm font-semibold text-text border-b">Notifications</div>
+                {% for notification in unread_notifications %}
+                    <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-subtle">
+                        {{ notification.text }}
+                    </a>
+                {% else %}
+                    <p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div x-data="{ dropdownOpen: false }" class="relative">
+            <button @click="dropdownOpen = !dropdownOpen" class="flex items-center space-x-2">
+                <img class="h-9 w-9 rounded-full object-cover" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ current_user.name[0].upper() }}" alt="User Avatar" />
+                <div class="hidden md:block text-left">
+                    <p class="font-semibold text-text text-sm">{{ current_user.name }}</p>
+                    <p class="text-xs text-text-secondary">{{ current_user.role }}</p>
+                </div>
+            </button>
+            <div x-show="dropdownOpen" @click.away="dropdownOpen = false" class="absolute right-0 mt-2 w-48 bg-surface rounded-md shadow-lg py-1 z-10" style="display: none;">
+                <a href="{{ url_for('main.account') }}" class="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-subtle">Account</a>
+                <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-subtle">Logout</a>
+            </div>
+        </div>
+    </div>
+</header>
