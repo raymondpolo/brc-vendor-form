@@ -25,7 +25,7 @@ from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
-                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm, SendFollowUpForm)
+                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm, SendFollowUpForm, MarkAsCompletedForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
@@ -271,6 +271,7 @@ def view_request(request_id):
     tag_form = TagForm()
     reassign_form = ReassignRequestForm()
     follow_up_form = SendFollowUpForm()
+    completed_form = MarkAsCompletedForm()
     requester_initials = get_requester_initials(work_order.requester_name)
     quotes = work_order.quotes
     all_users = User.query.filter_by(is_active=True).all()
@@ -337,7 +338,23 @@ def view_request(request_id):
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
                            requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
                            delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form,
-                           follow_up_form=follow_up_form, all_users=all_users)
+                           follow_up_form=follow_up_form, all_users=all_users, completed_form=completed_form)
+
+
+@main.route('/request/<int:request_id>/mark_as_completed', methods=['POST'])
+@login_required
+def mark_as_completed(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = MarkAsCompletedForm()
+    if form.validate_on_submit():
+        work_order.status = 'Completed'
+        work_order.date_completed = datetime.utcnow()
+        db.session.add(AuditLog(text='Request marked as completed.', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+        flash('Request has been marked as completed.', 'success')
+    else:
+        flash('There was an error marking the request as completed.', 'danger')
+    return redirect(url_for('main.view_request', request_id=request_id))
 
 
 @main.route('/request/<int:request_id>/send_follow_up', methods=['POST'])
