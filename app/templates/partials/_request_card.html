@@ -1,7 +1,7 @@
 {% macro request_card(req) %}
-<a :href="'/request/' + req.id" class="bg-white p-4 rounded-lg shadow space-y-3 block">
-    <div class="flex items-center justify-between">
-        <div class="font-bold text-lg text-indigo-600" x-text="'#' + req.id"></div>
+<a :href="'/request/' + req.id" class="block bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
+    <div class="flex items-center justify-between mb-3">
+        <div class="font-bold text-lg text-indigo-600">Request #<span x-text="req.id"></span></div>
         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
               :class="{
                   'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
@@ -14,21 +14,15 @@
     </div>
 
     <div class="border-t border-gray-200 pt-3 space-y-2 text-sm text-gray-700">
-        <div class="flex justify-between">
-            <span class="font-semibold text-gray-500">Property:</span>
-            <span class="text-right" x-text="req.property + (req.unit ? ' #' + req.unit : '')"></span>
-        </div>
-        <div class="flex justify-between">
-            <span class="font-semibold text-gray-500">Date:</span>
-            <span x-text="req.date_created"></span>
-        </div>
-        <div class="flex justify-between">
-            <span class="font-semibold text-gray-500">Vendor:</span>
-            <span x-text="req.vendor_name"></span>
-        </div>
-        <div class="flex justify-between">
-            <span class="font-semibold text-gray-500">Type:</span>
-            <span x-text="req.request_type"></span>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+            <div class="col-span-1 sm:col-span-2"><strong>Work Order #:</strong> <span x-text="req.wo_number || 'N/A'"></span></div>
+            <div class="col-span-1 sm:col-span-2"><strong>Request Type:</strong> <span x-text="req.request_type"></span></div>
+            <div><strong>Property:</strong> <span x-text="req.property"></span></div>
+            <div><strong>Unit:</strong> <span x-text="req.unit || 'N/A'"></span></div>
+            <div class="col-span-1 sm:col-span-2"><strong>Address:</strong> <span x-text="req.address"></span></div>
+            <div class="col-span-1 sm:col-span-2"><strong>Assigned Vendor:</strong> <span x-text="req.vendor_name || 'N/A'"></span></div>
+            <div class="col-span-1 sm:col-span-2"><strong>Property Manager:</strong> <span x-text="req.property_manager || 'N/A'"></span></div>
+            <div class="col-span-1 sm:col-span-2"><strong>Requester:</strong> <span x-text="req.requester_name"></span></div>
         </div>
     </div>
 </a>
