@@ -25,7 +25,7 @@ from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
-                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm)
+                       UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm, SendFollowUpForm)
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
@@ -65,6 +65,8 @@ def work_order_to_dict(req):
         'wo_number': req.wo_number,
         'requester_name': req.requester_name,
         'property': req.property,
+        'unit': req.unit,
+        'property_manager': req.property_manager,
         'status': req.status,
         # MODIFIED: Get the request type name from the relationship
         'request_type': req.request_type_relation.name,
@@ -268,8 +270,10 @@ def view_request(request_id):
     delete_form = DeleteRestoreRequestForm()
     tag_form = TagForm()
     reassign_form = ReassignRequestForm()
+    follow_up_form = SendFollowUpForm()
     requester_initials = get_requester_initials(work_order.requester_name)
     quotes = work_order.quotes
+    all_users = User.query.filter_by(is_active=True).all()
 
     if is_admin_staff:
         status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined', 'New']]
@@ -332,7 +336,43 @@ def view_request(request_id):
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
                            requester_initials=requester_initials, quote_form=quote_form, quotes=quotes,
-                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form)
+                           delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form,
+                           follow_up_form=follow_up_form, all_users=all_users)
+
+
+@main.route('/request/<int:request_id>/send_follow_up', methods=['POST'])
+@login_required
+@admin_required
+def send_follow_up(request_id):
+    work_order = WorkOrder.query.get_or_404(request_id)
+    form = SendFollowUpForm()
+    if form.validate_on_submit():
+        recipient = form.recipient.data
+        cc = form.cc.data
+        subject = form.subject.data
+        body = form.body.data
+
+        recipients = [recipient]
+        cc_list = [email.strip() for email in cc.split(',')] if cc else []
+        
+        html_body = f"<p>{body.replace(chr(10), '<br>')}</p>"
+
+        send_notification_email(
+            subject=subject,
+            recipients=recipients,
+            cc=cc_list,
+            html_body=html_body,
+            text_body=body
+        )
+
+        db.session.add(AuditLog(text=f"Follow-up email sent to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+
+        flash('Follow-up email sent successfully!', 'success')
+    else:
+        flash('Failed to send follow-up email. Please check the form.', 'danger')
+
+    return redirect(url_for('main.view_request', request_id=request_id))
 
 
 @main.route('/request/<int:request_id>/delete', methods=['POST'])
@@ -696,7 +736,9 @@ def new_request():
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
             contact_person=form.contact_person.data, contact_person_phone=form.contact_person_phone.data,
             preferred_date_1=date1, preferred_date_2=date2,
-            preferred_date_3=date3, user_id=current_user.id)
+            preferred_date_3=date3, user_id=current_user.id,
+            preferred_vendor=form.vendor_assigned.data
+            )
         
         if selected_property:
             new_order.property_id = selected_property.id
@@ -773,6 +815,7 @@ def edit_request(request_id):
         work_order.tenant_phone = form.tenant_phone.data
         work_order.contact_person = form.contact_person.data
         work_order.contact_person_phone = form.contact_person_phone.data
+        work_order.preferred_vendor = form.vendor_assigned.data
         
         work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
