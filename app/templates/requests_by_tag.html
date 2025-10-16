@@ -15,33 +15,121 @@
                class="w-full md:w-1/2 lg:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="hidden md:block overflow-x-auto">
+        <table class="w-full text-sm text-left text-gray-500">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">ID</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('date_created')">Date</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('requester_name')">Requester</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property')">Property</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('vendor_name')">Vendor</th>
+                    <th scope="col" class="px-6 py-3">Status & Tags</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="req in filteredRequests" :key="req.id">
+                    <tr class="bg-white border-b hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <a :href="'/request/' + req.id" class="font-medium text-indigo-600 hover:underline" x-text="'#' + req.id"></a>
+                        </td>
+                        <td class="px-6 py-4" x-text="req.date_created"></td>
+                        <td class="px-6 py-4" x-text="req.requester_name"></td>
+                        <td class="px-6 py-4" x-text="req.property"></td>
+                        <td class="px-6 py-4" x-text="req.vendor_name"></td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                  :class="{
+                                      'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
+                                      'bg-gray-100 text-gray-800': req.status === 'Closed',
+                                      'bg-red-100 text-red-800': req.status === 'Cancelled',
+                                      'bg-yellow-100 text-yellow-800': !['New', 'Open', 'Closed', 'Cancelled'].includes(req.status)
+                                  }"
+                                  x-text="req.status">
+                            </span>
+                            <template x-if="req.tag">
+                                <template x-for="t in req.tag.split(',').filter(Boolean)" :key="t">
+                                     <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="{
+                                              'bg-green-100 text-green-800': ['Approved', 'Completed'].includes(t),
+                                              'bg-red-100 text-red-800': ['Declined'].includes(t),
+                                              'bg-blue-100 text-blue-800': ['Go-back'].includes(t),
+                                              'bg-purple-100 text-purple-800': !['Approved', 'Completed', 'Declined', 'Go-back'].includes(t)
+                                          }"
+                                          x-text="t">
+                                    </span>
+                                </template>
+                            </template>
+                        </td>
+                    </tr>
+                </template>
+                <tr x-show="filteredRequests.length === 0">
+                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                        No requests found matching your search.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 md:hidden">
         <template x-for="req in filteredRequests" :key="req.id">
             {{ request_card('req') }}
         </template>
-    </div>
-
-    <div x-show="filteredRequests.length === 0" class="text-center text-gray-500 py-10">
-        No requests found matching your search.
+        <div x-show="filteredRequests.length === 0" class="text-center text-gray-500 py-10">
+            No requests found matching your search.
+        </div>
     </div>
 </div>
-
 <script>
     function requestManager() {
         return {
             search: '',
             requests: {{ requests_json|safe }},
+            sortColumn: 'id',
+            sortDirection: 'desc',
+
+            sortBy(column) {
+                if (this.sortColumn === column) {
+                    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortColumn = column;
+                    this.sortDirection = 'asc';
+                }
+            },
 
             get filteredRequests() {
-                const searchLower = this.search.toLowerCase();
-                if (!searchLower) {
-                    return this.requests;
-                }
-                return this.requests.filter(req => {
-                    return Object.values(req).some(val =>
-                        String(val).toLowerCase().includes(searchLower)
+                const filtered = this.requests.filter(req => {
+                    const searchLower = this.search.toLowerCase();
+                    return (
+                        req.id.toString().includes(searchLower) ||
+                        (req.wo_number && req.wo_number.toLowerCase().includes(searchLower)) ||
+                        (req.requester_name && req.requester_name.toLowerCase().includes(searchLower)) ||
+                        (req.property && req.property.toLowerCase().includes(searchLower)) ||
+                        (req.vendor_name && req.vendor_name.toLowerCase().includes(searchLower))
                     );
                 });
+
+                if (this.sortColumn) {
+                    filtered.sort((a, b) => {
+                        let valA = a[this.sortColumn];
+                        let valB = b[this.sortColumn];
+
+                        if (this.sortColumn === 'id') {
+                            valA = parseInt(valA, 10);
+                            valB = parseInt(valB, 10);
+                        } else if (typeof valA === 'string') {
+                            valA = valA.toLowerCase();
+                            valB = valB.toLowerCase();
+                        }
+
+                        if (valA < valB) return this.sortDirection === 'asc' ? -1 : 1;
+                        if (valA > valB) return this.sortDirection === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+                }
+
+                return filtered;
             }
         }
     }
