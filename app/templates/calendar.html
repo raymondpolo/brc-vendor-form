@@ -42,8 +42,8 @@
         z-index: 20;
     }
 
-    /* --- Responsive Adjustments --- */
-    @media (max-width: 767px) {
+    /* --- Responsive Adjustments for Toolbar --- */
+    @media (max-width: 576px) {
         /* Stack the toolbar on mobile */
         .fc .fc-header-toolbar {
             flex-direction: column;
@@ -61,11 +61,6 @@
         .fc .fc-button {
             padding: 0.4em 0.65em;
             font-size: 0.85rem;
-        }
-        /* Make day headers smaller */
-        .fc-col-header-cell-cushion {
-            font-size: 0.8em;
-            padding: 2px 4px;
         }
     }
 </style>
@@ -87,20 +82,29 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,listWeek' // Simplified for all devices
+                    right: 'dayGridMonth,listWeek' // List view available on all devices
                 },
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
-                
-                // --- CORE FIXES FOR MOBILE ---
-                // Force the calendar to fit its container width
-                aspectRatio: isMobile ? 0.9 : 1.8, 
-                // Use single-letter day headers on mobile ('S', 'M', 'T'...)
-                dayHeaderFormat: isMobile ? { weekday: 'narrow' } : { weekday: 'short' },
-                // On mobile, show NO events directly, only the "+more" link.
-                dayMaxEvents: isMobile ? 0 : 3,
 
+                // --- CORE FIXES FOR MOBILE ---
+                
+                // 1. Don't show dates from other months. This fixes the overflow.
+                showNonCurrentDates: false, 
+                
+                // 2. The number of weeks will now be 4, 5, or 6, fitting the month perfectly.
+                fixedWeekCount: false,
+                
+                // 3. Let the calendar's content determine its height naturally.
+                height: 'auto',
+
+                // 4. Use single-letter day headers on mobile for a tighter fit.
+                dayHeaderFormat: isMobile ? { weekday: 'narrow' } : { weekday: 'short' },
+
+                // 5. On mobile, show no events directly, only the "+more" link.
+                dayMaxEvents: isMobile ? 0 : 3,
+                
                 eventDidMount: function(info) {
                     // Add tooltips on hover for desktop users
                     if (!isMobile) {
