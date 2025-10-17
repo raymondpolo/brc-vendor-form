@@ -749,7 +749,6 @@
                 hideModal();
             }
         });
-        // MODIFIED: Use FormData for file uploads
         submitEmailBtn.addEventListener('click', async function (event) {
             event.preventDefault();
             const originalButtonContent = submitEmailBtn.innerHTML;
@@ -868,6 +867,8 @@
                 e.preventDefault();
                 const noteTextarea = document.getElementById('note-textarea');
                 const formData = new FormData(noteForm);
+                // MODIFIED: Manually add the submit button's name to the form data
+                formData.append('post_note', 'Post Note');
 
                 fetch("{{ url_for('main.view_request', request_id=work_order.id) }}", {
                     method: 'POST',
@@ -877,12 +878,19 @@
                         'X-CSRFToken': csrfToken
                     }
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        // If the response is not OK, it might be an HTML error page
+                        // which would cause the JSON parsing to fail.
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         noteTextarea.value = '';
                     } else {
-                        console.error("Failed to post note.");
+                        console.error("Failed to post note:", data.errors);
                     }
                 })
                 .catch(error => console.error("Error posting note:", error));
