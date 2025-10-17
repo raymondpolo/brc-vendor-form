@@ -43,7 +43,7 @@
     }
 
     /* --- Responsive Adjustments --- */
-    @media (max-width: 576px) {
+    @media (max-width: 767px) {
         /* Stack the toolbar on mobile */
         .fc .fc-header-toolbar {
             flex-direction: column;
@@ -62,13 +62,10 @@
             padding: 0.4em 0.65em;
             font-size: 0.85rem;
         }
-        /* Ensure the calendar view itself doesn't cause overflow */
-        #calendar {
-            width: 100%;
-            overflow: hidden;
-        }
-        .fc-view {
-            overflow-x: auto;
+        /* Make day headers smaller */
+        .fc-col-header-cell-cushion {
+            font-size: 0.8em;
+            padding: 2px 4px;
         }
     }
 </style>
@@ -78,10 +75,9 @@
         var calendarEl = document.getElementById('calendar');
         var calendar;
 
-        function initializeCalendar() {
+        function renderCalendar() {
             var isMobile = window.innerWidth < 768;
 
-            // Destroy the old instance if it exists
             if (calendar) {
                 calendar.destroy();
             }
@@ -91,17 +87,22 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: isMobile ? 'dayGridMonth,listWeek' : 'dayGridMonth,timeGridWeek,listWeek'
+                    right: 'dayGridMonth,listWeek' // Simplified for all devices
                 },
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
-                // On mobile, show 0 events directly, only the "+more" link.
-                // On desktop, let FullCalendar decide.
-                dayMaxEvents: isMobile ? 0 : true,
                 
+                // --- CORE FIXES FOR MOBILE ---
+                // Force the calendar to fit its container width
+                aspectRatio: isMobile ? 0.9 : 1.8, 
+                // Use single-letter day headers on mobile ('S', 'M', 'T'...)
+                dayHeaderFormat: isMobile ? { weekday: 'narrow' } : { weekday: 'short' },
+                // On mobile, show NO events directly, only the "+more" link.
+                dayMaxEvents: isMobile ? 0 : 3,
+
                 eventDidMount: function(info) {
-                    // Add a tooltip on hover for desktop users
+                    // Add tooltips on hover for desktop users
                     if (!isMobile) {
                         var props = info.event.extendedProps;
                         info.el.setAttribute('title',
@@ -124,13 +125,13 @@
         }
 
         // Initial render
-        initializeCalendar();
+        renderCalendar();
 
-        // Re-initialize on window resize to adjust settings
+        // Re-render on window resize to apply responsive options
         var resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(initializeCalendar, 250);
+            resizeTimer = setTimeout(renderCalendar, 250);
         });
     });
 </script>
