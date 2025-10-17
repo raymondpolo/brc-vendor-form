@@ -28,6 +28,10 @@
         background-color: #3730a3;
         border-color: #3730a3;
     }
+    /* Remove rounded corners between grouped buttons */
+    .fc .fc-button-group > .fc-button {
+        margin: 0;
+    }
 
     /* Event styles */
     .fc-event {
@@ -52,15 +56,14 @@
         .fc .fc-header-toolbar {
             display: flex;
             flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
+            justify-content: center; /* Center chunks horizontally */
             gap: 0.75rem;
         }
-        /* Ensure each chunk (left, center, right) behaves correctly */
         .fc .fc-toolbar-chunk {
             display: flex;
+            justify-content: center;
             align-items: center;
-            gap: 0.25rem; /* Reduce gap between buttons within a group */
+            gap: 0.25rem;
         }
         .fc .fc-toolbar-title {
             font-size: 1.25rem;
@@ -101,10 +104,10 @@
                 initialView: 'dayGridMonth',
                 // --- FINAL TOOLBAR LAYOUT ---
                 headerToolbar: {
-                    left: 'prev,next',
-                    center: 'title',
-                    // Buttons are grouped by removing spaces
-                    right: 'today,dayGridMonth,listWeek' 
+                    left: 'prev,title,next',
+                    center: '',
+                    // Group buttons by using a space for default grouping, comma for no space
+                    right: 'today dayGridMonth,listWeek'
                 },
                 events: '/api/events',
                 navLinks: true,
