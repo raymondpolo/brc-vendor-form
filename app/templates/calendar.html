@@ -40,20 +40,24 @@
         white-space: normal; /* Allow event titles to wrap */
     }
 
-    /* --- Responsive Adjustments --- */
-
-    /* On mobile, make the toolbar stack vertically and reduce font sizes */
+    /* --- Responsive Adjustments for Toolbar --- */
     @media (max-width: 576px) {
-        .fc .fc-toolbar.fc-header-toolbar {
+        .fc .fc-header-toolbar {
+            display: flex;
             flex-direction: column;
-            align-items: center; /* Center-align the stacked toolbar items */
-            gap: 1rem; /* Add space between stacked items */
+            align-items: center;
+            gap: 1rem; /* Space between rows */
+        }
+        .fc .fc-toolbar-chunk {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem; /* Space between buttons */
         }
         .fc .fc-toolbar-title {
-            font-size: 1.2rem; /* Reduce title font size */
+            font-size: 1.2rem;
         }
         .fc .fc-button {
-            padding: 0.3em 0.6em; /* Slightly smaller buttons */
+            padding: 0.3em 0.6em;
             font-size: 0.8rem;
         }
     }
@@ -68,14 +72,13 @@
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                right: 'dayGridMonth,timeGridWeek,listWeek' // Added listWeek view
             },
             events: '/api/events',
-            navLinks: true, // can click day/week names to navigate views
+            navLinks: true,
             editable: false,
-            dayMaxEvents: true, // allow "more" link when too many events. Handles stacking.
+            dayMaxEvents: 1, // Show 1 event and then a "+x more" link
             
-            // This function is triggered for each event when it's rendered.
             eventDidMount: function(info) {
                 // Add a tooltip on hover for desktop users
                 var props = info.event.extendedProps;
@@ -86,29 +89,13 @@
                 );
             },
             
-            // Handle clicks on events
             eventClick: function(info) {
                 info.jsEvent.preventDefault(); // Don't let the browser follow the link
                 if (info.event.url) {
-                    window.open(info.event.url, "_self"); // Navigate to the event's URL in the same tab
-                }
-            },
-
-            // Adjust calendar options based on window size
-            windowResize: function(arg) {
-                // For very small screens, limit the number of events shown per day to avoid clutter.
-                if (window.innerWidth < 480) {
-                    calendar.setOption('dayMaxEvents', 1);
-                } else {
-                    calendar.setOption('dayMaxEvents', true); // Use default for larger screens
+                    window.open(info.event.url, "_self"); // Navigate in the same tab
                 }
             }
         });
-
-        // Run the resize check once on initial load
-        if (window.innerWidth < 480) {
-            calendar.setOption('dayMaxEvents', 1);
-        }
 
         calendar.render();
     });
