@@ -65,8 +65,30 @@
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { precision: 0 } },
-                y: { ticks: { precision: 0 } }
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            }
+        };
+
+        // Options for the horizontal property chart
+        const horizontalBarChartOptions = {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
+                    }
+                }
             }
         };
 
@@ -108,8 +130,8 @@
         createChart(document.getElementById('approvedByPmChart').getContext('2d'), 'bar', chartData.approved_by_pm, barChartOptions);
         createChart(document.getElementById('declinedByPmChart').getContext('2d'), 'bar', chartData.declined_by_pm, barChartOptions);
 
-        // Row 3 (Requests by Property - Now Vertical)
-        createChart(document.getElementById('propertyChart').getContext('2d'), 'bar', chartData.property, barChartOptions);
+        // Row 3 (Requests by Property - Now Horizontal)
+        createChart(document.getElementById('propertyChart').getContext('2d'), 'bar', chartData.property, horizontalBarChartOptions);
 
         // Row 4
         createChart(document.getElementById('gobackByVendorChart').getContext('2d'), 'bar', chartData.goback_by_vendor, barChartOptions);
