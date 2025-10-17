@@ -24,11 +24,15 @@ def send_async_email(app, message):
             sg = SendGridAPIClient(app.config['SENDGRID_API_KEY'])
             # Send the email using the SendGrid API
             response = sg.send(message)
-            # Log the successful sending of the email, including the response status code
-            logger.info(f"Email sent to {message.to[0].email} with status code: {response.status_code}")
+            # CORRECTED: Add a check to ensure message.to is not None before logging
+            if message.to:
+                logger.info(f"Email sent to {message.to[0].email} with status code: {response.status_code}")
         except Exception as e:
-            # Log the full error for debugging if the email fails to send
-            logger.error(f"Failed to send email to {message.to[0].email}. Error: {e}", exc_info=True)
+            # CORRECTED: Safely log the error without assuming a recipient exists
+            recipient = "unknown recipient"
+            if message.to:
+                recipient = message.to[0].email
+            logger.error(f"Failed to send email to {recipient}. Error: {e}", exc_info=True)
 
 def send_notification_email(subject, recipients, html_body, text_body=None, attachments=None, cc=None, sender=None):
     """
@@ -41,6 +45,10 @@ def send_notification_email(subject, recipients, html_body, text_body=None, atta
     effective_sender = sender or app.config.get('MAIL_DEFAULT_SENDER')
     if not effective_sender:
         logger.error("MAIL_DEFAULT_SENDER is not configured. Cannot send email.")
+        return
+
+    # CORRECTED: Do not attempt to send an email if there are no recipients
+    if not recipients:
         return
 
     # Create the email message object using SendGrid's Mail helper
