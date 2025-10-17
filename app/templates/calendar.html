@@ -29,7 +29,7 @@
         border-color: #3730a3;
     }
     
-    /* --- NEW: Style for the 'today' button (gray) --- */
+    /* Style for the 'today' button (gray) */
     .fc .fc-today-button {
         background-color: #6b7280; /* Tailwind gray-500 */
         border-color: #6b7280;
@@ -39,11 +39,6 @@
         background-color: #4b5563; /* Tailwind gray-600 */
         border-color: #4b5563;
     }
-    .fc .fc-today-button:disabled {
-        background-color: #9ca3af;
-        border-color: #9ca3af;
-    }
-
 
     /* Remove rounded corners between grouped buttons */
     .fc .fc-button-group > .fc-button {
@@ -59,6 +54,20 @@
         border-bottom-right-radius: 0;
     }
 
+    /* --- NEW: Custom Toolbar Layout to Center Everything --- */
+    .fc .fc-header-toolbar {
+        display: flex;
+        flex-direction: column; /* Stack chunks vertically */
+        align-items: center;    /* Center chunks horizontally */
+        gap: 0.75rem;           /* Space between the two rows */
+        margin-bottom: 1.5rem;
+    }
+    .fc .fc-toolbar-chunk {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
     /* Event styles */
     .fc-event { cursor: pointer; }
     .fc-daygrid-event, .fc-list-event-title { font-size: 0.8rem; }
@@ -70,17 +79,6 @@
 
     /* --- Responsive Adjustments --- */
     @media (max-width: 576px) {
-        .fc .fc-header-toolbar {
-            flex-direction: column;
-            align-items: center;
-            gap: 1rem;
-        }
-        .fc .fc-toolbar-chunk {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 0.5rem;
-        }
         .fc .fc-toolbar-title { font-size: 1.25rem; }
         .fc .fc-button { padding: 0.4em 0.65em; font-size: 0.85rem; }
         .fc .fc-daygrid-day-number { font-size: 0.75em; padding: 2px; }
@@ -105,10 +103,9 @@
                 initialView: 'dayGridMonth',
                 // --- FINAL TOOLBAR LAYOUT TO MATCH SCREENSHOT ---
                 headerToolbar: {
-                    left: '',
+                    left: '', // Empty
                     center: 'prev,title,next',
-                    // A space separates button groups. A comma fuses buttons inside a group.
-                    right: 'today dayGridMonth,listWeek' 
+                    right: 'today dayGridMonth,listWeek'
                 },
                 events: '/api/events',
                 navLinks: true,
