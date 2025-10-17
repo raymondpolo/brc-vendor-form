@@ -71,26 +71,36 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
-    user = User.query.get(user_id)
-    if not user:
-        return
+    print(f"Attempting to send push notification to user_id: {user_id}") # ADDED LOGGING
+    app = current_app._get_current_object()
+    with app.app_context():
+        user = User.query.get(user_id)
+        if not user:
+            print(f"User with id {user_id} not found.") # ADDED LOGGING
+            return
 
-    subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
-    
-    vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
-    # CORRECTED: Ensure the 'sub' claim includes 'mailto:'
-    vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
+        subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
+        if not subscriptions:
+            print(f"No push subscriptions found for user {user.name}.") # ADDED LOGGING
+            return
+        
+        print(f"Found {len(subscriptions)} subscriptions for user {user.name}.") # ADDED LOGGING
+        
+        vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
+        vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
 
-    for sub in subscriptions:
-        try:
-            webpush(
-                subscription_info=json.loads(sub.subscription_json),
-                data=json.dumps({'title': title, 'body': body, 'link': link}),
-                vapid_private_key=vapid_private_key,
-                vapid_claims=vapid_claims
-            )
-        except WebPushException as ex:
-            print(f"Web push failed: {ex}")
+        for sub in subscriptions:
+            try:
+                print(f"Sending to subscription: {sub.subscription_json[:50]}...") # ADDED LOGGING
+                webpush(
+                    subscription_info=json.loads(sub.subscription_json),
+                    data=json.dumps({'title': title, 'body': body, 'link': link}),
+                    vapid_private_key=vapid_private_key,
+                    vapid_claims=vapid_claims
+                )
+                print("Successfully sent push notification.") # ADDED LOGGING
+            except WebPushException as ex:
+                print(f"Web push failed: {ex}")
 
 
 @main.route('/')
@@ -1501,19 +1511,25 @@ def send_reminders():
 def subscribe():
     subscription_data = request.get_json()
     if not subscription_data:
+        print("Subscription endpoint called with no data.") # ADDED LOGGING
         return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
 
+    subscription_json = json.dumps(subscription_data)
     subscription = PushSubscription.query.filter_by(
-        subscription_json=json.dumps(subscription_data),
+        subscription_json=subscription_json,
         user_id=current_user.id
     ).first()
 
     if not subscription:
+        print(f"New subscription for user {current_user.name}. Saving to DB.") # ADDED LOGGING
         new_subscription = PushSubscription(
-            subscription_json=json.dumps(subscription_data),
+            subscription_json=subscription_json,
             user_id=current_user.id
         )
         db.session.add(new_subscription)
         db.session.commit()
+    else:
+        print(f"Subscription already exists for user {current_user.name}.") # ADDED LOGGING
+
 
     return jsonify({'success': True})

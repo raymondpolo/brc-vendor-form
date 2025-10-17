@@ -133,7 +133,8 @@
 
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/static/js/service-worker.js')
+                // ADDED a version query parameter to force update
+                navigator.serviceWorker.register('/static/js/service-worker.js?v=2')
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                         // Ask for permission and subscribe

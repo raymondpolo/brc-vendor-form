@@ -1,3 +1,5 @@
+console.log("Service Worker Version 2 Loaded"); // ADDED VERIFICATION
+
 self.addEventListener('push', event => {
     let notificationData = {};
 
