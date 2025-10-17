@@ -42,6 +42,12 @@
         z-index: 20;
     }
 
+    /* Style for non-clickable day numbers */
+    .fc-daygrid-day.fc-day-has-no-events .fc-daygrid-day-number {
+        pointer-events: none;
+        color: #9ca3af; /* Lighter color for disabled days */
+    }
+
     /* --- Responsive Adjustments --- */
     @media (max-width: 576px) {
         /* Stack the toolbar on mobile */
@@ -85,7 +91,7 @@
         var calendarEl = document.getElementById('calendar');
         var calendar;
 
-        function renderCalendar() {
+        function initializeCalendar() {
             var isMobile = window.innerWidth < 768;
 
             if (calendar) {
@@ -97,29 +103,42 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,listWeek' 
+                    right: 'dayGridMonth,listWeek'
                 },
                 events: '/api/events',
-                navLinks: true,
+                navLinks: true, // This enables day number links
                 editable: false,
                 
-                // --- CORE FIXES FOR MOBILE ---
-                
-                // 1. Show dates from other months to complete the weeks.
-                showNonCurrentDates: true, 
-                
-                // 2. THIS IS THE KEY CHANGE: Use a dynamic number of weeks (4, 5, or 6).
-                fixedWeekCount: false,
-                
-                // 3. Let the calendar's content determine its height naturally.
+                // --- CORE FIXES ---
+                showNonCurrentDates: true,
+                fixedWeekCount: false, // Use dynamic weeks (4, 5, or 6) to fit the month
                 height: 'auto',
-
-                // 4. Use single-letter day headers on mobile for a tighter fit.
                 dayHeaderFormat: isMobile ? { weekday: 'narrow' } : { weekday: 'short' },
+                dayMaxEvents: isMobile ? 0 : 3, // On mobile, show only "+more"
 
-                // 5. On mobile, show no events directly, only the "+more" link.
-                dayMaxEvents: isMobile ? 0 : 3,
+                // --- NEW: Disable clicks on empty days ---
+                dayCellDidMount: function(arg) {
+                    var dateStr = arg.date.toISOString().slice(0, 10);
+                    var eventsOnDay = calendar.getEvents().filter(function(event) {
+                        return event.start && event.start.toISOString().slice(0, 10) === dateStr;
+                    });
+                    if (eventsOnDay.length === 0) {
+                        arg.el.classList.add('fc-day-has-no-events');
+                    }
+                },
                 
+                navLinkDayClick: function(date, jsEvent) {
+                    var dateStr = date.toISOString().slice(0, 10);
+                    var eventsOnDay = calendar.getEvents().filter(function(event) {
+                        return event.start && event.start.toISOString().slice(0, 10) === dateStr;
+                    });
+
+                    // If there are no events, prevent the default navigation
+                    if (eventsOnDay.length === 0) {
+                        jsEvent.preventDefault();
+                    }
+                },
+
                 eventDidMount: function(info) {
                     // Add tooltips on hover for desktop users
                     if (!isMobile) {
@@ -144,13 +163,13 @@
         }
 
         // Initial render
-        renderCalendar();
+        initializeCalendar();
 
         // Re-render on window resize to apply responsive options
         var resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(renderCalendar, 250);
+            resizeTimer = setTimeout(initializeCalendar, 250);
         });
     });
 </script>
