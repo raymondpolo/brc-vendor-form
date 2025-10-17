@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <div class="bg-white p-2 md:p-6 rounded-lg shadow-md">
-    
+
     <!-- ✅ Custom Toolbar -->
     <div class="custom-calendar-toolbar">
         <div class="toolbar-nav">
@@ -16,7 +16,7 @@
         </div>
     </div>
 
-    <!-- FullCalendar Container -->
+    <!-- Calendar -->
     <div id="calendar"></div>
 </div>
 
@@ -24,7 +24,7 @@
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
 
-<!-- ✅ Custom Styles -->
+<!-- ✅ Styles -->
 <style>
     :root {
         --fc-border-color: #e5e7eb;
@@ -58,33 +58,9 @@
         border-color: #4b5563;
     }
 
-    .fc .fc-button-group > .fc-button {
-        margin: 0;
-    }
-
-    .fc .fc-button-group > .fc-button:not(:first-child) {
-        border-top-left-radius: 0;
-        border-bottom-left-radius: 0;
-        margin-left: -1px;
-    }
-
-    .fc .fc-button-group > .fc-button:not(:last-child) {
-        border-top-right-radius: 0;
-        border-bottom-right-radius: 0;
-    }
-
-    .fc-event {
-        cursor: pointer;
-    }
-
-    .fc-daygrid-event,
-    .fc-list-event-title {
-        font-size: 0.8rem;
-    }
-
-    .fc-popover {
-        z-index: 20;
-    }
+    .fc-event { cursor: pointer; }
+    .fc-daygrid-event, .fc-list-event-title { font-size: 0.8rem; }
+    .fc-popover { z-index: 20; }
 
     .fc-daygrid-day.fc-day-has-no-events .fc-daygrid-day-number {
         pointer-events: none;
@@ -92,31 +68,25 @@
     }
 
     @media (max-width: 576px) {
-        .fc .fc-toolbar-title {
-            font-size: 1.25rem;
-        }
-
+        .fc .fc-toolbar-title { font-size: 1.25rem; }
         .fc .fc-button {
             padding: 0.4em 0.65em;
             font-size: 0.85rem;
         }
-
         .fc .fc-daygrid-day-number {
             font-size: 0.75em;
             padding: 2px;
         }
-
         .fc .fc-daygrid-day-top {
             justify-content: center;
         }
-
         .fc-col-header-cell-cushion {
             font-size: 0.75em;
             padding: 2px 4px;
         }
     }
 
-    /* ✅ Custom Toolbar Styles */
+    /* ✅ Custom Toolbar Layout */
     .custom-calendar-toolbar {
         display: flex;
         flex-direction: column;
@@ -142,7 +112,7 @@
     }
 </style>
 
-<!-- ✅ FullCalendar Setup -->
+<!-- ✅ Calendar Setup -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const calendarEl = document.getElementById('calendar');
@@ -151,45 +121,11 @@
         function renderCalendar() {
             const isMobile = window.innerWidth < 768;
 
-            if (calendar) {
-                calendar.destroy();
-            }
+            if (calendar) calendar.destroy();
 
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
-                headerToolbar: false, // ✅ Disable built-in toolbar
-                customButtons: {
-                    prev: {
-                        text: '‹',
-                        click: function () {
-                            calendar.prev();
-                        }
-                    },
-                    next: {
-                        text: '›',
-                        click: function () {
-                            calendar.next();
-                        }
-                    },
-                    today: {
-                        text: 'today',
-                        click: function () {
-                            calendar.today();
-                        }
-                    },
-                    month: {
-                        text: 'month',
-                        click: function () {
-                            calendar.changeView('dayGridMonth');
-                        }
-                    },
-                    list: {
-                        text: 'list',
-                        click: function () {
-                            calendar.changeView('listWeek');
-                        }
-                    }
-                },
+                headerToolbar: false, // ✅ Use custom toolbar
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
@@ -240,24 +176,29 @@
 
             calendar.render();
 
-            // ✅ Update title on load and navigation
-            document.getElementById('calendar-title').textContent = calendar.view.title;
+            // ✅ Update title
+            const titleEl = document.getElementById('calendar-title');
+            titleEl.textContent = calendar.view.title;
             calendar.on('datesSet', function (info) {
-                document.getElementById('calendar-title').textContent = info.view.title;
+                titleEl.textContent = info.view.title;
             });
 
-            // ✅ Bind custom toolbar buttons
+            // ✅ Hook up custom buttons
             document.querySelectorAll('.custom-calendar-toolbar [data-command]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const cmd = btn.getAttribute('data-command');
-                    calendar.customButtons[cmd].click();
+                    if (cmd === 'prev') calendar.prev();
+                    else if (cmd === 'next') calendar.next();
+                    else if (cmd === 'today') calendar.today();
+                    else if (cmd === 'month') calendar.changeView('dayGridMonth');
+                    else if (cmd === 'list') calendar.changeView('listWeek');
                 });
             });
         }
 
         renderCalendar();
 
-        // Re-render on resize
+        // Re-render calendar on resize
         let resizeTimer;
         window.addEventListener('resize', function () {
             clearTimeout(resizeTimer);
