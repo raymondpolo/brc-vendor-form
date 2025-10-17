@@ -78,6 +78,7 @@ def send_push_notification(user_id, title, body, link):
     subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
     
     vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
+    # CORRECTED: Ensure the 'sub' claim includes 'mailto:'
     vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
 
     for sub in subscriptions:
