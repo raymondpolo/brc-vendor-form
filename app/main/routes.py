@@ -258,64 +258,66 @@ def view_request(request_id):
 
     note_form = NoteForm()
 
-    if 'post_note' in request.form:
-        if note_form.validate_on_submit():
-            note_text = note_form.text.data
-            note = Note(text=note_text, author=current_user, work_order=work_order)
-            db.session.add(note)
-            
-            notified_users = {work_order.author} if work_order.author != current_user else set()
-            tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
-            for name in tagged_names:
-                tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
-                if tagged_user:
-                    if tagged_user not in work_order.viewers:
-                        work_order.viewers.append(tagged_user)
-                    if tagged_user != current_user:
-                        notified_users.add(tagged_user)
-            db.session.commit()
-
-            broadcast_new_note(work_order.id, note)
-
-            for user in notified_users:
-                notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
-                    link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
-                db.session.add(notification)
-                email_body = f"""
-                <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-                <p><b>Note:</b></p>
-                <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-                """
-                send_notification_email(
-                    subject=f"New Note on Request #{work_order.id}",
-                    recipients=[user.email],
-                    text_body=f"{current_user.name} mentioned you in a note on Request #{work_order.id}",
-                    html_body=render_template(
-                        'email/notification_email.html',
-                        title="New Note on Request",
-                        user=user,
-                        body_content=email_body,
-                        link=url_for('main.view_request', request_id=work_order.id, _external=True)
-                    )
-                )
-            db.session.commit()
-            return jsonify({'success': True})
-        else:
-            return jsonify({'success': False, 'errors': note_form.errors}), 400
-
     if request.method == 'POST':
-        # This will catch other form submissions on the page that are not AJAX
-        # (e.g., status change, assign vendor) and redirect appropriately.
-        flash('Action processed.', 'success') 
-        return redirect(url_for('main.view_request', request_id=request_id))
+        # Check if the submission is for the note form
+        if 'post_note' in request.form:
+            if note_form.validate_on_submit():
+                note_text = note_form.text.data
+                note = Note(text=note_text, author=current_user, work_order=work_order)
+                db.session.add(note)
+                
+                notified_users = {work_order.author} if work_order.author != current_user else set()
+                tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
+                for name in tagged_names:
+                    tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
+                    if tagged_user:
+                        if tagged_user not in work_order.viewers:
+                            work_order.viewers.append(tagged_user)
+                        if tagged_user != current_user:
+                            notified_users.add(tagged_user)
+                db.session.commit()
 
-    if request.method == 'GET' and not work_order.is_deleted:
-        if is_admin_staff and work_order.status == 'New':
-            work_order.status = 'Open'
-            db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
-            flash('Request status has been updated to Open.', 'info')
-        db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
-        db.session.commit()
+                broadcast_new_note(work_order.id, note)
+
+                for user in notified_users:
+                    notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
+                        link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
+                    db.session.add(notification)
+                    email_body = f"""
+                    <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
+                    <p><b>Note:</b></p>
+                    <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
+                    """
+                    send_notification_email(
+                        subject=f"New Note on Request #{work_order.id}",
+                        recipients=[user.email],
+                        text_body=f"{current_user.name} mentioned you in a note on Request #{work_order.id}",
+                        html_body=render_template(
+                            'email/notification_email.html',
+                            title="New Note on Request",
+                            user=user,
+                            body_content=email_body,
+                            link=url_for('main.view_request', request_id=work_order.id, _external=True)
+                        )
+                    )
+                db.session.commit()
+                return jsonify({'success': True})
+            else:
+                return jsonify({'success': False, 'errors': note_form.errors}), 400
+        else:
+            # Handle other potential POST requests on this page that are not AJAX
+            # For now, we assume all other POST actions have their own dedicated routes
+            flash('An unspecified action was processed.', 'info')
+            return redirect(url_for('main.view_request', request_id=request_id))
+
+    # This block now only handles GET requests
+    if not work_order.is_deleted and is_admin_staff and work_order.status == 'New':
+        work_order.status = 'Open'
+        db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
+        flash('Request status has been updated to Open.', 'info')
+    
+    db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
+    db.session.commit()
 
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
