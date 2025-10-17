@@ -11,7 +11,8 @@
     /* Custom FullCalendar Theme */
     :root {
         --fc-border-color: #e5e7eb;
-        --fc-today-bg-color: rgba(79, 70, 229, 0.05);
+        /* NEW: A more visible highlight for today's date */
+        --fc-today-bg-color: rgba(79, 70, 229, 0.1); 
     }
 
     /* Toolbar buttons */
@@ -59,6 +60,7 @@
         .fc .fc-toolbar-chunk {
             display: flex;
             justify-content: center;
+            align-items: center;
             gap: 0.5rem;
         }
         .fc .fc-toolbar-title {
@@ -91,7 +93,7 @@
         var calendarEl = document.getElementById('calendar');
         var calendar;
 
-        function initializeCalendar() {
+        function renderCalendar() {
             var isMobile = window.innerWidth < 768;
 
             if (calendar) {
@@ -100,23 +102,23 @@
 
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
+                // --- NEW: Toolbar layout updated ---
                 headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'dayGridMonth,listWeek'
+                    left: '',
+                    center: 'prev,title,next',
+                    right: 'today dayGridMonth,listWeek'
                 },
                 events: '/api/events',
-                navLinks: true, // This enables day number links
+                navLinks: true,
                 editable: false,
                 
-                // --- CORE FIXES ---
-                showNonCurrentDates: true,
-                fixedWeekCount: false, // Use dynamic weeks (4, 5, or 6) to fit the month
+                // --- CORE FIXES FOR MOBILE ---
+                showNonCurrentDates: true, 
+                fixedWeekCount: false,
                 height: 'auto',
                 dayHeaderFormat: isMobile ? { weekday: 'narrow' } : { weekday: 'short' },
-                dayMaxEvents: isMobile ? 0 : 3, // On mobile, show only "+more"
-
-                // --- NEW: Disable clicks on empty days ---
+                dayMaxEvents: isMobile ? 0 : 3,
+                
                 dayCellDidMount: function(arg) {
                     var dateStr = arg.date.toISOString().slice(0, 10);
                     var eventsOnDay = calendar.getEvents().filter(function(event) {
@@ -133,14 +135,12 @@
                         return event.start && event.start.toISOString().slice(0, 10) === dateStr;
                     });
 
-                    // If there are no events, prevent the default navigation
                     if (eventsOnDay.length === 0) {
                         jsEvent.preventDefault();
                     }
                 },
 
                 eventDidMount: function(info) {
-                    // Add tooltips on hover for desktop users
                     if (!isMobile) {
                         var props = info.event.extendedProps;
                         info.el.setAttribute('title',
@@ -163,13 +163,13 @@
         }
 
         // Initial render
-        initializeCalendar();
+        renderCalendar();
 
         // Re-render on window resize to apply responsive options
         var resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(initializeCalendar, 250);
+            resizeTimer = setTimeout(renderCalendar, 250);
         });
     });
 </script>
