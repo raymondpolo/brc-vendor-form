@@ -8,20 +8,19 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
 
 <style>
-    /* Custom FullCalendar Styles */
+    /* Custom FullCalendar Theme */
     :root {
         --fc-border-color: #e5e7eb;
-        --fc-today-bg-color: rgba(79, 70, 229, 0.05);
-        --fc-event-bg-color: #4f46e5;
-        --fc-event-border-color: #4f46e5;
-        --fc-event-text-color: #ffffff;
+        --fc-today-bg-color: rgba(79, 70, 229, 0.05); /* A subtle highlight for the current day */
     }
+
+    /* Toolbar buttons */
     .fc .fc-button-primary {
         background-color: #4f46e5;
         border-color: #4f46e5;
-        color: #fff;
     }
-    .fc .fc-button-primary:hover, .fc .fc-button-primary:focus {
+    .fc .fc-button-primary:hover,
+    .fc .fc-button-primary:focus {
         background-color: #4338ca;
         border-color: #4338ca;
     }
@@ -29,45 +28,56 @@
         background-color: #3730a3;
         border-color: #3730a3;
     }
+
+    /* Event styles */
     .fc-event {
         cursor: pointer;
-        padding: 4px 6px;
-        font-size: 0.8rem;
+        padding: 3px 5px;
+        font-size: 0.75rem; /* Smaller font for events to fit more text */
+        border-radius: 4px;
     }
     .fc-daygrid-event {
         white-space: normal; /* Allow event titles to wrap */
     }
-    /* List View Customizations */
-    .fc-list-event-title a {
-        color: inherit;
-        text-decoration: none;
-    }
-    .fc-list-event-dot {
-        border-color: var(--fc-event-bg-color);
-    }
-    .fc-list-table .fc-list-event:hover td {
-        background-color: #f3f4f6;
+
+    /* --- Responsive Adjustments --- */
+
+    /* On mobile, make the toolbar stack vertically and reduce font sizes */
+    @media (max-width: 576px) {
+        .fc .fc-toolbar.fc-header-toolbar {
+            flex-direction: column;
+            align-items: center; /* Center-align the stacked toolbar items */
+            gap: 1rem; /* Add space between stacked items */
+        }
+        .fc .fc-toolbar-title {
+            font-size: 1.2rem; /* Reduce title font size */
+        }
+        .fc .fc-button {
+            padding: 0.3em 0.6em; /* Slightly smaller buttons */
+            font-size: 0.8rem;
+        }
     }
 </style>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         var calendarEl = document.getElementById('calendar');
-        var isMobile = window.innerWidth < 768;
 
         var calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: isMobile ? 'listWeek' : 'dayGridMonth',
+            initialView: 'dayGridMonth',
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
-                right: isMobile ? 'listWeek,dayGridDay' : 'dayGridMonth,timeGridWeek,listWeek'
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
             },
             events: '/api/events',
             navLinks: true, // can click day/week names to navigate views
             editable: false,
-            dayMaxEvents: true, // allow "more" link when too many events
+            dayMaxEvents: true, // allow "more" link when too many events. Handles stacking.
+            
+            // This function is triggered for each event when it's rendered.
             eventDidMount: function(info) {
-                // Add a tooltip on hover
+                // Add a tooltip on hover for desktop users
                 var props = info.event.extendedProps;
                 info.el.setAttribute('title',
                     `Type: ${props.type}\n` +
@@ -75,13 +85,30 @@
                     `Requester: ${props.requester}`
                 );
             },
+            
+            // Handle clicks on events
             eventClick: function(info) {
-                info.jsEvent.preventDefault(); // prevent browser from following link in current tab.
+                info.jsEvent.preventDefault(); // Don't let the browser follow the link
                 if (info.event.url) {
-                    window.open(info.event.url, "_self"); // open in the same tab
+                    window.open(info.event.url, "_self"); // Navigate to the event's URL in the same tab
+                }
+            },
+
+            // Adjust calendar options based on window size
+            windowResize: function(arg) {
+                // For very small screens, limit the number of events shown per day to avoid clutter.
+                if (window.innerWidth < 480) {
+                    calendar.setOption('dayMaxEvents', 1);
+                } else {
+                    calendar.setOption('dayMaxEvents', true); // Use default for larger screens
                 }
             }
         });
+
+        // Run the resize check once on initial load
+        if (window.innerWidth < 480) {
+            calendar.setOption('dayMaxEvents', 1);
+        }
 
         calendar.render();
     });
