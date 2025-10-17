@@ -11,7 +11,7 @@
     /* Custom FullCalendar Theme */
     :root {
         --fc-border-color: #e5e7eb;
-        --fc-today-bg-color: rgba(79, 70, 229, 0.05); /* A subtle highlight for the current day */
+        --fc-today-bg-color: rgba(79, 70, 229, 0.05);
     }
 
     /* Toolbar buttons */
@@ -32,33 +32,43 @@
     /* Event styles */
     .fc-event {
         cursor: pointer;
-        padding: 3px 5px;
-        font-size: 0.75rem; /* Smaller font for events to fit more text */
-        border-radius: 4px;
     }
-    .fc-daygrid-event {
-        white-space: normal; /* Allow event titles to wrap */
+    .fc-daygrid-event, .fc-list-event-title {
+        font-size: 0.8rem;
+    }
+    
+    /* Popover for "+more" link */
+    .fc-popover {
+        z-index: 20;
     }
 
-    /* --- Responsive Adjustments for Toolbar --- */
+    /* --- Responsive Adjustments --- */
     @media (max-width: 576px) {
+        /* Stack the toolbar on mobile */
         .fc .fc-header-toolbar {
-            display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 1rem; /* Space between rows */
+            gap: 0.75rem;
         }
         .fc .fc-toolbar-chunk {
             display: flex;
             justify-content: center;
-            gap: 0.5rem; /* Space between buttons */
+            gap: 0.5rem;
         }
         .fc .fc-toolbar-title {
-            font-size: 1.2rem;
+            font-size: 1.25rem;
         }
         .fc .fc-button {
-            padding: 0.3em 0.6em;
-            font-size: 0.8rem;
+            padding: 0.4em 0.65em;
+            font-size: 0.85rem;
+        }
+        /* Ensure the calendar view itself doesn't cause overflow */
+        #calendar {
+            width: 100%;
+            overflow: hidden;
+        }
+        .fc-view {
+            overflow-x: auto;
         }
     }
 </style>
@@ -66,38 +76,62 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         var calendarEl = document.getElementById('calendar');
+        var calendar;
 
-        var calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: 'dayGridMonth',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,listWeek' // Added listWeek view
-            },
-            events: '/api/events',
-            navLinks: true,
-            editable: false,
-            dayMaxEvents: 1, // Show 1 event and then a "+x more" link
-            
-            eventDidMount: function(info) {
-                // Add a tooltip on hover for desktop users
-                var props = info.event.extendedProps;
-                info.el.setAttribute('title',
-                    `Type: ${props.type}\n` +
-                    `Status: ${props.status}\n` +
-                    `Requester: ${props.requester}`
-                );
-            },
-            
-            eventClick: function(info) {
-                info.jsEvent.preventDefault(); // Don't let the browser follow the link
-                if (info.event.url) {
-                    window.open(info.event.url, "_self"); // Navigate in the same tab
-                }
+        function initializeCalendar() {
+            var isMobile = window.innerWidth < 768;
+
+            // Destroy the old instance if it exists
+            if (calendar) {
+                calendar.destroy();
             }
-        });
 
-        calendar.render();
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: isMobile ? 'dayGridMonth,listWeek' : 'dayGridMonth,timeGridWeek,listWeek'
+                },
+                events: '/api/events',
+                navLinks: true,
+                editable: false,
+                // On mobile, show 0 events directly, only the "+more" link.
+                // On desktop, let FullCalendar decide.
+                dayMaxEvents: isMobile ? 0 : true,
+                
+                eventDidMount: function(info) {
+                    // Add a tooltip on hover for desktop users
+                    if (!isMobile) {
+                        var props = info.event.extendedProps;
+                        info.el.setAttribute('title',
+                            `Type: ${props.type}\n` +
+                            `Status: ${props.status}\n` +
+                            `Requester: ${props.requester}`
+                        );
+                    }
+                },
+                
+                eventClick: function(info) {
+                    info.jsEvent.preventDefault();
+                    if (info.event.url) {
+                        window.open(info.event.url, "_self");
+                    }
+                }
+            });
+
+            calendar.render();
+        }
+
+        // Initial render
+        initializeCalendar();
+
+        // Re-initialize on window resize to adjust settings
+        var resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(initializeCalendar, 250);
+        });
     });
 </script>
 {% endblock content %}
