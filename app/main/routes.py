@@ -304,7 +304,9 @@ def view_request(request_id):
             return jsonify({'success': False, 'errors': note_form.errors}), 400
 
     if request.method == 'POST':
-        flash('An action was processed.', 'success')
+        # This will catch other form submissions on the page that are not AJAX
+        # (e.g., status change, assign vendor) and redirect appropriately.
+        flash('Action processed.', 'success') 
         return redirect(url_for('main.view_request', request_id=request_id))
 
     if request.method == 'GET' and not work_order.is_deleted:
