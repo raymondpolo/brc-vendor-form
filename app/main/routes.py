@@ -1224,11 +1224,11 @@ def api_user_search():
 @admin_required
 def send_work_order_email(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    data = request.get_json()
-    recipient = data.get('recipient')
-    cc = data.get('cc')
-    subject = data.get('subject')
-    body = data.get('body')
+    recipient = request.form.get('recipient')
+    cc = request.form.get('cc')
+    subject = request.form.get('subject')
+    body = request.form.get('body')
+    files = request.files.getlist('attachments')
 
     if not recipient:
         return jsonify({'success': False, 'message': 'Recipient email is required.'}), 400
@@ -1236,9 +1236,23 @@ def send_work_order_email(request_id):
     recipients = [recipient]
     cc_list = [email.strip() for email in cc.split(',')] if cc else []
 
-    # Create a plain text version of the body by stripping all HTML tags
-    text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
+    attachments_for_email = []
+    temp_upload_path = None
+    if files:
+        temp_upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp_email')
+        os.makedirs(temp_upload_path, exist_ok=True)
+        for file in files:
+            if file and file.filename:
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(temp_upload_path, f"{uuid.uuid4().hex}_{filename}")
+                file.save(filepath)
+                attachments_for_email.append({
+                    'path': filepath,
+                    'filename': filename,
+                    'mimetype': file.mimetype
+                })
 
+    text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
     text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
     html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
 
@@ -1247,8 +1261,16 @@ def send_work_order_email(request_id):
         recipients=recipients,
         cc=cc_list,
         text_body=text_body,
-        html_body=html_body
+        html_body=html_body,
+        attachments=attachments_for_email
     )
+
+    if temp_upload_path:
+        for att in attachments_for_email:
+            try:
+                os.remove(att['path'])
+            except OSError as e:
+                current_app.logger.error(f"Error removing temp email attachment: {e}")
     
     db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()

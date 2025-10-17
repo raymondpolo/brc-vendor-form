@@ -495,7 +495,6 @@
             <h3 class="text-xl font-semibold">Send Work Request as Email</h3>
             <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
         </div>
-
         <div class="p-6 flex-grow overflow-y-auto">
             <form id="emailForm" onsubmit="return false;">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
@@ -544,9 +543,12 @@
                         </textarea>
                     </div>
                 </div>
+                <div class="mb-4">
+                    <label for="email_attachments" class="block text-sm font-medium text-gray-700 mb-1">Attachments</label>
+                    <input type="file" id="email_attachments" name="attachments" multiple class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                </div>
             </form>
         </div>
-
         <div class="flex justify-end items-center space-x-3 p-4 border-t flex-shrink-0 bg-gray-50 rounded-b-lg">
             {% if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager'] %}
             <button type="button" id="insertSignatureBtn"
@@ -565,7 +567,6 @@
         </div>
     </div>
 </div>
-
 
 <div id="followUpModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
@@ -748,25 +749,31 @@
                 hideModal();
             }
         });
+        // MODIFIED: Use FormData for file uploads
         submitEmailBtn.addEventListener('click', async function (event) {
             event.preventDefault();
             const originalButtonContent = submitEmailBtn.innerHTML;
             submitEmailBtn.innerHTML = `Sending...`;
             submitEmailBtn.disabled = true;
-            const data = {
-                recipient: document.getElementById('recipient').value,
-                cc: document.getElementById('cc').value,
-                subject: document.getElementById('subject').value,
-                body: editor.getData()
-            };
+
+            const formData = new FormData();
+            formData.append('recipient', document.getElementById('recipient').value);
+            formData.append('cc', document.getElementById('cc').value);
+            formData.append('subject', document.getElementById('subject').value);
+            formData.append('body', editor.getData());
+            
+            const files = document.getElementById('email_attachments').files;
+            for (let i = 0; i < files.length; i++) {
+                formData.append('attachments', files[i]);
+            }
+
             try {
                 const response = await fetch(`{{ url_for('main.send_work_order_email', request_id=work_order.id) }}`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify(data)
+                    body: formData
                 });
                 const result = await response.json();
                 if (response.ok && result.success) {

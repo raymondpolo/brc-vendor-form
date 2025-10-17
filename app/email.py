@@ -2,9 +2,13 @@
 import os
 from flask import current_app
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from sendgrid.helpers.mail import (
+    Mail, Attachment, FileContent, FileName,
+    FileType, Disposition
+)
 from threading import Thread
 import logging
+import base64
 
 # Set up a logger for this module for better debugging
 logger = logging.getLogger(__name__)
@@ -52,8 +56,23 @@ def send_notification_email(subject, recipients, html_body, text_body=None, atta
     if cc:
         message.cc = cc
 
-    # Note: SendGrid attachment handling is more complex and would be added here if needed.
-    # For now, focusing on the core email sending functionality.
+    # Add attachments if any
+    if attachments:
+        for att_data in attachments:
+            try:
+                with open(att_data['path'], 'rb') as f:
+                    data = f.read()
+                encoded_file = base64.b64encode(data).decode()
+                
+                attached_file = Attachment(
+                    FileContent(encoded_file),
+                    FileName(att_data['filename']),
+                    FileType(att_data['mimetype']),
+                    Disposition('attachment')
+                )
+                message.add_attachment(attached_file)
+            except Exception as e:
+                logger.error(f"Failed to attach file {att_data['filename']}. Error: {e}", exc_info=True)
 
     # Start the background thread to send the email asynchronously
     Thread(target=send_async_email, args=(app, message)).start()
