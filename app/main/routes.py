@@ -18,11 +18,12 @@ from flask import (render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
 import bleach
+from pywebpush import webpush, WebPushException
 
 from app import db, csrf
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
-                        AuditLog, Attachment, Vendor, Quote, RequestType)
+                        AuditLog, Attachment, Vendor, Quote, RequestType, PushSubscription)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
                        UpdateAccountForm, ChangePasswordForm, AssignVendorForm, ReportForm, QuoteForm, DeleteRestoreRequestForm, TagForm, ReassignRequestForm, SendFollowUpForm, MarkAsCompletedForm)
 from app.email import send_notification_email
@@ -68,6 +69,28 @@ def work_order_to_dict(req):
         'tag': req.tag,
         'vendor_name': req.vendor.company_name if req.vendor else 'N/A'
     }
+
+def send_push_notification(user_id, title, body, link):
+    user = User.query.get(user_id)
+    if not user:
+        return
+
+    subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
+    
+    vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
+    vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
+
+    for sub in subscriptions:
+        try:
+            webpush(
+                subscription_info=json.loads(sub.subscription_json),
+                data=json.dumps({'title': title, 'body': body, 'link': link}),
+                vapid_private_key=vapid_private_key,
+                vapid_claims=vapid_claims
+            )
+        except WebPushException as ex:
+            print(f"Web push failed: {ex}")
+
 
 @main.route('/')
 @login_required
@@ -279,9 +302,21 @@ def view_request(request_id):
                 broadcast_new_note(work_order.id, note)
 
                 for user in notified_users:
-                    notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
-                        link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
+                    notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
+                    notification = Notification(
+                        text=notification_text,
+                        link=url_for('main.view_request', request_id=work_order.id), 
+                        user_id=user.id
+                    )
                     db.session.add(notification)
+                    
+                    send_push_notification(
+                        user.id,
+                        'New Mention',
+                        notification_text,
+                        url_for('main.view_request', request_id=work_order.id, _external=True)
+                    )
+
                     email_body = f"""
                     <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
                     <p><b>Note:</b></p>
@@ -290,7 +325,7 @@ def view_request(request_id):
                     send_notification_email(
                         subject=f"New Note on Request #{work_order.id}",
                         recipients=[user.email],
-                        text_body=f"{current_user.name} mentioned you in a note on Request #{work_order.id}",
+                        text_body=notification_text,
                         html_body=render_template(
                             'email/notification_email.html',
                             title="New Note on Request",
@@ -496,15 +531,27 @@ def change_status(request_id):
         work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
 
-        if work_order.author != current_user:
-            notification = Notification(text=f'Status for Request #{work_order.id} changed to {new_status}.',
-                link=url_for('main.view_request', request_id=work_order.id), user_id=work_order.user_id)
+        if work_order.author and work_order.author != current_user:
+            notification_text = f'Status for Request #{work_order.id} changed to {new_status}.'
+            notification = Notification(
+                text=notification_text,
+                link=url_for('main.view_request', request_id=work_order.id), 
+                user_id=work_order.user_id
+            )
             db.session.add(notification)
+            
+            send_push_notification(
+                work_order.user_id,
+                'Request Status Updated',
+                notification_text,
+                url_for('main.view_request', request_id=work_order.id, _external=True)
+            )
+
             email_body = f"<p>The status of your Request #{work_order.id} for property <b>{work_order.property}</b> was changed from <b>{old_status}</b> to <b>{new_status}</b>.</p>"
             send_notification_email(
                 subject=f"Status Update for Request #{work_order.id}",
                 recipients=[work_order.author.email],
-                text_body=f"The status of your Request #{work_order.id} was changed to {new_status}.",
+                text_body=notification_text,
                 html_body=render_template(
                     'email/notification_email.html',
                     title="Request Status Updated",
@@ -517,11 +564,20 @@ def change_status(request_id):
         if new_status == 'Quote Sent' and work_order.property_manager:
             manager = User.query.filter_by(name=work_order.property_manager, role='Property Manager').first()
             if manager:
+                notification_text = f'A quote has been sent for Request #{work_order.id} at {work_order.property}.'
                 manager_notification = Notification(
-                    text=f'A quote has been sent for Request #{work_order.id} at {work_order.property}.',
+                    text=notification_text,
                     link=url_for('main.view_request', request_id=work_order.id),
                     user_id=manager.id)
                 db.session.add(manager_notification)
+                
+                send_push_notification(
+                    manager.id,
+                    'Quote Approval Needed',
+                    notification_text,
+                    url_for('main.view_request', request_id=work_order.id, _external=True)
+                )
+
                 email_body_pm = f"<p>A quote has been sent and requires your approval for Request #{work_order.id} at property <b>{work_order.property}</b>.</p>"
                 send_notification_email(
                     subject=f"Quote Approval Needed for Request #{work_order.id}",
@@ -781,9 +837,19 @@ def new_request():
         admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
         for user in admins_and_schedulers:
             if user != current_user:
-                notification = Notification(text=f'New request #{new_order.id} submitted by {current_user.name}.',
-                    link=url_for('main.view_request', request_id=new_order.id), user_id=user.id)
+                notification_text = f'New request #{new_order.id} submitted by {current_user.name}.'
+                notification = Notification(
+                    text=notification_text,
+                    link=url_for('main.view_request', request_id=new_order.id), 
+                    user_id=user.id
+                )
                 db.session.add(notification)
+                send_push_notification(
+                    user.id,
+                    'New Work Request',
+                    notification_text,
+                    url_for('main.view_request', request_id=new_order.id, _external=True)
+                )
         db.session.commit()
         flash('Your request has been created!', 'success')
         return redirect(url_for('main.my_requests'))
@@ -1392,18 +1458,26 @@ def send_reminders():
     for wo in work_orders_for_follow_up:
         admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
         for user in admins_and_schedulers:
+            notification_text = f"Follow-up reminder for Request #{wo.id}"
             notification = Notification(
-                text=f"Follow-up reminder for Request #{wo.id}",
+                text=notification_text,
                 link=url_for('main.view_request', request_id=wo.id),
                 user_id=user.id
             )
             db.session.add(notification)
             
+            send_push_notification(
+                user.id,
+                'Follow-up Reminder',
+                notification_text,
+                url_for('main.view_request', request_id=wo.id, _external=True)
+            )
+            
             email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
             send_notification_email(
                 subject=f"Follow-up Reminder for Request #{wo.id}",
                 recipients=[user.email],
-                text_body=f"This is a reminder to follow-up on Request #{wo.id}.",
+                text_body=notification_text,
                 html_body=render_template(
                     'email/notification_email.html',
                     title="Follow-up Reminder",
@@ -1420,3 +1494,25 @@ def send_reminders():
         db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id))
 
     db.session.commit()
+
+@main.route('/subscribe', methods=['POST'])
+@login_required
+def subscribe():
+    subscription_data = request.get_json()
+    if not subscription_data:
+        return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
+
+    subscription = PushSubscription.query.filter_by(
+        subscription_json=json.dumps(subscription_data),
+        user_id=current_user.id
+    ).first()
+
+    if not subscription:
+        new_subscription = PushSubscription(
+            subscription_json=json.dumps(subscription_data),
+            user_id=current_user.id
+        )
+        db.session.add(new_subscription)
+        db.session.commit()
+
+    return jsonify({'success': True})

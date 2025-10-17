@@ -34,6 +34,7 @@ class User(db.Model, UserMixin):
                                         backref='recipient', lazy='dynamic', cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     audit_logs = db.relationship('AuditLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    push_subscriptions = db.relationship('PushSubscription', backref='user', lazy='dynamic', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -190,3 +191,8 @@ class RequestType(db.Model):
 
     def __repr__(self):
         return f"RequestType('{self.name}')"
+
+class PushSubscription(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    subscription_json = db.Column(db.Text, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
