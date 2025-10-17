@@ -105,11 +105,11 @@
                 
                 // --- CORE FIXES FOR MOBILE ---
                 
-                // 1. Show dates from other months.
+                // 1. Show dates from other months to complete the weeks.
                 showNonCurrentDates: true, 
                 
-                // 2. Always show 6 weeks to maintain a consistent height.
-                fixedWeekCount: true,
+                // 2. THIS IS THE KEY CHANGE: Use a dynamic number of weeks (4, 5, or 6).
+                fixedWeekCount: false,
                 
                 // 3. Let the calendar's content determine its height naturally.
                 height: 'auto',
