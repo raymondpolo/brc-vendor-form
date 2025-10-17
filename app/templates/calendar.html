@@ -54,25 +54,38 @@
         border-bottom-right-radius: 0;
     }
 
-    /* --- Modified Toolbar Layout --- */
+    /* --- MODIFIED TOOLBAR LAYOUT --- */
     .fc .fc-header-toolbar {
-        display: flex;
-        flex-direction: column;   /* Stack rows */
-        align-items: center;      /* Center horizontally */
-        gap: 0.5rem;              /* Space between rows */
+        display: grid;
+        grid-template-areas:
+            "nav"
+            "views";
+        row-gap: 0.5rem;
+        justify-content: center;
         margin-bottom: 1.5rem;
     }
 
-    .fc .fc-toolbar-chunk {
+    /* First row: prev, title, next */
+    .fc .fc-header-toolbar .fc-toolbar-chunk:nth-child(1) {
+        grid-area: nav;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+    }
+
+    /* Second row: today, month, list */
+    .fc .fc-header-toolbar .fc-toolbar-chunk:nth-child(2) {
+        grid-area: views;
         display: flex;
         justify-content: center;
-        align-items: center;
         gap: 0.5rem;
     }
 
+    /* Optional: spacing between arrows and title */
     .fc .fc-prev-button,
     .fc .fc-next-button {
-        margin: 0 0.75rem;
+        margin: 0 0.5rem;
     }
 
     /* Event styles */
