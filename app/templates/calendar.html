@@ -2,29 +2,27 @@
 {% block content %}
 <div class="bg-white p-2 md:p-6 rounded-lg shadow-md">
 
-    <!-- ✅ Custom Toolbar -->
     <div class="custom-calendar-toolbar">
         <div class="toolbar-nav">
-            <button type="button" data-command="prev" class="fc-button fc-button-primary">‹</button>
-            <span id="calendar-title" class="calendar-title">Loading...</span>
-            <button type="button" data-command="next" class="fc-button fc-button-primary">›</button>
+            <button type="button" data-command="prev" class="fc-button fc-button-primary">&lsaquo;</button>
+            <h2 id="calendar-title" class="calendar-title">Loading...</h2>
+            <button type="button" data-command="next" class="fc-button fc-button-primary">&rsaquo;</button>
         </div>
         <div class="toolbar-views">
             <button type="button" data-command="today" class="fc-button fc-today-button">today</button>
-            <button type="button" data-command="month" class="fc-button fc-button-primary">month</button>
-            <button type="button" data-command="list" class="fc-button fc-button-primary">list</button>
+            <div class="fc-button-group">
+                <button type="button" data-command="month" class="fc-button fc-button-primary fc-button-active">month</button>
+                <button type="button" data-command="list" class="fc-button fc-button-primary">list</button>
+            </div>
         </div>
     </div>
 
-    <!-- Calendar -->
     <div id="calendar"></div>
 </div>
 
-<!-- FullCalendar CSS/JS -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
 
-<!-- ✅ Styles -->
 <style>
     :root {
         --fc-border-color: #e5e7eb;
@@ -34,14 +32,12 @@
     .fc .fc-button-primary {
         background-color: #4f46e5;
         border-color: #4f46e5;
+        color: #fff;
     }
-
-    .fc .fc-button-primary:hover,
-    .fc .fc-button-primary:focus {
+    .fc .fc-button-primary:hover, .fc .fc-button-primary:focus {
         background-color: #4338ca;
         border-color: #4338ca;
     }
-
     .fc .fc-button-primary:not(:disabled).fc-button-active {
         background-color: #3730a3;
         border-color: #3730a3;
@@ -50,25 +46,44 @@
     .fc .fc-today-button {
         background-color: #6b7280;
         border-color: #6b7280;
+        color: #fff;
     }
-
-    .fc .fc-today-button:hover,
-    .fc .fc-today-button:focus {
+    .fc .fc-today-button:hover, .fc .fc-today-button:focus {
         background-color: #4b5563;
         border-color: #4b5563;
     }
+    
+    /* Ensure custom buttons inherit FullCalendar's base styles */
+    .fc-button {
+        display: inline-block;
+        font-weight: 500;
+        padding: 0.5em 1em;
+        font-size: 0.9rem;
+        border-radius: 0.375rem;
+        border: 1px solid transparent;
+        transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+    }
+    
+    .fc-button-group > .fc-button:not(:first-child) {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        margin-left: -1px;
+    }
+    .fc-button-group > .fc-button:not(:last-child) {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
 
     .fc-event { cursor: pointer; }
     .fc-daygrid-event, .fc-list-event-title { font-size: 0.8rem; }
     .fc-popover { z-index: 20; }
-
     .fc-daygrid-day.fc-day-has-no-events .fc-daygrid-day-number {
         pointer-events: none;
         color: #9ca3af;
     }
 
     @media (max-width: 576px) {
-        .fc .fc-toolbar-title { font-size: 1.25rem; }
         .fc .fc-button {
             padding: 0.4em 0.65em;
             font-size: 0.85rem;
@@ -94,25 +109,23 @@
         margin-bottom: 1.5rem;
         gap: 0.75rem;
     }
-
     .toolbar-nav {
         display: flex;
         align-items: center;
         gap: 1rem;
     }
-
     .toolbar-views {
         display: flex;
-        gap: 0.5rem;
+        align-items: center;
+        gap: 0.5rem; /* Space between 'today' and the 'month/list' group */
     }
-
     .calendar-title {
-        font-size: 1.25rem;
+        font-size: 1.5rem;
         font-weight: 500;
+        text-align: center;
     }
 </style>
 
-<!-- ✅ Calendar Setup -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const calendarEl = document.getElementById('calendar');
@@ -125,7 +138,7 @@
 
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
-                headerToolbar: false, // ✅ Use custom toolbar
+                headerToolbar: false, // Use custom toolbar
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
@@ -176,14 +189,12 @@
 
             calendar.render();
 
-            // ✅ Update title
             const titleEl = document.getElementById('calendar-title');
             titleEl.textContent = calendar.view.title;
             calendar.on('datesSet', function (info) {
                 titleEl.textContent = info.view.title;
             });
 
-            // ✅ Hook up custom buttons
             document.querySelectorAll('.custom-calendar-toolbar [data-command]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const cmd = btn.getAttribute('data-command');
@@ -198,7 +209,6 @@
 
         renderCalendar();
 
-        // Re-render calendar on resize
         let resizeTimer;
         window.addEventListener('resize', function () {
             clearTimeout(resizeTimer);
