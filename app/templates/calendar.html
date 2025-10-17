@@ -42,7 +42,7 @@
         z-index: 20;
     }
 
-    /* --- Responsive Adjustments for Toolbar --- */
+    /* --- Responsive Adjustments --- */
     @media (max-width: 576px) {
         /* Stack the toolbar on mobile */
         .fc .fc-header-toolbar {
@@ -61,6 +61,21 @@
         .fc .fc-button {
             padding: 0.4em 0.65em;
             font-size: 0.85rem;
+        }
+        
+        /* Reduce font size of day numbers to prevent wrapping and scrolling */
+        .fc .fc-daygrid-day-number {
+            font-size: 0.75em;
+            padding: 2px;
+        }
+        .fc .fc-daygrid-day-top {
+            justify-content: center; /* Center the day number */
+        }
+
+        /* Make day headers smaller */
+        .fc-col-header-cell-cushion {
+            font-size: 0.75em;
+            padding: 2px 4px;
         }
     }
 </style>
@@ -82,19 +97,19 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,listWeek' // List view available on all devices
+                    right: 'dayGridMonth,listWeek' 
                 },
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
-
+                
                 // --- CORE FIXES FOR MOBILE ---
                 
-                // 1. Don't show dates from other months. This fixes the overflow.
-                showNonCurrentDates: false, 
+                // 1. Show dates from other months.
+                showNonCurrentDates: true, 
                 
-                // 2. The number of weeks will now be 4, 5, or 6, fitting the month perfectly.
-                fixedWeekCount: false,
+                // 2. Always show 6 weeks to maintain a consistent height.
+                fixedWeekCount: true,
                 
                 // 3. Let the calendar's content determine its height naturally.
                 height: 'auto',
