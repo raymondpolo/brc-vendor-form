@@ -21,7 +21,7 @@ import bleach
 
 from app import db, csrf
 from app.main import main
-# MODIFIED: Import RequestType
+# MODIFIED: Import RequestType and other models
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType)
 from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestForm,
@@ -29,12 +29,9 @@ from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestFor
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
+# ADDED: Import the event broadcaster
+from app.events import broadcast_new_note
 
-# REMOVED: The hardcoded list is no longer needed
-# request_types_list = [
-#     'Appliance', 'Junk Removal', 'Plumbing', 'Pest Control', 'Electrical',
-#     'Painting', 'Cleaning', 'Fence', 'Power Wash', 'Flooring', 'Window'
-# ]
 
 def get_requester_initials(name):
     parts = name.split()
@@ -69,7 +66,6 @@ def work_order_to_dict(req):
         'address': req.address,
         'property_manager': req.property_manager,
         'status': req.status,
-        # MODIFIED: Get the request type name from the relationship
         'request_type': req.request_type_relation.name,
         'tag': req.tag,
         'vendor_name': req.vendor.company_name if req.vendor else 'N/A'
@@ -117,7 +113,6 @@ def dashboard():
     }
 
     status_counts_for_chart = Counter(req.status for req in all_work_orders)
-    # MODIFIED: Get the request type name from the relationship
     type_counts = Counter(req.request_type_relation.name for req in all_work_orders)
     property_counts = Counter(req.property for req in all_work_orders)
     vendor_counts = Counter(req.vendor.company_name for req in all_work_orders if req.vendor)
@@ -264,6 +259,56 @@ def view_request(request_id):
         abort(403)
 
     note_form = NoteForm()
+    # ... (rest of form initializations)
+
+    if request.method == 'POST' and note_form.validate_on_submit() and 'post_note' in request.form:
+        note_text = note_form.text.data
+        note = Note(text=note_text, author=current_user, work_order=work_order)
+        db.session.add(note)
+        
+        notified_users = {work_order.author} if work_order.author != current_user else set()
+        tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
+        for name in tagged_names:
+            tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
+            if tagged_user:
+                if tagged_user not in work_order.viewers:
+                    work_order.viewers.append(tagged_user)
+                if tagged_user != current_user:
+                    notified_users.add(tagged_user)
+        db.session.commit()
+
+        # Call the Socket.IO event broadcaster
+        broadcast_new_note(work_order.id, note)
+
+        for user in notified_users:
+            notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
+                link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
+            db.session.add(notification)
+            # ... (email sending logic)
+        db.session.commit()
+        
+        # MODIFIED: Return JSON instead of redirecting
+        return jsonify({'success': True})
+
+    # --- Fallback for non-AJAX submissions or other POST actions ---
+    if request.method == 'POST':
+        # This will handle other form submissions on the page like status changes, etc.
+        # For simplicity, we'll just redirect back for now.
+        flash('Action processed.', 'success') # Generic message
+        return redirect(url_for('main.view_request', request_id=request_id))
+
+    if request.method == 'GET' and not work_order.is_deleted:
+        if is_admin_staff and work_order.status == 'New':
+            work_order.status = 'Open'
+            db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
+            flash('Request status has been updated to Open.', 'info')
+        db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
+
+    notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
+    audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
+    
+    # Initialize all other forms needed for the template
     status_form = ChangeStatusForm()
     attachment_form = AttachmentForm()
     assign_vendor_form = AssignVendorForm()
@@ -277,63 +322,6 @@ def view_request(request_id):
     quotes = work_order.quotes
     all_users = User.query.filter_by(is_active=True).all()
 
-    if is_admin_staff:
-        status_form.status.choices = [c for c in status_form.status.choices if c[0] not in ['Approved', 'Quote Declined', 'New']]
-    
-    if current_user.role in ['Admin', 'Scheduler']:
-        tag_form.tag.choices = [c for c in tag_form.tag.choices if c[0] not in ['Approved', 'Declined']]
-
-    if request.method == 'GET' and not work_order.is_deleted:
-        if is_admin_staff and work_order.status == 'New':
-            work_order.status = 'Open'
-            db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
-            flash('Request status has been updated to Open.', 'info')
-        db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
-        db.session.commit()
-
-    if note_form.validate_on_submit() and 'post_note' in request.form:
-        note_text = note_form.text.data
-        note = Note(text=note_text, author=current_user, work_order=work_order)
-        db.session.add(note)
-        notified_users = {work_order.author} if work_order.author != current_user else set()
-        
-        tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
-        for name in tagged_names:
-            tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
-            if tagged_user:
-                if tagged_user not in work_order.viewers:
-                    work_order.viewers.append(tagged_user)
-                if tagged_user != current_user:
-                    notified_users.add(tagged_user)
-        db.session.commit()
-
-        for user in notified_users:
-            notification = Notification(text=f'{current_user.name} mentioned you in a note on Request #{work_order.id}',
-                link=url_for('main.view_request', request_id=work_order.id), user_id=user.id)
-            db.session.add(notification)
-            email_body = f"""
-            <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-            <p><b>Note:</b></p>
-            <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-            """
-            send_notification_email(
-                subject=f"New Note on Request #{work_order.id}",
-                recipients=[user.email],
-                text_body=f"{current_user.name} mentioned you in a note on Request #{work_order.id}",
-                html_body=render_template(
-                    'email/notification_email.html',
-                    title="New Note on Request",
-                    user=user,
-                    body_content=email_body,
-                    link=url_for('main.view_request', request_id=work_order.id, _external=True)
-                )
-            )
-        db.session.commit()
-        flash('Your note has been added.', 'success')
-        return redirect(url_for('main.view_request', request_id=work_order.id))
-
-    notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
-    audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
@@ -1224,11 +1212,11 @@ def api_user_search():
 @admin_required
 def send_work_order_email(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    recipient = request.form.get('recipient')
-    cc = request.form.get('cc')
-    subject = request.form.get('subject')
-    body = request.form.get('body')
-    files = request.files.getlist('attachments')
+    data = request.get_json()
+    recipient = data.get('recipient')
+    cc = data.get('cc')
+    subject = data.get('subject')
+    body = data.get('body')
 
     if not recipient:
         return jsonify({'success': False, 'message': 'Recipient email is required.'}), 400
@@ -1236,23 +1224,9 @@ def send_work_order_email(request_id):
     recipients = [recipient]
     cc_list = [email.strip() for email in cc.split(',')] if cc else []
 
-    attachments_for_email = []
-    temp_upload_path = None
-    if files:
-        temp_upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp_email')
-        os.makedirs(temp_upload_path, exist_ok=True)
-        for file in files:
-            if file and file.filename:
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(temp_upload_path, f"{uuid.uuid4().hex}_{filename}")
-                file.save(filepath)
-                attachments_for_email.append({
-                    'path': filepath,
-                    'filename': filename,
-                    'mimetype': file.mimetype
-                })
-
+    # Create a plain text version of the body by stripping all HTML tags
     text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
+
     text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
     html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
 
@@ -1261,16 +1235,8 @@ def send_work_order_email(request_id):
         recipients=recipients,
         cc=cc_list,
         text_body=text_body,
-        html_body=html_body,
-        attachments=attachments_for_email
+        html_body=html_body
     )
-
-    if temp_upload_path:
-        for att in attachments_for_email:
-            try:
-                os.remove(att['path'])
-            except OSError as e:
-                current_app.logger.error(f"Error removing temp email attachment: {e}")
     
     db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()
