@@ -28,15 +28,15 @@
         background-color: #3730a3;
         border-color: #3730a3;
     }
-    
+
     /* Style for the 'today' button (gray) */
     .fc .fc-today-button {
-        background-color: #6b7280; /* Tailwind gray-500 */
+        background-color: #6b7280;
         border-color: #6b7280;
     }
     .fc .fc-today-button:hover,
     .fc .fc-today-button:focus {
-        background-color: #4b5563; /* Tailwind gray-600 */
+        background-color: #4b5563;
         border-color: #4b5563;
     }
 
@@ -54,24 +54,34 @@
         border-bottom-right-radius: 0;
     }
 
-    /* --- NEW: Custom Toolbar Layout to Center Everything --- */
+    /* --- Modified Toolbar Layout --- */
     .fc .fc-header-toolbar {
         display: flex;
-        flex-direction: column; /* Stack chunks vertically */
-        align-items: center;    /* Center chunks horizontally */
-        gap: 0.75rem;           /* Space between the two rows */
+        flex-direction: column;   /* Stack rows */
+        align-items: center;      /* Center horizontally */
+        gap: 0.5rem;              /* Space between rows */
         margin-bottom: 1.5rem;
     }
+
     .fc .fc-toolbar-chunk {
         display: flex;
+        justify-content: center;
         align-items: center;
         gap: 0.5rem;
     }
 
+    .fc .fc-prev-button,
+    .fc .fc-next-button {
+        margin: 0 0.75rem;
+    }
+
     /* Event styles */
     .fc-event { cursor: pointer; }
-    .fc-daygrid-event, .fc-list-event-title { font-size: 0.8rem; }
+    .fc-daygrid-event,
+    .fc-list-event-title { font-size: 0.8rem; }
+
     .fc-popover { z-index: 20; }
+
     .fc-daygrid-day.fc-day-has-no-events .fc-daygrid-day-number {
         pointer-events: none;
         color: #9ca3af;
@@ -80,15 +90,26 @@
     /* --- Responsive Adjustments --- */
     @media (max-width: 576px) {
         .fc .fc-toolbar-title { font-size: 1.25rem; }
-        .fc .fc-button { padding: 0.4em 0.65em; font-size: 0.85rem; }
-        .fc .fc-daygrid-day-number { font-size: 0.75em; padding: 2px; }
-        .fc .fc-daygrid-day-top { justify-content: center; }
-        .fc-col-header-cell-cushion { font-size: 0.75em; padding: 2px 4px; }
+        .fc .fc-button {
+            padding: 0.4em 0.65em;
+            font-size: 0.85rem;
+        }
+        .fc .fc-daygrid-day-number {
+            font-size: 0.75em;
+            padding: 2px;
+        }
+        .fc .fc-daygrid-day-top {
+            justify-content: center;
+        }
+        .fc-col-header-cell-cushion {
+            font-size: 0.75em;
+            padding: 2px 4px;
+        }
     }
 </style>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         var calendarEl = document.getElementById('calendar');
         var calendar;
 
@@ -101,35 +122,34 @@
 
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
-                // --- FINAL TOOLBAR LAYOUT TO MATCH SCREENSHOT ---
                 headerToolbar: {
-                    left: '', // Empty
+                    left: '',
                     center: 'prev,title,next',
                     right: 'today dayGridMonth,listWeek'
                 },
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
-                
-                showNonCurrentDates: true, 
+
+                showNonCurrentDates: true,
                 fixedWeekCount: false,
                 height: 'auto',
                 dayHeaderFormat: isMobile ? { weekday: 'narrow' } : { weekday: 'short' },
                 dayMaxEvents: isMobile ? 0 : 3,
-                
-                dayCellDidMount: function(arg) {
+
+                dayCellDidMount: function (arg) {
                     var dateStr = arg.date.toISOString().slice(0, 10);
-                    var eventsOnDay = calendar.getEvents().filter(function(event) {
+                    var eventsOnDay = calendar.getEvents().filter(function (event) {
                         return event.start && event.start.toISOString().slice(0, 10) === dateStr;
                     });
                     if (eventsOnDay.length === 0) {
                         arg.el.classList.add('fc-day-has-no-events');
                     }
                 },
-                
-                navLinkDayClick: function(date, jsEvent) {
+
+                navLinkDayClick: function (date, jsEvent) {
                     var dateStr = date.toISOString().slice(0, 10);
-                    var eventsOnDay = calendar.getEvents().filter(function(event) {
+                    var eventsOnDay = calendar.getEvents().filter(function (event) {
                         return event.start && event.start.toISOString().slice(0, 10) === dateStr;
                     });
                     if (eventsOnDay.length === 0) {
@@ -137,7 +157,7 @@
                     }
                 },
 
-                eventDidMount: function(info) {
+                eventDidMount: function (info) {
                     if (!isMobile) {
                         var props = info.event.extendedProps;
                         info.el.setAttribute('title',
@@ -147,8 +167,8 @@
                         );
                     }
                 },
-                
-                eventClick: function(info) {
+
+                eventClick: function (info) {
                     info.jsEvent.preventDefault();
                     if (info.event.url) {
                         window.open(info.event.url, "_self");
@@ -162,7 +182,7 @@
         renderCalendar();
 
         var resizeTimer;
-        window.addEventListener('resize', function() {
+        window.addEventListener('resize', function () {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(renderCalendar, 250);
         });
