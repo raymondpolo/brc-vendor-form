@@ -37,30 +37,30 @@
         font-size: 0.8rem;
     }
     
-    /* Popover for "+more" link */
     .fc-popover {
         z-index: 20;
     }
 
-    /* Style for non-clickable day numbers */
     .fc-daygrid-day.fc-day-has-no-events .fc-daygrid-day-number {
         pointer-events: none;
-        color: #9ca3af; /* Lighter color for disabled days */
+        color: #9ca3af;
     }
 
     /* --- Responsive Adjustments --- */
     @media (max-width: 576px) {
-        /* Stack the toolbar on mobile */
+        /* Allow the toolbar to wrap and space out its main sections */
         .fc .fc-header-toolbar {
-            flex-direction: column;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
             align-items: center;
             gap: 0.75rem;
         }
+        /* Ensure each chunk (left, center, right) behaves correctly */
         .fc .fc-toolbar-chunk {
             display: flex;
-            justify-content: center;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.25rem; /* Reduce gap between buttons within a group */
         }
         .fc .fc-toolbar-title {
             font-size: 1.25rem;
@@ -70,16 +70,14 @@
             font-size: 0.85rem;
         }
         
-        /* Reduce font size of day numbers to prevent wrapping and scrolling */
         .fc .fc-daygrid-day-number {
             font-size: 0.75em;
             padding: 2px;
         }
         .fc .fc-daygrid-day-top {
-            justify-content: center; /* Center the day number */
+            justify-content: center;
         }
 
-        /* Make day headers smaller */
         .fc-col-header-cell-cushion {
             font-size: 0.75em;
             padding: 2px 4px;
@@ -101,17 +99,17 @@
 
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
-                // --- NEW: Toolbar layout updated ---
+                // --- FINAL TOOLBAR LAYOUT ---
                 headerToolbar: {
-                    left: '',
-                    center: 'prev,title,next',
-                    right: 'today dayGridMonth,listWeek'
+                    left: 'prev,next',
+                    center: 'title',
+                    // Buttons are grouped by removing spaces
+                    right: 'today,dayGridMonth,listWeek' 
                 },
                 events: '/api/events',
                 navLinks: true,
                 editable: false,
                 
-                // --- CORE FIXES FOR MOBILE ---
                 showNonCurrentDates: true, 
                 fixedWeekCount: false,
                 height: 'auto',
@@ -161,10 +159,8 @@
             calendar.render();
         }
 
-        // Initial render
         renderCalendar();
 
-        // Re-render on window resize to apply responsive options
         var resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
