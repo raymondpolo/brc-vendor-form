@@ -41,5 +41,23 @@ def notify_user(user_id, data):
 
 def broadcast_new_note(request_id, note):
     room = f'request_{request_id}'
-    note_html = render_template('partials/note.html', note=note)
-    socketio.emit('new_note', {'note_html': note_html}, to=room)
+    # MODIFIED: Generate HTML directly instead of using a missing template
+    note_html = f"""
+    <div class="flex space-x-3">
+        <div class="flex-shrink-0">
+            <img class="h-8 w-8 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text={note.author.name[0].upper()}" alt="User Avatar">
+        </div>
+        <div>
+            <div class="text-sm">
+                <a href="#" class="font-medium text-text">{note.author.name}</a>
+            </div>
+            <div class="mt-1 text-sm text-text-secondary">
+                <p>{note.text}</p>
+            </div>
+            <div class="mt-2 text-xs text-text-subtle">
+                <span>{note.date_posted.strftime('%m/%d/%Y at %I:%M %p')}</span>
+            </div>
+        </div>
+    </div>
+    """
+    socketio.emit('new_note', {'note_html': note_html.strip()}, to=room)
