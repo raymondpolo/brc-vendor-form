@@ -135,7 +135,7 @@
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
                 // Add versioning to force update
-                navigator.serviceWorker.register('/static/js/service-worker.js?v=4') // Incremented version
+                navigator.serviceWorker.register('/static/js/service-worker.js?v=5') // Incremented version
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                         // Ask for permission and subscribe
@@ -184,26 +184,19 @@
 
             let applicationServerKey;
             try {
-                // +++ ADDED try...catch block +++
-                applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+                applicationServerKey = urlBase64ToUint8Array(vapidPublicKey.trim());
                 console.log("DEBUG SUB JS: VAPID key successfully converted to Uint8Array.");
             } catch (e) {
-                console.error("DEBUG SUB JS: ERROR converting VAPID key:", e);
-                // This is the error from the Chrome Console: "A listener indicated..."
-                // It's often related to an invalid character, like a stray newline or space.
-                // Let's try trimming the key just in case.
-                try {
-                    console.log("DEBUG SUB JS: Retrying conversion with trimmed key...");
-                    applicationServerKey = urlBase64ToUint8Array(vapidPublicKey.trim());
-                    console.log("DEBUG SUB JS: Trimmed key conversion successful.");
-                } catch (e2) {
-                    console.error("DEBUG SUB JS: ERROR converting trimmed VAPID key:", e2);
-                    return; // Stop if conversion fails
-                }
+                console.error("DEBUG SUB JS: ERROR converting VAPID key (is it valid?):", e);
+                return; 
             }
-            // +++ END +++
+            
+            console.log("DEBUG SUB JS: Waiting for navigator.serviceWorker.ready...");
             
             navigator.serviceWorker.ready.then(registration => {
+                
+                console.log("DEBUG SUB JS: ServiceWorker is ready. Calling pushManager.subscribe...");
+                
                 registration.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: applicationServerKey
@@ -221,25 +214,24 @@
                     })
                     .then(response => {
                         console.log('DEBUG SUB JS: Received response from /subscribe:', response.status);
-                        if (response.ok) {
-                            return response.json();
-                        }
+                        if (response.ok) return response.json();
                         throw new Error('Failed to save subscription on server.');
                     })
                     .then(data => {
-                        if(data.success) {
-                            console.log('DEBUG SUB JS: Server successfully saved subscription.');
-                        } else {
-                            console.error('DEBUG SUB JS: Server reported failure in saving subscription.');
-                        }
+                        if(data.success) console.log('DEBUG SUB JS: Server successfully saved subscription.');
+                        else console.error('DEBUG SUB JS: Server reported failure in saving subscription.');
                     })
                     .catch(err => {
                         console.error('DEBUG SUB JS: Error sending subscription to /subscribe:', err);
                     });
                 })
                 .catch(err => {
+                    // This is where the error is likely happening
                     console.error('DEBUG SUB JS: Failed to subscribe the user with pushManager:', err);
                 });
+            })
+            .catch(err => {
+                console.error('DEBUG SUB JS: navigator.serviceWorker.ready promise FAILED:', err);
             });
         }
     </script>

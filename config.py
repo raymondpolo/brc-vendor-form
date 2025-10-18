@@ -21,17 +21,15 @@ class Config:
 
     WTF_CSRF_ENABLED = True
 
-    # --- Old Flask-Mail settings are removed ---
-
-    # Add the new SendGrid API Key configuration
+    # --- SendGrid API Key ---
     SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
-
-    # We still need a default sender email address
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER')
-
     SHARED_MAIL_USERNAME = os.environ.get('SHARED_MAIL_USERNAME')
 
     # --- Push Notifications (VAPID Keys) ---
     VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
     VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
     VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL')
+    
+    # +++ ADD THIS LINE TO FIX HTTP LINKS +++
+    PREFERRED_URL_SCHEME = 'https'
