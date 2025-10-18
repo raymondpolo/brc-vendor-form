@@ -238,11 +238,12 @@
                             console.warn('DEBUG SUB JS: Could not inspect applicationServerKey:', err);
                         }
 
+                        console.log('DEBUG SUB JS: navigator.userAgent:', navigator.userAgent);
                         reg.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: applicationServerKey
-                    })
-                    .then(subscription => {
+                            userVisibleOnly: true,
+                            applicationServerKey: applicationServerKey
+                        })
+                        .then(subscription => {
                         console.log('DEBUG SUB JS: Browser push subscription successful:', subscription);
                         console.log('DEBUG SUB JS: Sending subscription to /subscribe...');
                         fetch('/subscribe', {
@@ -277,8 +278,57 @@
                         });
                     })
                     .catch(err => {
-                        // This is where the error is likely happening
                         console.error('DEBUG SUB JS: Failed to subscribe the user with pushManager:', err);
+                        // If AbortError, try again using the ArrayBuffer backing the key (some mobile
+                        // implementations are picky about the type of the key).
+                        try {
+                            const isAbort = err && err.name === 'AbortError';
+                            if (isAbort) {
+                                console.log('DEBUG SUB JS: AbortError detected — retrying using applicationServerKey.buffer');
+                                const keyBuffer = applicationServerKey instanceof ArrayBuffer ? applicationServerKey : applicationServerKey.buffer;
+                                reg.pushManager.subscribe({
+                                    userVisibleOnly: true,
+                                    applicationServerKey: keyBuffer
+                                })
+                                .then(sub2 => {
+                                    console.log('DEBUG SUB JS: Retry subscribe successful (used ArrayBuffer):', sub2);
+                                    // send to server
+                                    fetch('/subscribe', {
+                                        method: 'POST',
+                                        credentials: 'same-origin',
+                                        body: JSON.stringify(sub2),
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Accept': 'application/json',
+                                            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                                        }
+                                    })
+                                    .then(async response => {
+                                        console.log('DEBUG SUB JS: Received response from /subscribe (retry):', response.status, response.url);
+                                        const text = await response.text();
+                                        try {
+                                            const data = JSON.parse(text || '{}');
+                                            if (response.ok) {
+                                                if (data.success) console.log('DEBUG SUB JS: Server successfully saved subscription (retry).');
+                                                else console.error('DEBUG SUB JS: Server reported failure in saving subscription (retry):', data);
+                                                return data;
+                                            }
+                                            throw new Error(data.message || 'Failed to save subscription on server.');
+                                        } catch (e) {
+                                            console.error('DEBUG SUB JS: Could not parse JSON response from /subscribe (retry). Raw response:', text);
+                                            throw e;
+                                        }
+                                    })
+                                    .catch(err2 => console.error('DEBUG SUB JS: Error sending subscription to /subscribe (retry):', err2));
+                                })
+                                .catch(errRetry => {
+                                    console.error('DEBUG SUB JS: Retry subscribe also failed:', errRetry);
+                                });
+                                return;
+                            }
+                        } catch (ex) {
+                            console.error('DEBUG SUB JS: Error during retry logic:', ex);
+                        }
                     });
                 } catch (e) {
                     console.error('DEBUG SUB JS: Exception while calling pushManager.subscribe:', e);
