@@ -229,6 +229,24 @@
                             console.log('DEBUG SUB JS: Existing subscription for registration:', existingSub);
                         }).catch(err => console.warn('DEBUG SUB JS: getSubscription() failed:', err));
 
+                        // Diagnostic: check permissionState for push (may reveal browser policy)
+                        if (reg.pushManager.permissionState) {
+                            reg.pushManager.permissionState({userVisibleOnly: true, applicationServerKey: applicationServerKey})
+                            .then(state => console.log('DEBUG SUB JS: pushManager.permissionState:', state))
+                            .catch(err => console.warn('DEBUG SUB JS: pushManager.permissionState() failed:', err));
+                        } else {
+                            console.log('DEBUG SUB JS: pushManager.permissionState not supported in this UA');
+                        }
+
+                        // Diagnostic: other useful context
+                        try {
+                            console.log('DEBUG SUB JS: window.isSecureContext =', window.isSecureContext);
+                            console.log('DEBUG SUB JS: navigator.serviceWorker.controller =', navigator.serviceWorker.controller);
+                            navigator.serviceWorker.getRegistrations().then(regs => console.log('DEBUG SUB JS: navigator.serviceWorker.getRegistrations():', regs)).catch(e => console.warn('DEBUG SUB JS: getRegistrations failed', e));
+                        } catch (e) {
+                            console.warn('DEBUG SUB JS: error collecting extra diagnostics', e);
+                        }
+
                         // Diagnostic: log applicationServerKey details
                         try {
                             console.log('DEBUG SUB JS: applicationServerKey byteLength =', applicationServerKey.byteLength);
