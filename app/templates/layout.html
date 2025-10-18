@@ -9,10 +9,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.ckeditor.com/ckeditor5/41.4.2/super-build/ckeditor.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/tributejs"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -131,9 +131,10 @@
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
         });
 
+        // --- PUSH NOTIFICATION SCRIPT ---
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
-                // ADDED a version query parameter to force update
+                // Add versioning to force update
                 navigator.serviceWorker.register('/static/js/service-worker.js?v=2')
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
@@ -164,7 +165,10 @@
         function askPermissionAndSubscribe() {
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
+                    console.log('DEBUG SUB JS: Notification permission granted.');
                     subscribeUser();
+                } else {
+                    console.log('DEBUG SUB JS: Notification permission denied.');
                 }
             });
         }
@@ -177,6 +181,9 @@
                     applicationServerKey: applicationServerKey
                 })
                 .then(subscription => {
+                    console.log('DEBUG SUB JS: Browser push subscription successful:', subscription);
+                    // ADDED LOGGING FOR THE FETCH REQUEST
+                    console.log('DEBUG SUB JS: Sending subscription to /subscribe...');
                     fetch('/subscribe', {
                         method: 'POST',
                         body: JSON.stringify(subscription),
@@ -184,10 +191,27 @@
                             'Content-Type': 'application/json',
                             'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                         }
+                    })
+                    .then(response => {
+                        console.log('DEBUG SUB JS: Received response from /subscribe:', response.status);
+                        if (response.ok) {
+                            return response.json();
+                        }
+                        throw new Error('Failed to save subscription on server.');
+                    })
+                    .then(data => {
+                        if(data.success) {
+                            console.log('DEBUG SUB JS: Server successfully saved subscription.');
+                        } else {
+                            console.error('DEBUG SUB JS: Server reported failure in saving subscription.');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('DEBUG SUB JS: Error sending subscription to /subscribe:', err);
                     });
                 })
                 .catch(err => {
-                    console.log('Failed to subscribe the user: ', err);
+                    console.error('DEBUG SUB JS: Failed to subscribe the user with pushManager:', err);
                 });
             });
         }
