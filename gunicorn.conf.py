@@ -9,7 +9,7 @@ monkey.patch_all()
 bind = "0.0.0.0:5000"
 # Use the gevent worker class for asynchronous handling of requests
 worker_class = 'geventwebsocket.gunicorn.workers.GeventWebSocketWorker'
-workers = 1
+workers = 1 # Keep workers=1 on Render free tier
 threads = 4
 worker_connections = 1000
 timeout = 120

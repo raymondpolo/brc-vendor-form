@@ -18,7 +18,11 @@ def create_app(config_class=Config):
     login_manager.login_message_category = 'info'
     migrate.init_app(app, db)
     csrf.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*", message_queue=os.environ.get('REDIS_URL'))
+
+    # CORRECTED: Robustly handle Redis URL for Socket.IO message queue
+    # This prevents connection errors if REDIS_URL is not set in the environment.
+    redis_url = os.environ.get('REDIS_URL')
+    socketio.init_app(app, cors_allowed_origins="*", message_queue=redis_url)
 
     # Ensure the instance and upload folders exist
     os.makedirs(app.instance_path, exist_ok=True)
@@ -72,13 +76,7 @@ def create_app(config_class=Config):
             from app.main.routes import send_reminders
             send_reminders()
 
-        @app.cli.command("send-follow-ups")
-        def send_follow_ups_command():
-            """Sends automated follow-up emails for stalled requests."""
-            from app.main.routes import send_automated_follow_ups
-            send_automated_follow_ups()
-
-    # CORRECTED: Use a relative import to load the event handlers
+    # Use a relative import to load the event handlers
     from . import events
 
     return app
