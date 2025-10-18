@@ -71,6 +71,7 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
+    # Use Flask logger instead of print
     current_app.logger.info(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
     app = current_app._get_current_object()
     with app.app_context():
@@ -311,6 +312,7 @@ def view_request(request_id):
         db.session.rollback()
         current_app.logger.error(f"Error committing view log: {e}")
 
+
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
     note_form = NoteForm()
@@ -340,16 +342,27 @@ def view_request(request_id):
 @login_required
 @csrf.exempt # <<< TEMPORARILY disable CSRF for this route
 def post_note(request_id):
+    # Use Flask's logger - Log entry immediately
     current_app.logger.info(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
     try:
+        # Just log that we received the data and return success
         note_text_received = request.form.get('text', 'No text found in form')
         current_app.logger.info(f"DEBUG NOTE: Received note text: '{note_text_received}'")
         current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
-        work_order = WorkOrder.query.get_or_404(request_id)
+        work_order = WorkOrder.query.get_or_404(request_id) # Verify work order exists
         current_app.logger.info(f"DEBUG NOTE: Found WorkOrder ID: {work_order.id}")
-        
+
+        # --- Temporarily skip validation, DB saving, mentions, and notifications ---
+        # note_form = NoteForm()
+        # validation_result = note_form.validate_on_submit()
+        # if validation_result:
+        #    ... (original logic) ...
+        # else: ...
+
+        # Directly return success after logging
         current_app.logger.info("DEBUG NOTE: Skipping full processing, returning success JSON for testing.")
         return jsonify({'success': True})
+
     except Exception as e:
         current_app.logger.error(f"DEBUG NOTE: Exception occurred in simplified post_note: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'Simplified route error.'}), 500
@@ -387,7 +400,7 @@ def send_follow_up(request_id):
 
         recipients = [recipient]
         cc_list = [email.strip() for email in cc.split(',')] if cc else []
-        
+
         html_body = f"<p>{body.replace(chr(10), '<br>')}</p>"
 
         send_notification_email(
