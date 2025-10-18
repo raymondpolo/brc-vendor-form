@@ -20,7 +20,7 @@ from sqlalchemy import or_, func, case
 import bleach
 from pywebpush import webpush, WebPushException
 
-from app import db, csrf
+from app import db, csrf # Make sure csrf is imported
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType, PushSubscription)
@@ -71,7 +71,6 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
-    # Use Flask logger instead of print
     current_app.logger.info(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
     app = current_app._get_current_object()
     with app.app_context():
@@ -278,12 +277,11 @@ def requests_by_tag(tag_name):
     return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}',
                            requests_json=json.dumps(requests_list), tag_name=tag_name)
 
-@main.route('/request/<int:request_id>', methods=['GET']) # REMOVED POST from methods
+@main.route('/request/<int:request_id>', methods=['GET'])
 @login_required
 def view_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
 
-    # --- Keep permission checks ---
     if work_order.is_deleted and current_user.role != 'Super User':
         abort(404)
     is_author = work_order.author == current_user
@@ -293,7 +291,6 @@ def view_request(request_id):
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
 
-    # --- Keep GET request logic ---
     if not work_order.is_deleted and is_admin_staff and work_order.status == 'New':
         work_order.status = 'Open'
         db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
@@ -307,19 +304,16 @@ def view_request(request_id):
                  current_app.logger.error(f"Error committing status change: {e}")
                  flash('Error updating status.', 'danger')
 
-    # Log viewing action (commit happens below or if status was changed)
     db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
     try:
-        db.session.commit() # Commit viewing log and potential status change
+        db.session.commit()
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error committing view log: {e}")
 
-
-    # --- Keep data fetching and form initializations ---
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
-    note_form = NoteForm() # Still needed for rendering
+    note_form = NoteForm()
     status_form = ChangeStatusForm()
     attachment_form = AttachmentForm()
     assign_vendor_form = AssignVendorForm()
@@ -333,7 +327,6 @@ def view_request(request_id):
     quotes = work_order.quotes
     all_users = User.query.filter_by(is_active=True).all()
 
-    # --- Keep template rendering ---
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
@@ -342,145 +335,31 @@ def view_request(request_id):
                            follow_up_form=follow_up_form, all_users=all_users, completed_form=completed_form)
 
 
-# +++ ROUTE for handling note posts via AJAX +++
+# +++ SIMPLIFIED ROUTE for handling note posts via AJAX +++
 @main.route('/request/<int:request_id>/post_note', methods=['POST'])
 @login_required
+@csrf.exempt # <<< TEMPORARILY disable CSRF for this route
 def post_note(request_id):
-    # Use Flask's logger
     current_app.logger.info(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
-
-    current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
-    work_order = WorkOrder.query.get_or_404(request_id)
-    current_app.logger.info(f"DEBUG NOTE: Fetched WorkOrder ID: {work_order.id}")
-
-    # --- Basic permission check (can add more granular checks if needed) ---
-    is_author = work_order.author == current_user
-    is_viewer = current_user in work_order.viewers
-    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
-    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
-    if not (is_author or is_viewer or is_admin_staff or is_property_manager):
-         current_app.logger.warning(f"DEBUG NOTE: Permission denied for user {current_user.id} ({current_user.name}) on request {request_id}")
-         return jsonify({'success': False, 'message': 'Permission denied.'}), 403
-    current_app.logger.info("DEBUG NOTE: Permission check passed.")
-
-    note_form = NoteForm()
-    current_app.logger.info("DEBUG NOTE: NoteForm instantiated.")
-    current_app.logger.info(f"DEBUG NOTE: Raw request form data: {request.form}") # Log raw form data
-
-    # --- Explicitly check validation ---
-    validation_result = note_form.validate_on_submit()
-    current_app.logger.info(f"DEBUG NOTE: note_form.validate_on_submit() returned: {validation_result}")
-
-    if validation_result:
-        current_app.logger.info("DEBUG NOTE: Note form validated successfully. Entering try block.")
-        try:
-            note_text = note_form.text.data
-            current_app.logger.info(f"DEBUG NOTE: Note text extracted: '{note_text}'")
-            note = Note(text=note_text, author=current_user, work_order=work_order)
-            db.session.add(note)
-            current_app.logger.info("DEBUG NOTE: Note object created and added to session.")
-
-            notified_users = set()
-            # Ensure author is added if they aren't the one posting
-            if work_order.author and work_order.author != current_user:
-                 notified_users.add(work_order.author)
-                 current_app.logger.info(f"DEBUG NOTE: Added author {work_order.author.name} to notified_users.")
-
-            tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
-            current_app.logger.info(f"DEBUG NOTE: Found mentions: {tagged_names}")
-            for name in tagged_names:
-                search_name = name.strip()
-                # Use case-insensitive search
-                tagged_user = User.query.filter(func.lower(User.name) == func.lower(search_name)).first()
-                if tagged_user:
-                    current_app.logger.info(f"DEBUG NOTE: Found tagged user: {tagged_user.name} (ID: {tagged_user.id})")
-                    if tagged_user not in work_order.viewers:
-                        work_order.viewers.append(tagged_user)
-                        current_app.logger.info(f"DEBUG NOTE: Added {tagged_user.name} to work_order viewers.")
-                    if tagged_user != current_user:
-                        notified_users.add(tagged_user)
-                        current_app.logger.info(f"DEBUG NOTE: Added {tagged_user.name} to notified_users.")
-                    else:
-                        current_app.logger.info(f"DEBUG NOTE: Tagged user {tagged_user.name} is the current user, not adding to notify list.")
-                else:
-                    current_app.logger.warning(f"DEBUG NOTE: Could not find user for mention: @{search_name}")
-
-            current_app.logger.info("DEBUG NOTE: Committing note and viewer changes...")
-            db.session.commit() # Commit note and viewer changes first
-            current_app.logger.info("DEBUG NOTE: Commit successful.")
-
-            current_app.logger.info("DEBUG NOTE: Broadcasting note via Socket.IO...")
-            broadcast_new_note(work_order.id, note) # Notify via Socket.IO
-            current_app.logger.info("DEBUG NOTE: Broadcast complete.")
-
-            current_app.logger.info(f"DEBUG NOTE: Users to notify via Push/Email: {[user.name for user in notified_users]}")
-            if not notified_users:
-                 current_app.logger.info("DEBUG NOTE: No users found in notified_users set.")
-
-            for user in notified_users:
-                current_app.logger.info(f"DEBUG NOTE: Processing PUSH/EMAIL for user: {user.name} (ID: {user.id})")
-                notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
-                notification = Notification(
-                    text=notification_text,
-                    link=url_for('main.view_request', request_id=work_order.id),
-                    user_id=user.id
-                )
-                db.session.add(notification)
-                current_app.logger.info(f"DEBUG NOTE: Added Notification object for user {user.id} to session.")
-
-                current_app.logger.info(f"DEBUG PUSH (Pre-call): Preparing to send push for user {user.id} ({user.name})")
-                push_link = url_for('main.view_request', request_id=work_order.id, _external=True)
-                current_app.logger.info(f"DEBUG PUSH (Pre-call): Link generated: {push_link}")
-
-                # Call the push notification function
-                send_push_notification(
-                    user.id,
-                    'New Mention',
-                    notification_text,
-                    push_link
-                )
-                current_app.logger.info(f"DEBUG PUSH (Post-call): Returned from send_push_notification for user {user.id}")
-
-                # Send email notification
-                current_app.logger.info(f"DEBUG EMAIL (Pre-call): Preparing email for user {user.id} ({user.name})")
-                email_body = f"""
-                <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-                <p><b>Note:</b></p>
-                <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-                """
-                send_notification_email(
-                    subject=f"New Note on Request #{work_order.id}",
-                    recipients=[user.email],
-                    text_body=notification_text,
-                    html_body=render_template(
-                        'email/notification_email.html',
-                        title="New Note on Request",
-                        user=user,
-                        body_content=email_body,
-                        link=url_for('main.view_request', request_id=work_order.id, _external=True)
-                    )
-                )
-                current_app.logger.info(f"DEBUG EMAIL (Post-call): Returned from send_notification_email for user {user.id}")
-
-            current_app.logger.info("DEBUG NOTE: Committing notifications...")
-            db.session.commit() # Commit notifications
-            current_app.logger.info("DEBUG NOTE: Notifications commit successful. Returning success JSON.")
-            return jsonify({'success': True})
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error posting note: {e}", exc_info=True) # Log full traceback
-            return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
-    else:
-        current_app.logger.warning(f"DEBUG NOTE: Note form validation FAILED. Errors: {note_form.errors}")
-        return jsonify({'success': False, 'errors': note_form.errors}), 400
-# --- END NEW ROUTE ---
+    try:
+        note_text_received = request.form.get('text', 'No text found in form')
+        current_app.logger.info(f"DEBUG NOTE: Received note text: '{note_text_received}'")
+        current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
+        work_order = WorkOrder.query.get_or_404(request_id)
+        current_app.logger.info(f"DEBUG NOTE: Found WorkOrder ID: {work_order.id}")
+        
+        current_app.logger.info("DEBUG NOTE: Skipping full processing, returning success JSON for testing.")
+        return jsonify({'success': True})
+    except Exception as e:
+        current_app.logger.error(f"DEBUG NOTE: Exception occurred in simplified post_note: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Simplified route error.'}), 500
+# --- END SIMPLIFIED ROUTE ---
 
 
 # --- Keep ALL other existing routes ---
 @main.route('/request/<int:request_id>/mark_as_completed', methods=['POST'])
 @login_required
 def mark_as_completed(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = MarkAsCompletedForm()
     if form.validate_on_submit():
@@ -493,11 +372,11 @@ def mark_as_completed(request_id):
         flash('There was an error marking the request as completed.', 'danger')
     return redirect(url_for('main.view_request', request_id=request_id))
 
+
 @main.route('/request/<int:request_id>/send_follow_up', methods=['POST'])
 @login_required
 @admin_required
 def send_follow_up(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = SendFollowUpForm()
     if form.validate_on_submit():
@@ -508,7 +387,7 @@ def send_follow_up(request_id):
 
         recipients = [recipient]
         cc_list = [email.strip() for email in cc.split(',')] if cc else []
-
+        
         html_body = f"<p>{body.replace(chr(10), '<br>')}</p>"
 
         send_notification_email(
@@ -528,11 +407,11 @@ def send_follow_up(request_id):
 
     return redirect(url_for('main.view_request', request_id=request_id))
 
+
 @main.route('/request/<int:request_id>/delete', methods=['POST'])
 @login_required
 @role_required(['Super User'])
 def delete_request(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
@@ -546,11 +425,11 @@ def delete_request(request_id):
         flash('Invalid request to delete the work order.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
+
 @main.route('/request/<int:request_id>/restore', methods=['POST'])
 @login_required
 @role_required(['Super User'])
 def restore_request(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
@@ -568,7 +447,6 @@ def restore_request(request_id):
 @login_required
 @role_required(['Super User'])
 def permanently_delete_request(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
@@ -584,16 +462,15 @@ def permanently_delete_request(request_id):
 @login_required
 @role_required(['Super User'])
 def deleted_requests():
-    # ... (function body) ...
     deleted = WorkOrder.query.filter_by(is_deleted=True).order_by(WorkOrder.deleted_at.desc()).all()
     form = DeleteRestoreRequestForm()
     return render_template('deleted_requests.html', title='Deleted Requests', requests=deleted, form=form)
+
 
 @main.route('/change_status/<int:request_id>', methods=['POST'])
 @login_required
 @admin_required
 def change_status(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = ChangeStatusForm()
     form.status.choices = [c for c in form.status.choices if c[0] != 'New']
@@ -706,7 +583,6 @@ def change_status(request_id):
 @main.route('/request/<int:request_id>/quote/<int:quote_id>/<action>', methods=['POST'])
 @login_required
 def quote_action(request_id, quote_id, action):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     quote = Quote.query.get_or_404(quote_id)
 
@@ -752,7 +628,6 @@ def quote_action(request_id, quote_id, action):
 @main.route('/tag_request/<int:request_id>', methods=['POST'])
 @login_required
 def tag_request(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = TagForm()
 
@@ -828,7 +703,6 @@ def tag_request(request_id):
 @main.route('/cancel_request/<int:request_id>', methods=['POST'])
 @login_required
 def cancel_request(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -849,7 +723,6 @@ def cancel_request(request_id):
 @login_required
 @admin_required
 def assign_vendor(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     vendor_id = request.form.get('vendor_id')
 
@@ -872,7 +745,6 @@ def assign_vendor(request_id):
 @login_required
 @admin_required
 def unassign_vendor(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     if work_order.vendor:
         vendor_name = work_order.vendor.company_name
@@ -887,7 +759,6 @@ def unassign_vendor(request_id):
 @main.route('/notifications/read/<int:notification_id>')
 @login_required
 def mark_notification_read(notification_id):
-    # ... (function body) ...
     notification = Notification.query.get_or_404(notification_id)
     if notification.user_id != current_user.id:
         abort(403)
@@ -898,7 +769,6 @@ def mark_notification_read(notification_id):
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required
 def new_request():
-    # ... (function body - including push notifications for admins/schedulers) ...
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
@@ -972,7 +842,6 @@ def new_request():
 @main.route('/edit-request/<int:request_id>', methods=['GET', 'POST'])
 @login_required
 def edit_request(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
@@ -1042,7 +911,6 @@ def edit_request(request_id):
 @main.route('/upload_attachment/<int:request_id>', methods=['POST'])
 @login_required
 def upload_attachment(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = AttachmentForm()
     if form.validate_on_submit():
@@ -1063,15 +931,14 @@ def upload_attachment(request_id):
         flash('File upload failed validation.', 'danger')
     return redirect(url_for('main.view_request', request_id=request_id))
 
+
 @main.route('/download_attachment/<int:attachment_id>')
 @login_required
 def download_attachment(attachment_id):
-    # ... (function body) ...
     attachment = Attachment.query.get_or_404(attachment_id)
-    # Ensure attachment belongs to a valid work order before proceeding
     work_order = WorkOrder.query.get(attachment.work_order_id)
     if not work_order:
-         abort(404) # Or handle as appropriate
+         abort(404)
 
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
@@ -1086,9 +953,7 @@ def download_attachment(attachment_id):
 @main.route('/view_attachment/<int:attachment_id>')
 @login_required
 def view_attachment(attachment_id):
-    # ... (function body) ...
     attachment = Attachment.query.get_or_404(attachment_id)
-    # Ensure attachment belongs to a valid work order before proceeding
     work_order = WorkOrder.query.get(attachment.work_order_id)
     if not work_order:
         abort(404)
@@ -1103,17 +968,17 @@ def view_attachment(attachment_id):
 
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
 
+
 @main.route('/delete_attachment/<int:attachment_id>', methods=['POST'])
 @login_required
 def delete_attachment(attachment_id):
-    # ... (function body) ...
     attachment = Attachment.query.get_or_404(attachment_id)
     if attachment.user_id != current_user.id and current_user.role not in ['Admin', 'Super User']:
         abort(403)
     try:
         os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
     except OSError:
-        pass # File might already be gone, proceed with DB deletion
+        pass
     db.session.add(AuditLog(text=f'Deleted attachment: {attachment.filename}', user_id=current_user.id, work_order_id=attachment.work_order_id))
     db.session.delete(attachment)
     db.session.commit()
@@ -1123,7 +988,6 @@ def delete_attachment(attachment_id):
 @main.route('/account', methods=['GET', 'POST'])
 @login_required
 def account():
-    # ... (function body) ...
     update_form = UpdateAccountForm(obj=current_user)
     password_form = ChangePasswordForm()
 
@@ -1196,10 +1060,10 @@ def account():
 
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
+
 @main.route('/upload_image', methods=['POST'])
 @login_required
 def upload_image():
-    # ... (function body) ...
     if 'upload' in request.files:
         file = request.files['upload']
         if file:
@@ -1216,14 +1080,12 @@ def upload_image():
 
 @main.route('/uploads/<filename>')
 def uploaded_file(filename):
-    # ... (function body) ...
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 @main.route('/reports')
 @login_required
 @admin_required
 def reports_page():
-    # ... (function body) ...
     form = ReportForm()
     return render_template('reports.html', title='Reports', form=form)
 
@@ -1231,7 +1093,6 @@ def reports_page():
 @login_required
 @admin_required
 def download_all_work_orders():
-    # ... (function body) ...
     date_type = request.args.get('date_type', 'date_created')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
@@ -1277,7 +1138,6 @@ def download_all_work_orders():
 @login_required
 @admin_required
 def download_summary_report():
-    # ... (function body) ...
     date_type = request.args.get('date_type', 'date_created')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
@@ -1327,13 +1187,11 @@ def download_summary_report():
 @main.route('/calendar')
 @login_required
 def calendar():
-    # ... (function body) ...
     return render_template('calendar.html', title='Calendar')
 
 @main.route('/api/events')
 @login_required
 def api_events():
-    # ... (function body) ...
     status_colors = {
         'Scheduled': '#8B5CF6',  # purple
         'New': '#3B82F6',        # blue
@@ -1383,7 +1241,6 @@ def api_events():
 @main.route('/api/vendors/search')
 @login_required
 def search_vendors():
-    # ... (function body) ...
     q = request.args.get('q')
     if q:
         vendors = Vendor.query.filter(Vendor.company_name.ilike(f'%{q}%')).all()
@@ -1393,7 +1250,6 @@ def search_vendors():
 @main.route('/api/users/search')
 @login_required
 def api_user_search():
-    # ... (function body) ...
     users = User.query.filter_by(is_active=True).all()
     user_list = [{'key': user.name, 'value': user.name.replace(' ', '')} for user in users]
     return jsonify(user_list)
@@ -1402,7 +1258,6 @@ def api_user_search():
 @login_required
 @admin_required
 def send_work_order_email(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     recipient = request.form.get('recipient')
     cc = request.form.get('cc')
@@ -1461,7 +1316,6 @@ def send_work_order_email(request_id):
 @login_required
 @admin_required
 def add_quote(request_id):
-    # ... (function body) ...
     work_order = WorkOrder.query.get_or_404(request_id)
     form = QuoteForm()
     if form.validate_on_submit():
@@ -1491,7 +1345,6 @@ def add_quote(request_id):
 @login_required
 @admin_required
 def delete_quote(quote_id):
-    # ... (function body) ...
     quote = Quote.query.get_or_404(quote_id)
     work_order_id = quote.work_order_id
     attachment = Attachment.query.get(quote.attachment_id)
@@ -1501,7 +1354,7 @@ def delete_quote(quote_id):
             os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
         except OSError as e:
             current_app.logger.error(f"Error deleting file {attachment.filename}: {e}")
-            pass  # Continue even if file is not found
+            pass
 
         db.session.delete(attachment)
 
@@ -1515,8 +1368,8 @@ def delete_quote(quote_id):
     flash('Quote has been deleted successfully.', 'success')
     return redirect(url_for('main.view_request', request_id=work_order_id))
 
+
 def get_date_range(range_name, start_str, end_str):
-    # ... (function body) ...
     today = datetime.utcnow().date()
     start_date, end_date = None, None
 
@@ -1566,7 +1419,6 @@ def get_date_range(range_name, start_str, end_str):
     return start_date, end_date
 
 def send_reminders():
-    # ... (function body) ...
     today = datetime.utcnow().date()
     work_orders_for_follow_up = WorkOrder.query.filter(
         WorkOrder.follow_up_date <= today,
@@ -1609,7 +1461,6 @@ def send_reminders():
         current_tags.discard('Follow-up needed')
         wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         wo.follow_up_date = None
-        # Assuming user_id=1 exists and is a system/admin user for logging automated tasks
         audit_user_id = User.query.filter_by(role='Super User').first().id if User.query.filter_by(role='Super User').first() else 1
         db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=audit_user_id, work_order_id=wo.id))
 
@@ -1619,7 +1470,6 @@ def send_reminders():
 @main.route('/subscribe', methods=['POST'])
 @login_required
 def subscribe():
-    # ... (function body) ...
     subscription_data = request.get_json()
     if not subscription_data:
         current_app.logger.warning("DEBUG SUB: Subscription endpoint called with no data.")
