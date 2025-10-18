@@ -47,8 +47,15 @@ def convert_to_denver(dt):
         return None
     tz = _get_timezone()
     if dt.tzinfo is None:
-        # Localize naive datetimes as if they were in the app timezone
-        return tz.localize(dt)
+        # Many DBs store datetimes without timezone information (naive). In practice
+        # these are often stored in UTC or have lost their tzinfo during persistence.
+        # To avoid showing times shifted by the wrong offset, assume naive datetimes
+        # coming from storage are in UTC, then convert to the application's timezone.
+        try:
+            return pytz.UTC.localize(dt).astimezone(tz)
+        except Exception:
+            # Fallback: treat naive as app-local if UTC-localize fails for some reason
+            return tz.localize(dt)
     # Convert aware datetimes to the app timezone
     return dt.astimezone(tz)
 
