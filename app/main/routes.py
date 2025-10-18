@@ -341,26 +341,31 @@ def view_request(request_id):
                            follow_up_form=follow_up_form, all_users=all_users, completed_form=completed_form)
 
 
-# +++ NEW ROUTE for handling note posts via AJAX +++
+# +++ ROUTE for handling note posts via AJAX +++
 @main.route('/request/<int:request_id>/post_note', methods=['POST'])
 @login_required
 def post_note(request_id):
-    print(f"DEBUG NOTE: Entered post_note route for request_id: {request_id}. Method: {request.method}")
+    # +++ ADDED TOP-LEVEL LOG +++
+    print(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
+    # ++++++++++++++++++++++++++++
+
+    print(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
     work_order = WorkOrder.query.get_or_404(request_id)
+    print(f"DEBUG NOTE: Fetched WorkOrder ID: {work_order.id}")
 
     # --- Basic permission check (can add more granular checks if needed) ---
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
-    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name # Added PM check
+    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
-    if not (is_author or is_viewer or is_admin_staff or is_property_manager): # Added PM check
+    if not (is_author or is_viewer or is_admin_staff or is_property_manager):
          print(f"DEBUG NOTE: Permission denied for user {current_user.id} ({current_user.name}) on request {request_id}")
          return jsonify({'success': False, 'message': 'Permission denied.'}), 403
     print("DEBUG NOTE: Permission check passed.")
 
     note_form = NoteForm()
     print("DEBUG NOTE: NoteForm instantiated.")
-    print(f"DEBUG NOTE: Request form data: {request.form}")
+    print(f"DEBUG NOTE: Raw request form data: {request.form}") # Log raw form data
 
     # --- Explicitly check validation ---
     validation_result = note_form.validate_on_submit()
@@ -479,7 +484,6 @@ def post_note(request_id):
 # delete_attachment, account, upload_image, uploaded_file, reports_page, download_all_work_orders,
 # download_summary_report, calendar, api_events, search_vendors, api_user_search, send_work_order_email,
 # add_quote, delete_quote, get_date_range, send_reminders, subscribe
-
 @main.route('/request/<int:request_id>/mark_as_completed', methods=['POST'])
 @login_required
 def mark_as_completed(request_id):
@@ -1064,7 +1068,10 @@ def upload_attachment(request_id):
 @login_required
 def download_attachment(attachment_id):
     attachment = Attachment.query.get_or_404(attachment_id)
-    work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
+    # Ensure attachment belongs to a valid work order before proceeding
+    work_order = WorkOrder.query.get(attachment.work_order_id)
+    if not work_order:
+         abort(404) # Or handle as appropriate
 
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
@@ -1080,7 +1087,10 @@ def download_attachment(attachment_id):
 @login_required
 def view_attachment(attachment_id):
     attachment = Attachment.query.get_or_404(attachment_id)
-    work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
+    # Ensure attachment belongs to a valid work order before proceeding
+    work_order = WorkOrder.query.get(attachment.work_order_id)
+    if not work_order:
+        abort(404)
 
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
@@ -1092,6 +1102,7 @@ def view_attachment(attachment_id):
 
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
 
+
 @main.route('/delete_attachment/<int:attachment_id>', methods=['POST'])
 @login_required
 def delete_attachment(attachment_id):
@@ -1101,7 +1112,7 @@ def delete_attachment(attachment_id):
     try:
         os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
     except OSError:
-        pass
+        pass # File might already be gone, proceed with DB deletion
     db.session.add(AuditLog(text=f'Deleted attachment: {attachment.filename}', user_id=current_user.id, work_order_id=attachment.work_order_id))
     db.session.delete(attachment)
     db.session.commit()

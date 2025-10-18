@@ -676,7 +676,7 @@
         function hideAttachmentModal() { /* ... keep existing code ... */ }
         if (closeAttachmentModalBtn) { closeAttachmentModalBtn.addEventListener('click', hideAttachmentModal); }
 
-        // +++ CORRECTED TributeJS Initialization +++
+        // --- CORRECTED TributeJS Initialization ---
         const noteTextareaElement = document.getElementById('note-textarea');
         if (noteTextareaElement) {
              var tribute = new Tribute({
@@ -714,11 +714,11 @@
                 }]
             });
             tribute.attach(noteTextareaElement); // Attach Tribute to the textarea
-            console.log("DEBUG JS: Tribute attached to note textarea."); // ADDED LOGGING
+            console.log("DEBUG JS: Tribute attached to note textarea.");
         } else {
-             console.error("DEBUG JS: Could not find note textarea element for Tribute."); // ADDED LOGGING
+             console.error("DEBUG JS: Could not find note textarea element for Tribute.");
         }
-        // +++ END CORRECTION +++
+        // --- END CORRECTION ---
 
 
         // --- Keep Socket.IO connection and event listeners ---
