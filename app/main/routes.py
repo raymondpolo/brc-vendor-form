@@ -1686,3 +1686,41 @@ def test_push():
     except Exception as e:
         current_app.logger.error(f"ERROR in test_push: {e}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@main.route('/my_subscriptions', methods=['GET'])
+@login_required
+def my_subscriptions():
+    """Return the current user's stored push subscriptions (for debugging).
+
+    JSON output: [{id, subscription_json}, ...]
+    """
+    try:
+        subs = PushSubscription.query.filter_by(user_id=current_user.id).all()
+        out = []
+        for s in subs:
+            try:
+                parsed = json.loads(s.subscription_json)
+            except Exception:
+                parsed = None
+            out.append({'id': s.id, 'subscription': parsed, 'raw': s.subscription_json})
+        return jsonify({'success': True, 'subscriptions': out})
+    except Exception as e:
+        current_app.logger.error(f"ERROR in my_subscriptions: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@main.route('/subscriptions/<int:sub_id>', methods=['DELETE'])
+@login_required
+def delete_subscription(sub_id):
+    """Delete a stored push subscription by id (authorized for the owner only)."""
+    try:
+        sub = PushSubscription.query.get_or_404(sub_id)
+        if sub.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Not authorized.'}), 403
+        db.session.delete(sub)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        current_app.logger.error(f"ERROR deleting subscription {sub_id}: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
