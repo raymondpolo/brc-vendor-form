@@ -1665,3 +1665,24 @@ def vapid_public_key():
         return jsonify({'success': False, 'message': 'VAPID public key not configured.'}), 500
     current_app.logger.debug('DEBUG SUB: VAPID_PUBLIC_KEY served to client')
     return jsonify({'success': True, 'vapidPublicKey': key})
+
+
+@main.route('/test_push', methods=['GET'])
+@login_required
+def test_push():
+    """Trigger a test push notification to the current user's subscriptions.
+
+    Useful for debugging mobile behavior — visit this URL while logged in from the
+    mobile browser you want to test and confirm whether you receive a push.
+    """
+    try:
+        # Compose a friendly test payload
+        title = 'Test Notification'
+        body = f'This is a test push to {current_user.name}. If you see this on mobile, push works.'
+        link = url_for('main.index', _external=True)
+        # Use the shared helper to send pushes to all stored subscriptions for this user
+        send_push_notification(current_user.id, title, body, link)
+        return jsonify({'success': True, 'message': 'Test push sent (server attempted sends). Check server logs for results.'})
+    except Exception as e:
+        current_app.logger.error(f"ERROR in test_push: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500

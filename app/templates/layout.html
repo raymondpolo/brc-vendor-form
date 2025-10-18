@@ -224,7 +224,21 @@
                 console.log("DEBUG SUB JS: Using ServiceWorkerRegistration to call pushManager.subscribe...");
                 try {
                     console.log("DEBUG SUB JS: ServiceWorker is ready. Calling pushManager.subscribe...");
-                    reg.pushManager.subscribe({
+                        // Diagnostic: log any existing subscription
+                        reg.pushManager.getSubscription().then(existingSub => {
+                            console.log('DEBUG SUB JS: Existing subscription for registration:', existingSub);
+                        }).catch(err => console.warn('DEBUG SUB JS: getSubscription() failed:', err));
+
+                        // Diagnostic: log applicationServerKey details
+                        try {
+                            console.log('DEBUG SUB JS: applicationServerKey byteLength =', applicationServerKey.byteLength);
+                            const view = new Uint8Array(applicationServerKey);
+                            console.log('DEBUG SUB JS: applicationServerKey sample bytes (first 10):', Array.from(view.slice(0,10)));
+                        } catch (err) {
+                            console.warn('DEBUG SUB JS: Could not inspect applicationServerKey:', err);
+                        }
+
+                        reg.pushManager.subscribe({
                         userVisibleOnly: true,
                         applicationServerKey: applicationServerKey
                     })
