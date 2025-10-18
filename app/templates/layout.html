@@ -134,8 +134,8 @@
         // --- PUSH NOTIFICATION SCRIPT ---
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
-                // Add versioning to force update
-                navigator.serviceWorker.register('/static/js/service-worker.js?v=5') // Incremented version
+                // Incremented version to v=6
+                navigator.serviceWorker.register('/static/js/service-worker.js?v=6')
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                         // Ask for permission and subscribe
