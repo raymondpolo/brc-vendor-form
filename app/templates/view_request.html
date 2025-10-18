@@ -186,7 +186,7 @@
 
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-text mb-4">Notes</h3>
-            <div id="notes-list" class="space-y-4 max-h-96 overflow-y-auto pr-4">
+            <div id="notes-list" data-request-id="{{ work_order.id }}" class="space-y-4 max-h-96 overflow-y-auto pr-4">
                 {% for note in notes %}
                 <div class="flex space-x-3">
                     <div class="flex-shrink-0">
@@ -768,7 +768,8 @@
 
         // --- Keep Socket.IO connection and event listeners ---
         const socket = io(); // Ensure socket is initialized
-        const requestId = {{ work_order.id }}; // Ensure requestId is defined
+    const notesListEl = document.getElementById('notes-list');
+    const requestId = notesListEl ? notesListEl.dataset.requestId : null;
 
         socket.on('connect', () => {
              console.log('DEBUG JS: Socket connected, joining room:', `request_${requestId}`);
@@ -782,14 +783,55 @@
             if (noNotesMessage) {
                 noNotesMessage.remove();
             }
-            const newNoteDiv = document.createElement('div');
-            // Ensure classes match original structure for styling
-            newNoteDiv.className = 'flex space-x-3 opacity-0 transition-opacity duration-500';
-            newNoteDiv.innerHTML = data.note_html;
-            notesList.appendChild(newNoteDiv);
-             // Scroll to the bottom of the notes list
-             notesList.scrollTop = notesList.scrollHeight;
-            setTimeout(() => newNoteDiv.classList.remove('opacity-0'), 100); // Fade in
+
+            // Structured payload
+            const note = data.note;
+
+            // Build DOM for note
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex space-x-3 opacity-0 transition-opacity duration-500';
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'flex-shrink-0';
+            const avatarImg = document.createElement('img');
+            avatarImg.className = 'h-8 w-8 rounded-full';
+            // Placeholder avatar service with initial
+            avatarImg.src = `https://placehold.co/100x100/E2E8F0/4A5568?text=${note.author_initial}`;
+            avatarImg.alt = 'User Avatar';
+            avatarDiv.appendChild(avatarImg);
+
+            const contentDiv = document.createElement('div');
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'text-sm';
+            const authorLink = document.createElement('a');
+            authorLink.href = '#';
+            authorLink.className = 'font-medium text-text';
+            authorLink.textContent = note.author_name;
+            headerDiv.appendChild(authorLink);
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'mt-1 text-sm text-text-secondary';
+            const p = document.createElement('p');
+            p.textContent = note.text;
+            textDiv.appendChild(p);
+
+            const footerDiv = document.createElement('div');
+            footerDiv.className = 'mt-2 text-xs text-text-subtle';
+            const span = document.createElement('span');
+            span.textContent = note.date_posted_local || '';
+            footerDiv.appendChild(span);
+
+            contentDiv.appendChild(headerDiv);
+            contentDiv.appendChild(textDiv);
+            contentDiv.appendChild(footerDiv);
+
+            wrapper.appendChild(avatarDiv);
+            wrapper.appendChild(contentDiv);
+
+            notesList.appendChild(wrapper);
+            // Scroll to the bottom of the notes list
+            notesList.scrollTop = notesList.scrollHeight;
+            setTimeout(() => wrapper.classList.remove('opacity-0'), 100); // Fade in
         });
 
         // --- Keep UPDATED Note Form Submission ---

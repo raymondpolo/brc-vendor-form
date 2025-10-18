@@ -1,0 +1,16 @@
+<div class="flex space-x-3">
+    <div class="flex-shrink-0">
+        <img class="h-8 w-8 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ note.author.name[0]|upper }}" alt="User Avatar">
+    </div>
+    <div>
+        <div class="text-sm">
+            <a href="#" class="font-medium text-text">{{ note.author.name }}</a>
+        </div>
+        <div class="mt-1 text-sm text-text-secondary">
+            <p>{{ note.text }}</p>
+        </div>
+        <div class="mt-2 text-xs text-text-subtle">
+            <span>{{ note.date_posted | local_dt('%m/%d/%Y at %I:%M %p') }}</span>
+        </div>
+    </div>
+</div>
