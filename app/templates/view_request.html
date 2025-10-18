@@ -178,6 +178,7 @@
     </div>
 
     <div class="lg:col-span-1 space-y-6">
+        {# ... Keep Status Update and Assign Vendor sections ... #}
         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
         <div x-data="{
                 selectedStatus: '{{ work_order.status }}',
@@ -418,6 +419,7 @@
             </div>
         </div>
         {% endif %}
+        {# ... Keep Attachments and History sections ... #}
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-text mb-4">Attachments</h3>
             <ul class="space-y-2">
@@ -489,6 +491,7 @@
     </div>
 </div>
 
+{# ... Keep Modals (Email, FollowUp, Attachment) ... #}
 <div id="emailModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col">
         <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
@@ -620,10 +623,7 @@
     </div>
 </div>
 
-<div id="notificationToast" class="fixed bottom-5 right-5 p-4 rounded-lg text-white shadow-lg hidden transition-opacity duration-300">
-    <span id="notificationMessage"></span>
-</div>
-
+{# --- Keep Signature Div --- #}
 {% if current_user.is_authenticated and current_user.signature %}
 <div id="user-signature" class="hidden">{{ current_user.signature|safe }}</div>
 {% endif %}
@@ -676,9 +676,50 @@
         function hideAttachmentModal() { /* ... keep existing code ... */ }
         if (closeAttachmentModalBtn) { closeAttachmentModalBtn.addEventListener('click', hideAttachmentModal); }
 
-        // --- Keep TributeJS setup ---
-        var tribute = new Tribute({ /* ... keep existing code ... */ });
-        tribute.attach(document.getElementById('note-textarea'));
+        // +++ CORRECTED TributeJS Initialization +++
+        const noteTextareaElement = document.getElementById('note-textarea');
+        if (noteTextareaElement) {
+             var tribute = new Tribute({
+                // The `collection` configuration was missing
+                collection: [{
+                    // function that retrieves the data
+                    values: function(text, cb) {
+                        fetch('/api/users/search') // Your existing endpoint
+                            .then(response => response.json())
+                            .then(data => cb(data)) // Pass data to the callback
+                            .catch(error => cb([])); // Pass empty array on error
+                    },
+                    // function that returns what to insert once a match is selected
+                    selectTemplate: function(item) {
+                        if (typeof item === 'undefined') return null;
+                        // item.original contains the object from the values array
+                        // We defined 'key' and 'value' in the /api/users/search endpoint
+                        return `@${item.original.key} `; // Use key (full name with space)
+                    },
+                    // attribute to match characters in the `values` array
+                    lookup: 'value', // Match against the name without space
+                    // attribute to display in the menu
+                    fillAttr: 'key', // Display the full name with space
+                     // Allows names with spaces
+                    allowSpaces: true,
+                    // Template for displaying items in the menu
+                    menuItemTemplate: function(item) {
+                        // item.string is the value matched (key in this case)
+                        return item.string;
+                    },
+                    trigger: '@', // Character that triggers the menu
+                    noMatchTemplate: function () {
+                        return '<li class="no-match">No matches found</li>';
+                    }
+                }]
+            });
+            tribute.attach(noteTextareaElement); // Attach Tribute to the textarea
+            console.log("DEBUG JS: Tribute attached to note textarea."); // ADDED LOGGING
+        } else {
+             console.error("DEBUG JS: Could not find note textarea element for Tribute."); // ADDED LOGGING
+        }
+        // +++ END CORRECTION +++
+
 
         // --- Keep Socket.IO connection and event listeners ---
         const socket = io(); // Ensure socket is initialized
@@ -706,7 +747,7 @@
             setTimeout(() => newNoteDiv.classList.remove('opacity-0'), 100); // Fade in
         });
 
-        // --- UPDATED Note Form Submission ---
+        // --- Keep UPDATED Note Form Submission ---
         const noteForm = document.getElementById('note-form');
         if(noteForm) {
             noteForm.addEventListener('submit', (e) => {
