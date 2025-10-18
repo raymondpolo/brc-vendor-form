@@ -25,6 +25,12 @@ def _get_timezone():
         return pytz.timezone('America/Denver')
 
 
+# Backwards-compatible constant for code that imports DENVER_TZ directly.
+# This will evaluate to the timezone object for the configured app timezone
+# when the module is imported (if no app context, falls back to env or default).
+DENVER_TZ = _get_timezone()
+
+
 def get_denver_now():
     """Returns the current datetime localized to the application's timezone (default Denver)."""
     tz = _get_timezone()
