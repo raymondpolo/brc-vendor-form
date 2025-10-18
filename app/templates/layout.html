@@ -168,7 +168,22 @@
                     console.log('DEBUG SUB JS: Notification permission granted.');
                     // Fetch the VAPID public key from the server at runtime to avoid templating/quoting issues
                     fetch('/vapid_public_key', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-                        .then(resp => resp.json())
+                        .then(async resp => {
+                            const contentType = resp.headers.get('content-type') || '';
+                            const text = await resp.text();
+                            // If we got HTML back (e.g., a login page), log the raw response for debugging
+                            if (!contentType.includes('application/json')) {
+                                console.error('DEBUG SUB JS: /vapid_public_key returned non-JSON. Possible redirect to login. Response text starts with:', text.slice(0, 200));
+                                throw new Error('Non-JSON response from /vapid_public_key');
+                            }
+                            try {
+                                const data = JSON.parse(text || '{}');
+                                return data;
+                            } catch (e) {
+                                console.error('DEBUG SUB JS: Error parsing JSON from /vapid_public_key. Raw response:', text);
+                                throw e;
+                            }
+                        })
                         .then(data => {
                             if (data && data.success && data.vapidPublicKey) {
                                 subscribeUser(data.vapidPublicKey);

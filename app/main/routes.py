@@ -1617,7 +1617,6 @@ def subscribe():
 
 
 @main.route('/vapid_public_key', methods=['GET'])
-@login_required
 def vapid_public_key():
     """Return the VAPID public key as JSON so the client can fetch it at runtime.
 
@@ -1627,5 +1626,7 @@ def vapid_public_key():
     key = current_app.config.get('VAPID_PUBLIC_KEY')
     if not key:
         current_app.logger.warning('DEBUG SUB: VAPID_PUBLIC_KEY requested but not configured.')
+        # Return a consistent JSON error so clients don't get HTML login pages
         return jsonify({'success': False, 'message': 'VAPID public key not configured.'}), 500
+    current_app.logger.debug('DEBUG SUB: VAPID_PUBLIC_KEY served to client')
     return jsonify({'success': True, 'vapidPublicKey': key})
