@@ -72,6 +72,7 @@ def work_order_to_dict(req):
 
 def send_push_notification(user_id, title, body, link):
     print(f"Attempting to send push notification to user_id: {user_id}") # ADDED LOGGING
+    # It's crucial to get the app context correctly when running in threads or background tasks
     app = current_app._get_current_object()
     with app.app_context():
         user = User.query.get(user_id)
@@ -304,15 +305,20 @@ def view_request(request_id):
                 for name in tagged_names:
                     tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
                     if tagged_user:
+                        print(f"Found tagged user: {tagged_user.name} (ID: {tagged_user.id})") # ADDED LOGGING
                         if tagged_user not in work_order.viewers:
                             work_order.viewers.append(tagged_user)
                         if tagged_user != current_user:
                             notified_users.add(tagged_user)
-                db.session.commit()
+                    else:
+                        print(f"Could not find user for mention: @{name.strip()}") # ADDED LOGGING
+
+                db.session.commit() # Commit note and viewer changes first
 
                 broadcast_new_note(work_order.id, note)
 
                 for user in notified_users:
+                    print(f"Processing notification for user: {user.name} (ID: {user.id})") # ADDED LOGGING
                     notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
                     notification = Notification(
                         text=notification_text,
@@ -321,6 +327,14 @@ def view_request(request_id):
                     )
                     db.session.add(notification)
                     
+                    # ADDED LOGGING before push call
+                    print(f"--- Preparing to send push notification (inside loop) ---")
+                    print(f"Target User ID: {user.id}")
+                    print(f"Target User Name: {user.name}")
+                    print(f"Current App Context: {current_app.name}")
+                    print(f"VAPID Public Key Loaded: {'Yes' if current_app.config.get('VAPID_PUBLIC_KEY') else 'No'}")
+                    # --- END ADDED LOGGING ---
+
                     send_push_notification(
                         user.id,
                         'New Mention',
@@ -345,11 +359,12 @@ def view_request(request_id):
                             link=url_for('main.view_request', request_id=work_order.id, _external=True)
                         )
                     )
-                db.session.commit()
+                db.session.commit() # Commit notifications
                 return jsonify({'success': True})
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error posting note: {e}")
+                print(f"Exception during note processing: {e}") # ADDED LOGGING
                 return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
         else:
             return jsonify({'success': False, 'errors': note_form.errors}), 400
