@@ -135,11 +135,12 @@
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
                 // Incremented version to v=6
-                navigator.serviceWorker.register('/static/js/service-worker.js?v=6')
+                navigator.serviceWorker.register('/service-worker.js?v=6')
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                        // Ask for permission and subscribe
-                        askPermissionAndSubscribe();
+                        // Pass the registration to the permission/subscription flow so we can subscribe even
+                        // when the service worker's scope doesn't control the page.
+                        askPermissionAndSubscribe(registration);
                     })
                     .catch(err => {
                         console.log('ServiceWorker registration failed: ', err);
@@ -162,7 +163,7 @@
             return outputArray;
         }
 
-        function askPermissionAndSubscribe() {
+        function askPermissionAndSubscribe(registration) {
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
                     console.log('DEBUG SUB JS: Notification permission granted.');
@@ -186,7 +187,7 @@
                         })
                         .then(data => {
                             if (data && data.success && data.vapidPublicKey) {
-                                subscribeUser(data.vapidPublicKey);
+                                subscribeUser(registration, data.vapidPublicKey);
                             } else {
                                 console.error('DEBUG SUB JS: Could not retrieve VAPID public key from server', data);
                             }
@@ -198,7 +199,7 @@
             });
         }
 
-        function subscribeUser(vapidPublicKey) {
+        function subscribeUser(registration, vapidPublicKey) {
             console.log("DEBUG SUB JS: VAPID Public Key from server:", vapidPublicKey);
 
             if (!vapidPublicKey) {
@@ -215,58 +216,65 @@
                 return;
             }
             
-            console.log("DEBUG SUB JS: Waiting for navigator.serviceWorker.ready...");
-            
-            navigator.serviceWorker.ready.then(registration => {
-                
-                console.log("DEBUG SUB JS: ServiceWorker is ready. Calling pushManager.subscribe...");
-                
-                registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: applicationServerKey
-                })
-                .then(subscription => {
-                    console.log('DEBUG SUB JS: Browser push subscription successful:', subscription);
-                    console.log('DEBUG SUB JS: Sending subscription to /subscribe...');
-                    fetch('/subscribe', {
-                        method: 'POST',
-                        credentials: 'same-origin', // important: send cookies (session + CSRF linkage)
-                        body: JSON.stringify(subscription),
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                        }
+            // Prefer using the registration returned by navigator.serviceWorker.register()
+            // If that's not provided, fall back to navigator.serviceWorker.ready
+            const doSubscribe = (reg) => {
+                console.log("DEBUG SUB JS: Using ServiceWorkerRegistration to call pushManager.subscribe...");
+                try {
+                    console.log("DEBUG SUB JS: ServiceWorker is ready. Calling pushManager.subscribe...");
+                    reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey
                     })
-                    .then(async response => {
-                        console.log('DEBUG SUB JS: Received response from /subscribe:', response.status, response.url);
-                        const text = await response.text();
-                        // Try to parse JSON, otherwise log raw text for debugging
-                        try {
-                            const data = JSON.parse(text || '{}');
-                            if (response.ok) {
-                                if (data.success) console.log('DEBUG SUB JS: Server successfully saved subscription.');
-                                else console.error('DEBUG SUB JS: Server reported failure in saving subscription:', data);
-                                return data;
+                    .then(subscription => {
+                        console.log('DEBUG SUB JS: Browser push subscription successful:', subscription);
+                        console.log('DEBUG SUB JS: Sending subscription to /subscribe...');
+                        fetch('/subscribe', {
+                            method: 'POST',
+                            credentials: 'same-origin', // important: send cookies (session + CSRF linkage)
+                            body: JSON.stringify(subscription),
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                             }
-                            throw new Error(data.message || 'Failed to save subscription on server.');
-                        } catch (e) {
-                            console.error('DEBUG SUB JS: Could not parse JSON response from /subscribe. Raw response:', text);
-                            throw e;
-                        }
+                        })
+                        .then(async response => {
+                            console.log('DEBUG SUB JS: Received response from /subscribe:', response.status, response.url);
+                            const text = await response.text();
+                            // Try to parse JSON, otherwise log raw text for debugging
+                            try {
+                                const data = JSON.parse(text || '{}');
+                                if (response.ok) {
+                                    if (data.success) console.log('DEBUG SUB JS: Server successfully saved subscription.');
+                                    else console.error('DEBUG SUB JS: Server reported failure in saving subscription:', data);
+                                    return data;
+                                }
+                                throw new Error(data.message || 'Failed to save subscription on server.');
+                            } catch (e) {
+                                console.error('DEBUG SUB JS: Could not parse JSON response from /subscribe. Raw response:', text);
+                                throw e;
+                            }
+                        })
+                        .catch(err => {
+                            console.error('DEBUG SUB JS: Error sending subscription to /subscribe:', err);
+                        });
                     })
                     .catch(err => {
-                        console.error('DEBUG SUB JS: Error sending subscription to /subscribe:', err);
+                        // This is where the error is likely happening
+                        console.error('DEBUG SUB JS: Failed to subscribe the user with pushManager:', err);
                     });
-                })
-                .catch(err => {
-                    // This is where the error is likely happening
-                    console.error('DEBUG SUB JS: Failed to subscribe the user with pushManager:', err);
-                });
-            })
-            .catch(err => {
-                console.error('DEBUG SUB JS: navigator.serviceWorker.ready promise FAILED:', err);
-            });
+                } catch (e) {
+                    console.error('DEBUG SUB JS: Exception while calling pushManager.subscribe:', e);
+                }
+            };
+
+            if (registration) {
+                doSubscribe(registration);
+            } else {
+                console.log("DEBUG SUB JS: Waiting for navigator.serviceWorker.ready as fallback...");
+                navigator.serviceWorker.ready.then(reg => doSubscribe(reg)).catch(err => console.error('DEBUG SUB JS: navigator.serviceWorker.ready promise FAILED:', err));
+            }
         }
     </script>
 </body>
