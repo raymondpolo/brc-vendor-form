@@ -103,19 +103,29 @@
     </div>
 
     <script>
-        // Time Update Function
+        // Time Update Function (Modified for Denver Timezone and New Format)
         function updateTime() {
             const timeEl = document.getElementById('current-time');
             if (timeEl) {
                 const now = new Date();
-                timeEl.textContent = now.toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit'
-                });
+                // Options for Denver timezone and specific format
+                const options = {
+                    timeZone: 'America/Denver', // Set timezone to Denver
+                    weekday: 'long',    // "Saturday"
+                    year: 'numeric',    // "2025"
+                    month: 'long',     // "October"
+                    day: 'numeric',     // "18"
+                    hour: '2-digit',    // "hh"
+                    minute: '2-digit',  // "mm"
+                    second: '2-digit',  // "ss"
+                    hour12: true       // Use AM/PM, adjust if 24hr needed
+                };
+                // Format the date and time string
+                timeEl.textContent = now.toLocaleString('en-US', options);
             }
         }
-        setInterval(updateTime, 1000);
-        updateTime();
+        setInterval(updateTime, 1000); // Update every second
+        updateTime(); // Initial call to display time immediately
 
         // Socket.IO Connection
         document.addEventListener('DOMContentLoaded', function () {

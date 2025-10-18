@@ -57,7 +57,7 @@ def work_order_to_dict(req):
     """Helper function to convert a WorkOrder object to a dictionary."""
     return {
         'id': req.id,
-        'date_created': req.date_created.strftime('%Y-%m-%d'),
+        'date_created': req.date_created.strftime('%m/%d/%Y'),
         'wo_number': req.wo_number,
         'requester_name': req.requester_name,
         'property': req.property,
@@ -1258,8 +1258,8 @@ def download_all_work_orders():
     for wo in work_orders:
         csv_writer.writerow([
             wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor.company_name if wo.vendor else '',
-            wo.date_created.strftime('%Y-%m-%d %H:%M'),
-            wo.date_completed.strftime('%Y-%m-%d %H:%M') if wo.date_completed else '',
+            wo.date_created.strftime('%m/%d/%Y %H:%M'), # Changed date format
+            wo.date_completed.strftime('%m/%d/%Y %H:%M') if wo.date_completed else '', # Changed date format
             wo.requester_name, wo.request_type_relation.name, wo.property, wo.unit,
             wo.address, wo.description
         ])
@@ -1348,7 +1348,7 @@ def api_events():
     for event in events:
         event_list.append({
             'title': f"#{event.id} - {event.property}",
-            'start': event.scheduled_date.strftime('%Y-%m-%d'),
+            'start': event.scheduled_date.strftime('%m/%d/%Y'), # Changed format
             'url': url_for('main.view_request', request_id=event.id),
             'color': status_colors.get(event.status, '#6B7280'), # Default to gray
             'extendedProps': {
@@ -1366,7 +1366,7 @@ def api_events():
     for event in follow_up_events:
         event_list.append({
             'title': f"Follow-up for #{event.id}",
-            'start': event.follow_up_date.strftime('%Y-%m-%d'),
+            'start': event.follow_up_date.strftime('%m/%d/%Y'), # Changed format
             'url': url_for('main.view_request', request_id=event.id),
             'color': status_colors.get('Follow-up'),
             'extendedProps': {
