@@ -135,7 +135,7 @@
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
                 // Add versioning to force update
-                navigator.serviceWorker.register('/static/js/service-worker.js?v=3') // Incremented version
+                navigator.serviceWorker.register('/static/js/service-worker.js?v=4') // Incremented version
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                         // Ask for permission and subscribe
@@ -174,7 +174,6 @@
         }
 
         function subscribeUser() {
-            // +++ ADDED LOGGING to check the key +++
             const vapidPublicKey = '{{ config.VAPID_PUBLIC_KEY }}';
             console.log("DEBUG SUB JS: VAPID Public Key from template:", vapidPublicKey);
 
@@ -182,9 +181,28 @@
                 console.error("DEBUG SUB JS: VAPID_PUBLIC_KEY is EMPTY. Cannot subscribe. Check environment variables and template rendering.");
                 return;
             }
-            // +++ END LOGGING +++
 
-            const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+            let applicationServerKey;
+            try {
+                // +++ ADDED try...catch block +++
+                applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+                console.log("DEBUG SUB JS: VAPID key successfully converted to Uint8Array.");
+            } catch (e) {
+                console.error("DEBUG SUB JS: ERROR converting VAPID key:", e);
+                // This is the error from the Chrome Console: "A listener indicated..."
+                // It's often related to an invalid character, like a stray newline or space.
+                // Let's try trimming the key just in case.
+                try {
+                    console.log("DEBUG SUB JS: Retrying conversion with trimmed key...");
+                    applicationServerKey = urlBase64ToUint8Array(vapidPublicKey.trim());
+                    console.log("DEBUG SUB JS: Trimmed key conversion successful.");
+                } catch (e2) {
+                    console.error("DEBUG SUB JS: ERROR converting trimmed VAPID key:", e2);
+                    return; // Stop if conversion fails
+                }
+            }
+            // +++ END +++
+            
             navigator.serviceWorker.ready.then(registration => {
                 registration.pushManager.subscribe({
                     userVisibleOnly: true,
