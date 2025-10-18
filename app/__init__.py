@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask
 from config import Config
 from app.extensions import db, login_manager, migrate, csrf, socketio
+from app.utils import DENVER_TZ, convert_to_denver # Import Denver timezone and converter
 
 def create_app(config_class=Config):
     """
@@ -19,11 +20,11 @@ def create_app(config_class=Config):
         handler = logging.StreamHandler(os.sys.stdout)
         handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s [in %(pathname)s:%(lineno)d]'))
-        
+
         # Set the log level
         log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
         app.logger.setLevel(log_level)
-        
+
         app.logger.addHandler(handler)
         app.logger.info('Flask application starting up...') # Test log
     # --- END LOGGING CONFIG ---
@@ -50,24 +51,29 @@ def create_app(config_class=Config):
 
     from app.main import main as main_blueprint
     app.register_blueprint(main_blueprint)
-    
+
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
+
+    # --- ADD JINJA FILTER ---
+    def format_datetime_denver(value, format="%m/%d/%Y %I:%M %p"):
+        """Format a datetime object for display, converting to Denver time if necessary."""
+        if value is None:
+            return ""
+        # Convert to Denver timezone using the utility function
+        denver_time = convert_to_denver(value)
+        return denver_time.strftime(format)
+
+    app.jinja_env.filters['format_denver'] = format_datetime_denver
+    # --- END JINJA FILTER ---
+
 
     # Import models to ensure they are registered with SQLAlchemy
     from app import models
 
     # Register context processors
-    @app.context_processor
-    def inject_notifications():
-        from flask_login import current_user
-        from app.models import Notification
-        if current_user.is_authenticated:
-            unread_notifications = Notification.query.filter_by(
-                user_id=current_user.id, is_read=False
-            ).order_by(Notification.timestamp.desc()).all()
-            return dict(unread_notifications=unread_notifications)
-        return dict(unread_notifications=[])
+    # Note: The context_processor for notifications is already registered in main/context_processors.py
+    # and injected via the main blueprint, so we don't need the simplified version here anymore.
 
     with app.app_context():
         # Create a default superuser if one doesn't exist

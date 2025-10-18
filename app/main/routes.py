@@ -30,6 +30,7 @@ from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
 from app.events import broadcast_new_note
+from app.utils import get_denver_now, convert_to_denver, DENVER_TZ, make_denver_aware_start_of_day, make_denver_aware_end_of_day # Import helpers
 
 
 def get_requester_initials(name):
@@ -55,9 +56,11 @@ def save_attachment(file, work_order_id, file_type='Attachment'):
 
 def work_order_to_dict(req):
     """Helper function to convert a WorkOrder object to a dictionary."""
+    # Convert date_created to Denver time before formatting if needed
+    denver_created_date = convert_to_denver(req.date_created)
     return {
         'id': req.id,
-        'date_created': req.date_created.strftime('%m/%d/%Y'),
+        'date_created': denver_created_date.strftime('%m/%d/%Y') if denver_created_date else '', # Changed format
         'wo_number': req.wo_number,
         'requester_name': req.requester_name,
         'property': req.property,
@@ -404,6 +407,7 @@ def post_note(request_id):
         try:
             note_text = note_form.text.data
             current_app.logger.info(f"DEBUG NOTE: Note text extracted: '{note_text}'")
+            # Note timestamp defaults to Denver time
             note = Note(text=note_text, author=current_user, work_order=work_order)
             db.session.add(note)
             current_app.logger.info("DEBUG NOTE: Note object created and added to session.")
@@ -446,6 +450,7 @@ def post_note(request_id):
             for user in notified_users:
                 current_app.logger.info(f"DEBUG NOTE: Processing PUSH/EMAIL for user: {user.name} (ID: {user.id})")
                 notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
+                # Notification timestamp defaults to Denver time
                 notification = Notification(
                     text=notification_text,
                     link=url_for('main.view_request', request_id=work_order.id),
@@ -508,7 +513,7 @@ def mark_as_completed(request_id):
     form = MarkAsCompletedForm()
     if form.validate_on_submit():
         work_order.status = 'Completed'
-        work_order.date_completed = datetime.utcnow()
+        work_order.date_completed = get_denver_now() # <-- Use Denver time
         db.session.add(AuditLog(text='Request marked as completed.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash('Request has been marked as completed.', 'success')
@@ -531,7 +536,7 @@ def send_follow_up(request_id):
 
         recipients = [recipient]
         cc_list = [email.strip() for email in cc.split(',')] if cc else []
-        
+
         html_body = f"<p>{body.replace(chr(10), '<br>')}</p>"
 
         send_notification_email(
@@ -541,7 +546,7 @@ def send_follow_up(request_id):
             html_body=html_body,
             text_body=body
         )
-
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text=f"Follow-up email sent to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
 
@@ -560,7 +565,8 @@ def delete_request(request_id):
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
         work_order.is_deleted = True
-        work_order.deleted_at = datetime.utcnow()
+        work_order.deleted_at = get_denver_now() # <-- Use Denver time
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text='Request soft-deleted.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash(f'Request #{work_order.id} has been deleted. It can be restored.', 'success')
@@ -579,6 +585,7 @@ def restore_request(request_id):
     if form.validate_on_submit():
         work_order.is_deleted = False
         work_order.deleted_at = None
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text='Request restored.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash(f'Request #{work_order.id} has been restored.', 'success')
@@ -594,6 +601,7 @@ def permanently_delete_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     form = DeleteRestoreRequestForm()
     if form.validate_on_submit():
+        # Related items (notes, logs, attachments, etc.) should cascade delete based on model setup
         db.session.delete(work_order)
         db.session.commit()
         flash(f'Request #{work_order.id} has been permanently deleted.', 'success')
@@ -634,31 +642,50 @@ def change_status(request_id):
 
         old_status = work_order.status
         if old_status == new_status:
-            return redirect(url_for('main.view_request', request_id=request_id))
+            # Still update scheduled date if provided and status is Scheduled
+            if new_status == 'Scheduled' and form.scheduled_date.data:
+                try:
+                    new_scheduled_date = datetime.strptime(form.scheduled_date.data, '%m/%d/%Y').date()
+                    if work_order.scheduled_date != new_scheduled_date:
+                        work_order.scheduled_date = new_scheduled_date
+                        log_text = f'Scheduled date updated to {work_order.scheduled_date.strftime("%m/%d/%Y")}.'
+                        db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
+                        db.session.commit()
+                        flash('Scheduled date updated.', 'success')
+                    else:
+                         return redirect(url_for('main.view_request', request_id=request_id)) # No change needed
+                except ValueError:
+                    flash('Invalid date format for scheduled date.', 'danger')
+            return redirect(url_for('main.view_request', request_id=request_id)) # No status change
 
         work_order.status = new_status
         log_text = f'Changed status from {old_status} to {new_status}.'
 
         if new_status == 'Scheduled':
+            # Store scheduled_date as Date object (no timezone)
             work_order.scheduled_date = datetime.strptime(form.scheduled_date.data, '%m/%d/%Y').date()
-            log_text += f' for {work_order.scheduled_date.strftime("%Y-%m-%d")}'
+            log_text += f' for {work_order.scheduled_date.strftime("%m/%d/%Y")}' # Format date
         else:
             work_order.scheduled_date = None
 
         current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
         if new_status == 'Closed':
             current_tags.add('Completed')
-            work_order.date_completed = datetime.utcnow()
+            work_order.date_completed = get_denver_now() # <-- Use Denver time
             log_text += " and tagged as 'Completed'."
 
         if old_status == 'Closed' and new_status != 'Closed':
             current_tags.discard('Completed')
+            # Optionally clear date_completed if reopening? Decide based on workflow.
+            # work_order.date_completed = None
 
         work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
 
         if work_order.author and work_order.author != current_user:
             notification_text = f'Status for Request #{work_order.id} changed to {new_status}.'
+            # Notification timestamp defaults to Denver time
             notification = Notification(
                 text=notification_text,
                 link=url_for('main.view_request', request_id=work_order.id),
@@ -691,6 +718,7 @@ def change_status(request_id):
             manager = User.query.filter_by(name=work_order.property_manager, role='Property Manager').first()
             if manager:
                 notification_text = f'A quote has been sent for Request #{work_order.id} at {work_order.property}.'
+                 # Notification timestamp defaults to Denver time
                 manager_notification = Notification(
                     text=notification_text,
                     link=url_for('main.view_request', request_id=work_order.id),
@@ -720,6 +748,8 @@ def change_status(request_id):
         db.session.commit()
         flash(f'Status updated to {new_status}.', 'success')
     else:
+        # Log form errors for debugging
+        current_app.logger.warning(f"ChangeStatusForm validation failed: {form.errors}")
         flash('Could not update status. Please check the form for errors.', 'danger')
 
     return redirect(url_for('main.view_request', request_id=request_id))
@@ -743,6 +773,7 @@ def quote_action(request_id, quote_id, action):
         quote.status = 'Approved'
         current_tags.add('Approved')
         current_tags.discard('Declined')
+        # AuditLog timestamp defaults to Denver time
         log_text = f"Quote from {quote.vendor.company_name} approved."
         flash_text = f"Quote from {quote.vendor.company_name} has been approved."
     elif action == 'decline':
@@ -750,20 +781,22 @@ def quote_action(request_id, quote_id, action):
         if not any(q.status == 'Approved' for q in work_order.quotes if q.id != quote.id):
             current_tags.discard('Approved')
             current_tags.add('Declined')
+         # AuditLog timestamp defaults to Denver time
         log_text = f"Quote from {quote.vendor.company_name} declined."
         flash_text = f"Quote from {quote.vendor.company_name} has been declined."
     elif action == 'clear':
         quote.status = 'Pending'
         if not any(q.status == 'Approved' for q in work_order.quotes if q.id != quote.id):
             current_tags.discard('Approved')
-        if not any(q.status == 'Declined' for q in work_order.quotes):
+        if not any(q.status == 'Declined' for q in work_order.quotes): # Changed logic slightly: Remove 'Declined' only if NO quotes are declined
             current_tags.discard('Declined')
+        # AuditLog timestamp defaults to Denver time
         log_text = f"Status for quote from {quote.vendor.company_name} cleared."
         flash_text = f"Status for quote from {quote.vendor.company_name} has been cleared."
     else:
         return redirect(url_for('main.view_request', request_id=request_id))
 
-    work_order.tag = ','.join(sorted(list(filter(None, current_tags))))
+    work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None # Ensure empty string isn't saved
     db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()
     flash(flash_text, 'success')
@@ -778,13 +811,14 @@ def tag_request(request_id):
     can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
     can_super_user = current_user.role == 'Super User'
 
-    can_remove_any_tag = current_user.role in ['Property Manager', 'Super User']
+    can_remove_any_tag = current_user.role in ['Property Manager', 'Super User'] # Simplified permission
 
     if request.form.get('action') == 'remove_tag':
-        remove_form = DeleteRestoreRequestForm()
+        remove_form = DeleteRestoreRequestForm() # Using for CSRF
         if remove_form.validate_on_submit():
             tag_to_remove = request.form.get('tag_to_remove')
 
+            # Check permissions specifically for Approved/Declined
             if tag_to_remove in ['Approved', 'Declined'] and not (can_pm or can_super_user):
                 flash(f"You do not have permission to remove the '{tag_to_remove}' tag.", 'danger')
                 return redirect(url_for('main.view_request', request_id=request_id))
@@ -792,7 +826,12 @@ def tag_request(request_id):
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
             if tag_to_remove in current_tags:
                 current_tags.remove(tag_to_remove)
-                work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+                # If removing 'Follow-up needed', clear the date
+                if tag_to_remove == 'Follow-up needed':
+                    work_order.follow_up_date = None
+
+                work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None # Ensure empty string isn't saved
+                # AuditLog timestamp defaults to Denver time
                 db.session.add(AuditLog(text=f"Tag '{tag_to_remove}' removed.", user_id=current_user.id, work_order_id=work_order.id))
                 db.session.commit()
                 flash(f"Tag '{tag_to_remove}' has been removed.", 'info')
@@ -800,12 +839,15 @@ def tag_request(request_id):
             flash('Could not remove tag due to a security error.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
+    # Filter choices based on role for adding tags
     if current_user.role in ['Admin', 'Scheduler']:
         form.tag.choices = [c for c in form.tag.choices if c[0] not in ['Approved', 'Declined']]
+    # Property Managers and Super Users see all choices
 
     if form.validate_on_submit():
         tag_to_add = form.tag.data
 
+        # Permission check already happened for choice filtering, but double-check critical tags
         if tag_to_add in ['Approved', 'Declined'] and not (can_pm or can_super_user):
             flash('You do not have permission to approve or decline requests.', 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
@@ -817,8 +859,14 @@ def tag_request(request_id):
             if not follow_up_date_str:
                 flash('A follow-up date is required when adding the "Follow-up needed" tag.', 'danger')
                 return redirect(url_for('main.view_request', request_id=request_id))
-            work_order.follow_up_date = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
+            try:
+                 # follow_up_date is Date type, no timezone
+                work_order.follow_up_date = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
+            except ValueError:
+                 flash('Invalid date format for follow-up date.', 'danger')
+                 return redirect(url_for('main.view_request', request_id=request_id))
 
+        # Handle conflicting tags
         if tag_to_add == 'Approved':
             current_tags.discard('Declined')
         elif tag_to_add == 'Declined':
@@ -827,11 +875,19 @@ def tag_request(request_id):
         if tag_to_add not in current_tags:
             current_tags.add(tag_to_add)
             work_order.tag = ','.join(sorted(list(filter(None, current_tags))))
+             # AuditLog timestamp defaults to Denver time
             db.session.add(AuditLog(text=f"Request tagged as '{tag_to_add}'.", user_id=current_user.id, work_order_id=work_order.id))
             db.session.commit()
             flash(f"Request has been tagged as '{tag_to_add}'.", 'success')
         else:
-            flash(f"Request is already tagged as '{tag_to_add}'.", 'info')
+            # If tag exists but date needs updating (Follow-up)
+            if tag_to_add == 'Follow-up needed' and work_order.follow_up_date != datetime.strptime(form.follow_up_date.data, '%m/%d/%Y').date():
+                 work_order.follow_up_date = datetime.strptime(form.follow_up_date.data, '%m/%d/%Y').date()
+                 db.session.add(AuditLog(text=f"Follow-up date updated for tag '{tag_to_add}'.", user_id=current_user.id, work_order_id=work_order.id))
+                 db.session.commit()
+                 flash(f"Follow-up date for tag '{tag_to_add}' updated.", 'success')
+            else:
+                 flash(f"Request is already tagged as '{tag_to_add}'.", 'info')
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -845,14 +901,22 @@ def cancel_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
-    if not (is_author or is_property_manager):
+    # Allow Admin/Scheduler/SuperUser to cancel too
+    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+
+    if not (is_author or is_property_manager or is_admin_staff):
         abort(403)
     if work_order.status in ['Closed', 'Cancelled']:
-        flash('This request cannot be cancelled as it is already closed.', 'warning')
+        flash('This request cannot be cancelled as it is already closed or cancelled.', 'warning')
         return redirect(url_for('main.view_request', request_id=request_id))
+
     work_order.status = 'Cancelled'
-    work_order.tag = None
+    work_order.tag = None # Clear tags on cancellation
+    work_order.scheduled_date = None # Clear scheduled date
+    work_order.follow_up_date = None # Clear follow-up date
+
     log_text = f'Request cancelled by {current_user.name} ({current_user.role})'
+     # AuditLog timestamp defaults to Denver time
     db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()
     flash('The request has been successfully cancelled.', 'success')
@@ -875,6 +939,7 @@ def assign_vendor(request_id):
         return redirect(url_for('main.view_request', request_id=request_id))
 
     work_order.vendor_id = vendor.id
+     # AuditLog timestamp defaults to Denver time
     db.session.add(AuditLog(text=f"Vendor '{vendor.company_name}' assigned.", user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()
     flash(f"Vendor '{vendor.company_name}' has been assigned to this request.", 'success')
@@ -885,14 +950,19 @@ def assign_vendor(request_id):
 @admin_required
 def unassign_vendor(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    if work_order.vendor:
-        vendor_name = work_order.vendor.company_name
-        work_order.vendor_id = None
-        db.session.add(AuditLog(text=f"Vendor '{vendor_name}' unassigned.", user_id=current_user.id, work_order_id=work_order.id))
-        db.session.commit()
-        flash(f"Vendor '{vendor_name}' has been unassigned.", 'success')
+    form = AssignVendorForm() # Use for CSRF validation
+    if form.validate_on_submit(): # Check CSRF token
+        if work_order.vendor:
+            vendor_name = work_order.vendor.company_name
+            work_order.vendor_id = None
+            # AuditLog timestamp defaults to Denver time
+            db.session.add(AuditLog(text=f"Vendor '{vendor_name}' unassigned.", user_id=current_user.id, work_order_id=work_order.id))
+            db.session.commit()
+            flash(f"Vendor '{vendor_name}' has been unassigned.", 'success')
+        else:
+            flash('No vendor was assigned to this request.', 'info')
     else:
-        flash('No vendor was assigned to this request.', 'info')
+        flash('Invalid request to unassign vendor.', 'danger')
     return redirect(url_for('main.view_request', request_id=request_id))
 
 @main.route('/notifications/read/<int:notification_id>')
@@ -908,17 +978,20 @@ def mark_notification_read(notification_id):
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required
 def new_request():
-    properties = Property.query.all()
+    properties = Property.query.order_by(Property.name).all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
+
     if form.validate_on_submit():
+        # Date fields are Date type, no timezone
         date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         date2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         date3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
 
         selected_property = Property.query.filter_by(name=form.property.data).first()
 
+        # WorkOrder creation, date_created defaults to Denver time via model
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
             request_type_id=form.request_type.data, description=form.description.data,
@@ -930,32 +1003,39 @@ def new_request():
             preferred_vendor=form.vendor_assigned.data
             )
 
+        # Assign property details based on selection or lookup
         if selected_property:
             new_order.property_id = selected_property.id
             new_order.address = selected_property.address
             new_order.property_manager = selected_property.property_manager
         else:
-            new_order.address = properties_dict.get(form.property.data, {}).get('address', '')
-            new_order.property_manager = properties_dict.get(form.property.data, {}).get('manager', '')
+            # Fallback for properties perhaps not yet in the DB but known via properties_dict (less likely now)
+            new_order.address = properties_dict.get(form.property.data, {}).get('address', request.form.get('address', '')) # Get address from hidden input if needed
+            new_order.property_manager = properties_dict.get(form.property.data, {}).get('manager', request.form.get('property_manager', '')) # Get manager from hidden input
 
+        # Assign preferred vendor if found
         if form.vendor_assigned.data:
             vendor = Vendor.query.filter(Vendor.company_name.ilike(form.vendor_assigned.data)).first()
             if vendor:
                 new_order.vendor_id = vendor.id
 
         db.session.add(new_order)
-        db.session.commit()
+        db.session.commit() # Commit to get new_order.id
 
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text='Request created.', user_id=current_user.id, work_order_id=new_order.id))
-        db.session.commit()
+        db.session.commit() # Commit log
 
+        # Save attachments
         for file in form.attachments.data:
             save_attachment(file, new_order.id)
 
+        # Send notifications
         admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
         for user in admins_and_schedulers:
             if user != current_user:
                 notification_text = f'New request #{new_order.id} submitted by {current_user.name}.'
+                # Notification timestamp defaults to Denver time
                 notification = Notification(
                     text=notification_text,
                     link=url_for('main.view_request', request_id=new_order.id),
@@ -968,12 +1048,17 @@ def new_request():
                     notification_text,
                     url_for('main.view_request', request_id=new_order.id, _external=True)
                 )
-        db.session.commit()
+        db.session.commit() # Commit notifications
         flash('Your request has been created!', 'success')
         return redirect(url_for('main.my_requests'))
 
     elif request.method == 'POST':
-        current_app.logger.error(f"--- FORM VALIDATION FAILED --- Errors: {form.errors}")
+        current_app.logger.error(f"--- NEW REQUEST FORM VALIDATION FAILED --- Errors: {form.errors}")
+        # Add flash messages for specific errors if helpful
+        for field, errors in form.errors.items():
+             for error in errors:
+                  flash(f"Error in {getattr(form, field).label.text}: {error}", 'danger')
+
 
     return render_template('request_form.html', title='New Request', form=form,
         properties=properties, property_data=json.dumps(properties_dict))
@@ -989,23 +1074,25 @@ def edit_request(request_id):
         flash('You do not have permission to edit this request.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
-    if is_author and work_order.status in ['Closed', 'Cancelled']:
-        flash('This request cannot be edited because it is already closed.', 'warning')
+    # Prevent editing closed/cancelled requests unless admin/super user
+    if work_order.status in ['Closed', 'Cancelled'] and not current_user.role in ['Admin', 'Super User']:
+        flash('This request cannot be edited because it is already closed or cancelled.', 'warning')
         return redirect(url_for('main.view_request', request_id=work_order.id))
 
-    properties = Property.query.all()
+    properties = Property.query.order_by(Property.name).all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
-    form = NewRequestForm(obj=work_order)
+    form = NewRequestForm(obj=work_order) # Populate form from object
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     reassign_form = ReassignRequestForm()
 
-    del form.attachments
+    del form.attachments # Remove attachments field from main edit form
 
     if form.validate_on_submit():
+        # Update fields from form data
         work_order.wo_number = form.wo_number.data
         work_order.request_type_id = form.request_type.data
         work_order.description = form.description.data
-        work_order.property = form.property.data
+        work_order.property = form.property.data # Property name string
         work_order.unit = form.unit.data
         work_order.tenant_name = form.tenant_name.data
         work_order.tenant_phone = form.tenant_phone.data
@@ -1013,33 +1100,53 @@ def edit_request(request_id):
         work_order.contact_person_phone = form.contact_person_phone.data
         work_order.preferred_vendor = form.vendor_assigned.data
 
+        # Date fields are Date type, no timezone
         work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
 
+        # Update property relation and details based on selected property name
         selected_property = Property.query.filter_by(name=form.property.data).first()
         if selected_property:
             work_order.property_id = selected_property.id
             work_order.address = selected_property.address
             work_order.property_manager = selected_property.property_manager
         else:
+            # If property name doesn't match DB entry, clear relation and use submitted/looked up details
             work_order.property_id = None
+            # Get address/manager potentially from hidden fields populated by JS
+            work_order.address = request.form.get('address', properties_dict.get(form.property.data, {}).get('address', ''))
+            work_order.property_manager = request.form.get('property_manager', properties_dict.get(form.property.data, {}).get('manager', ''))
 
-        if 'attachments' in request.files:
-            for file in request.files.getlist('attachments'):
-                if file.filename:
-                    save_attachment(file, work_order.id)
 
+        # Note: Attachments are handled separately via upload_attachment route
+
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text='Edited request details.', user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash('Request has been updated.', 'success')
         return redirect(url_for('main.view_request', request_id=work_order.id))
 
     elif request.method == 'POST':
+        # Log validation errors if POST fails
         current_app.logger.error(f"--- EDIT FORM VALIDATION FAILED --- Errors: {form.errors}")
+        for field, errors in form.errors.items():
+             for error in errors:
+                  flash(f"Error in {getattr(form, field).label.text}: {error}", 'danger')
 
+
+    # Populate form with existing data on GET request
     if request.method == 'GET':
+        form.wo_number.data = work_order.wo_number
         form.request_type.data = work_order.request_type_id
+        form.description.data = work_order.description
+        form.property.data = work_order.property
+        form.unit.data = work_order.unit
+        form.tenant_name.data = work_order.tenant_name
+        form.tenant_phone.data = work_order.tenant_phone
+        form.contact_person.data = work_order.contact_person
+        form.contact_person_phone.data = work_order.contact_person_phone
+        form.vendor_assigned.data = work_order.preferred_vendor
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
@@ -1047,29 +1154,42 @@ def edit_request(request_id):
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
                            properties=properties, property_data=json.dumps(properties_dict), reassign_form=reassign_form)
 
+
 @main.route('/upload_attachment/<int:request_id>', methods=['POST'])
 @login_required
 def upload_attachment(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    form = AttachmentForm()
+    form = AttachmentForm() # AttachmentForm uses MultipleFileField named 'file'
     if form.validate_on_submit():
-        for file in form.file.data:
+        files_uploaded_count = 0
+        for file in form.file.data: # Access data attribute
             if file and file.filename:
-                file_type = request.form.get('file_type', 'Attachment')
+                file_type = request.form.get('file_type', 'Attachment') # Check for optional file_type if needed elsewhere
                 attachment_obj = save_attachment(file, request_id, file_type)
 
                 if attachment_obj:
+                    # AuditLog timestamp defaults to Denver time
                     db.session.add(AuditLog(text=f'Uploaded {file_type}: {secure_filename(file.filename)}', user_id=current_user.id, work_order_id=work_order.id))
-                    flash(f'{file_type} "{secure_filename(file.filename)}" uploaded successfully.', 'success')
+                    files_uploaded_count += 1
                 else:
-                    flash('There was an error uploading one of the files.', 'danger')
-            else:
-                flash('No file selected or file was empty.', 'danger')
-        db.session.commit()
-    else:
-        flash('File upload failed validation.', 'danger')
-    return redirect(url_for('main.view_request', request_id=request_id))
+                    # Log error if save_attachment failed for some reason
+                    current_app.logger.error(f"Failed to save attachment object for file: {secure_filename(file.filename)}")
+            # else: file might be empty if user selected multiple but one was blank
 
+        if files_uploaded_count > 0:
+             db.session.commit()
+             flash(f'{files_uploaded_count} attachment(s) uploaded successfully.', 'success')
+        else:
+             flash('No valid files were selected or uploaded.', 'warning')
+
+    else:
+        # Log form validation errors
+        current_app.logger.warning(f"AttachmentForm validation failed: {form.errors}")
+        for field, errors in form.errors.items():
+            for error_message in errors:
+                flash(f"Attachment Error: {error_message}", 'danger')
+
+    return redirect(url_for('main.view_request', request_id=request_id))
 
 @main.route('/download_attachment/<int:attachment_id>')
 @login_required
@@ -1079,6 +1199,7 @@ def download_attachment(attachment_id):
     if not work_order:
          abort(404)
 
+    # Permission check (allow author, viewers, PM, admin staff)
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -1087,7 +1208,12 @@ def download_attachment(attachment_id):
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
 
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=True)
+    # Make sure the filename in the header is safe
+    safe_display_name = secure_filename(attachment.filename) # Use the stored unique name initially
+    # You might want to store the original filename too if you want to offer that for download
+    # For now, we use the unique ID name
+
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=True, download_name=safe_display_name)
 
 @main.route('/view_attachment/<int:attachment_id>')
 @login_required
@@ -1097,6 +1223,7 @@ def view_attachment(attachment_id):
     if not work_order:
         abort(404)
 
+    # Permission check (allow author, viewers, PM, admin staff)
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -1105,24 +1232,50 @@ def view_attachment(attachment_id):
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
 
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
+    # Determine mimetype
+    mimetype, _ = mimetypes.guess_type(attachment.filename)
+    if not mimetype: # Provide a default if guess fails
+        mimetype = 'application/octet-stream'
+
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False, mimetype=mimetype)
 
 
 @main.route('/delete_attachment/<int:attachment_id>', methods=['POST'])
 @login_required
 def delete_attachment(attachment_id):
     attachment = Attachment.query.get_or_404(attachment_id)
+    # Allow uploader or Admin/Super User to delete
     if attachment.user_id != current_user.id and current_user.role not in ['Admin', 'Super User']:
         abort(403)
-    try:
-        os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
-    except OSError:
-        pass
-    db.session.add(AuditLog(text=f'Deleted attachment: {attachment.filename}', user_id=current_user.id, work_order_id=attachment.work_order_id))
-    db.session.delete(attachment)
-    db.session.commit()
-    flash('Attachment deleted.', 'success')
-    return redirect(url_for('main.view_request', request_id=attachment.work_order_id))
+
+    form = DeleteRestoreRequestForm() # Use for CSRF validation
+    if form.validate_on_submit():
+        original_filename = attachment.filename # Keep for logging
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename)
+        work_order_id = attachment.work_order_id # Keep for redirect and logging
+
+        try:
+            # Delete physical file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            else:
+                 current_app.logger.warning(f"File not found for deletion: {file_path}")
+
+            # AuditLog timestamp defaults to Denver time
+            db.session.add(AuditLog(text=f'Deleted attachment: {original_filename}', user_id=current_user.id, work_order_id=work_order_id))
+            # Delete DB record
+            db.session.delete(attachment)
+            db.session.commit()
+            flash('Attachment deleted.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error deleting attachment {attachment_id}: {e}", exc_info=True)
+            flash('Error deleting attachment.', 'danger')
+    else:
+        flash('Invalid request to delete attachment.', 'danger')
+
+    return redirect(url_for('main.view_request', request_id=work_order_id))
+
 
 @main.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -1135,6 +1288,7 @@ def account():
         current_user.email = update_form.email.data
 
         if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager']:
+            # ... (keep signature cleaning and embedding logic) ...
             allowed_tags = [
                 'a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 'strong',
                 'li', 'ol', 'ul', 'br', 'p', 'img', 'span', 'div', 'font',
@@ -1147,46 +1301,67 @@ def account():
                 'font': ['color', 'face', 'size']
             }
 
-            signature_html = request.form.get('signature')
+            signature_html = request.form.get('signature', '') # Default to empty string
 
             def embed_local_images(html_content):
-                upload_folder = current_app.config['UPLOAD_FOLDER']
-                img_tags = re.findall(r'<img[^>]+src=[\'"](https?://[^/]+/uploads/([^\'"]+))[\'"]', html_content)
+                # ... (embedding logic remains the same) ...
+                 upload_folder = current_app.config['UPLOAD_FOLDER']
+                 # Regex to find image URLs pointing back to our own /uploads/ endpoint
+                 # It captures the full URL and the filename part after /uploads/
+                 img_tags = re.findall(r'<img[^>]+src=[\'"](https?://[^/]+/uploads/([^\'"]+))[\'"]', html_content)
 
-                for full_url, filename_with_params in img_tags:
-                    filepath = os.path.join(upload_folder, filename_with_params.split('?')[0])
+                 for full_url, filename_part in img_tags:
+                      # Remove potential query parameters like ?v=timestamp from the filename
+                      filename = filename_part.split('?')[0]
+                      filepath = os.path.join(upload_folder, filename)
 
-                    if os.path.exists(filepath):
-                        try:
-                            with open(filepath, "rb") as image_file:
-                                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                      if os.path.exists(filepath):
+                           try:
+                                with open(filepath, "rb") as image_file:
+                                     encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
 
-                            mime_type, _ = mimetypes.guess_type(filepath)
-                            if not mime_type:
-                                mime_type = 'image/png'
+                                mime_type, _ = mimetypes.guess_type(filepath)
+                                if not mime_type:
+                                     # Guess common image types based on extension if mimetypes fails
+                                     ext = os.path.splitext(filename)[1].lower()
+                                     if ext == '.png': mime_type = 'image/png'
+                                     elif ext in ['.jpg', '.jpeg']: mime_type = 'image/jpeg'
+                                     elif ext == '.gif': mime_type = 'image/gif'
+                                     elif ext == '.webp': mime_type = 'image/webp'
+                                     else: mime_type = 'application/octet-stream' # Fallback
 
-                            data_uri = f"data:{mime_type};base64,{encoded_string}"
+                                data_uri = f"data:{mime_type};base64,{encoded_string}"
 
-                            html_content = html_content.replace(full_url, data_uri, 1)
-                        except Exception as e:
-                            current_app.logger.error(f"Error embedding image {filename_with_params}: {e}")
+                                # Replace the original URL with the data URI
+                                # Use full_url to ensure we replace the exact match
+                                html_content = html_content.replace(full_url, data_uri, 1)
+                           except Exception as e:
+                                current_app.logger.error(f"Error embedding image {filename}: {e}")
 
-                return html_content
+                 return html_content
+
 
             embedded_html = embed_local_images(signature_html)
 
+            # Clean the HTML (including data URIs)
             clean_html = bleach.clean(
                 embedded_html,
                 tags=allowed_tags,
                 attributes=allowed_attrs,
-                protocols=['http', 'https', 'mailto', 'data']
+                protocols=['http', 'https', 'mailto', 'data'] # Ensure 'data' protocol is allowed for embedded images
             )
-
             current_user.signature = clean_html
 
         db.session.commit()
         flash('Your account has been updated!', 'success')
         return redirect(url_for('main.account'))
+    elif 'update_account' in request.form:
+         # Log validation errors if update fails
+         current_app.logger.warning(f"UpdateAccountForm validation failed: {update_form.errors}")
+         for field, errors in update_form.errors.items():
+            for error in errors:
+                flash(f"Update Error: {error}", 'danger')
+
 
     if 'change_password' in request.form and password_form.validate_on_submit():
         if current_user.check_password(password_form.current_password.data):
@@ -1195,30 +1370,53 @@ def account():
             flash('Your password has been changed!', 'success')
         else:
             flash('Incorrect current password.', 'danger')
-        return redirect(url_for('main.account'))
+        return redirect(url_for('main.account')) # Redirect even on failure to clear form
+    elif 'change_password' in request.form:
+         # Log validation errors if password change fails
+         current_app.logger.warning(f"ChangePasswordForm validation failed: {password_form.errors}")
+         # Don't flash password-specific errors usually, just the incorrect password one
+         if 'current_password' not in password_form.errors: # Only flash if it's not the 'incorrect password' case
+              flash('Password change failed due to validation errors.', 'danger')
+
 
     return render_template('account.html', title='Account', update_form=update_form, password_form=password_form)
 
 
 @main.route('/upload_image', methods=['POST'])
+@csrf.exempt # Exempt CSRF for CKEditor SimpleUpload adapter
 @login_required
 def upload_image():
     if 'upload' in request.files:
         file = request.files['upload']
-        if file:
-            filename = secure_filename(file.filename)
-            ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-            unique_filename = f"{uuid.uuid4().hex}.{ext}"
-            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
+        # Add basic validation (e.g., file type, size)
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if file and '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions:
+            try:
+                filename = secure_filename(file.filename)
+                ext = filename.rsplit('.', 1)[1].lower()
+                # Create a unique filename to avoid collisions
+                unique_filename = f"{uuid.uuid4().hex}.{ext}"
+                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+                file.save(filepath)
 
-            cache_buster = int(datetime.utcnow().timestamp())
-            url = url_for('main.uploaded_file', filename=unique_filename, v=cache_buster, _external=True)
+                # Generate URL for the uploaded file
+                # Add a timestamp as a query parameter to help bypass browser cache if needed
+                cache_buster = int(get_denver_now().timestamp())
+                url = url_for('main.uploaded_file', filename=unique_filename, v=cache_buster, _external=True)
 
-            return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
-    return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
+                return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
+            except Exception as e:
+                current_app.logger.error(f"Error saving uploaded image: {e}", exc_info=True)
+                return jsonify({'uploaded': 0, 'error': {'message': 'Server error during upload.'}}), 500
+        else:
+            return jsonify({'uploaded': 0, 'error': {'message': 'Invalid file type.'}}), 400
+    return jsonify({'uploaded': 0, 'error': {'message': 'No upload file found.'}}), 400
 
 @main.route('/uploads/<filename>')
 def uploaded_file(filename):
+    # Basic security check: ensure filename doesn't try to access parent directories
+    if '..' in filename or filename.startswith('/'):
+        abort(404)
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 @main.route('/reports')
@@ -1238,13 +1436,14 @@ def download_all_work_orders():
 
     query = WorkOrder.query
 
-    start_date, end_date = get_date_range(request.args.get('date_range'), start_date_str, end_date_str)
+    start_dt, end_dt = get_date_range(request.args.get('date_range'), start_date_str, end_date_str)
 
-    date_column = getattr(WorkOrder, date_type)
-    if start_date:
-        query = query.filter(date_column >= start_date)
-    if end_date:
-        query = query.filter(date_column <= end_date)
+    # Filter based on the chosen DateTime column (date_created or date_completed)
+    date_column = getattr(WorkOrder, date_type, WorkOrder.date_created) # Default to date_created if invalid
+    if start_dt:
+        query = query.filter(date_column >= start_dt)
+    if end_dt:
+        query = query.filter(date_column <= end_dt)
 
     work_orders = query.order_by(WorkOrder.date_created.asc()).all()
 
@@ -1256,10 +1455,17 @@ def download_all_work_orders():
     ]
     csv_writer.writerow(headers)
     for wo in work_orders:
+        # Convert DB times (now potentially Denver-aware) to Denver before formatting
+        created_dt = convert_to_denver(wo.date_created)
+        completed_dt = convert_to_denver(wo.date_completed)
+        # Format using mm/dd/yyyy HH:MM
+        created_str = created_dt.strftime('%m/%d/%Y %H:%M') if created_dt else ''
+        completed_str = completed_dt.strftime('%m/%d/%Y %H:%M') if completed_dt else ''
+
         csv_writer.writerow([
             wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor.company_name if wo.vendor else '',
-            wo.date_created.strftime('%m/%d/%Y %H:%M'), # Changed date format
-            wo.date_completed.strftime('%m/%d/%Y %H:%M') if wo.date_completed else '', # Changed date format
+            created_str,
+            completed_str,
             wo.requester_name, wo.request_type_relation.name, wo.property, wo.unit,
             wo.address, wo.description
         ])
@@ -1267,10 +1473,17 @@ def download_all_work_orders():
     output = string_io.getvalue()
     string_io.close()
 
+    # Generate filename with date range info if applicable
+    filename_suffix = date_type
+    if start_dt and end_dt:
+         filename_suffix += f"_{start_dt.strftime('%Y%m%d')}-{end_dt.strftime('%Y%m%d')}"
+    elif start_dt:
+         filename_suffix += f"_from_{start_dt.strftime('%Y%m%d')}"
+
     return Response(
         output,
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment;filename=work_orders_{date_type}.csv"}
+        headers={"Content-Disposition": f"attachment;filename=work_orders_{filename_suffix}.csv"}
     )
 
 @main.route('/reports/download/summary')
@@ -1281,15 +1494,15 @@ def download_summary_report():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
-    start_date, end_date = get_date_range(request.args.get('date_range'), start_date_str, end_date_str)
+    start_dt, end_dt = get_date_range(request.args.get('date_range'), start_date_str, end_date_str)
 
     base_query = WorkOrder.query
-    date_column = getattr(WorkOrder, date_type)
+    date_column = getattr(WorkOrder, date_type, WorkOrder.date_created) # Default safely
 
-    if start_date:
-        base_query = base_query.filter(date_column >= start_date)
-    if end_date:
-        base_query = base_query.filter(date_column <= end_date)
+    if start_dt:
+        base_query = base_query.filter(date_column >= start_dt)
+    if end_dt:
+        base_query = base_query.filter(date_column <= end_dt)
 
     filtered_orders = base_query.all()
 
@@ -1303,7 +1516,7 @@ def download_summary_report():
     csv_writer.writerow(['Status', 'Count'])
     for status, count in status_counts.items():
         csv_writer.writerow([status, count])
-    csv_writer.writerow([])
+    csv_writer.writerow([]) # Blank row separator
     csv_writer.writerow(['Summary by Request Type'])
     csv_writer.writerow(['Type', 'Count'])
     for req_type, count in type_counts.items():
@@ -1317,10 +1530,17 @@ def download_summary_report():
     output = string_io.getvalue()
     string_io.close()
 
+    # Generate filename with date range info
+    filename_suffix = date_type
+    if start_dt and end_dt:
+         filename_suffix += f"_{start_dt.strftime('%Y%m%d')}-{end_dt.strftime('%Y%m%d')}"
+    elif start_dt:
+         filename_suffix += f"_from_{start_dt.strftime('%Y%m%d')}"
+
     return Response(
         output,
         mimetype="text/csv",
-        headers={"Content-Disposition": f"summary_report_{date_type}.csv"}
+        headers={"Content-Disposition": f"attachment;filename=summary_report_{filename_suffix}.csv"}
     )
 
 @main.route('/calendar')
@@ -1339,16 +1559,17 @@ def api_events():
         'Follow-up': '#EF4444'   # red
     }
 
+    # Date fields (scheduled_date, follow_up_date) are naive Date objects in the DB
     query = WorkOrder.query.filter(WorkOrder.scheduled_date.isnot(None), WorkOrder.is_deleted==False)
     if current_user.role == 'Requester':
         query = query.filter(WorkOrder.user_id == current_user.id)
-    events = query.all()
+    events_scheduled = query.all()
 
     event_list = []
-    for event in events:
+    for event in events_scheduled:
         event_list.append({
             'title': f"#{event.id} - {event.property}",
-            'start': event.scheduled_date.strftime('%m/%d/%Y'), # Changed format
+            'start': event.scheduled_date.strftime('%Y-%m-%d'), # FullCalendar prefers ISO format for dates
             'url': url_for('main.view_request', request_id=event.id),
             'color': status_colors.get(event.status, '#6B7280'), # Default to gray
             'extendedProps': {
@@ -1366,7 +1587,7 @@ def api_events():
     for event in follow_up_events:
         event_list.append({
             'title': f"Follow-up for #{event.id}",
-            'start': event.follow_up_date.strftime('%m/%d/%Y'), # Changed format
+            'start': event.follow_up_date.strftime('%Y-%m-%d'), # FullCalendar prefers ISO format for dates
             'url': url_for('main.view_request', request_id=event.id),
             'color': status_colors.get('Follow-up'),
             'extendedProps': {
@@ -1382,14 +1603,15 @@ def api_events():
 def search_vendors():
     q = request.args.get('q')
     if q:
-        vendors = Vendor.query.filter(Vendor.company_name.ilike(f'%{q}%')).all()
+        vendors = Vendor.query.filter(Vendor.company_name.ilike(f'%{q}%')).limit(20).all() # Add limit
         return jsonify([{'id': v.id, 'company_name': v.company_name, 'contact_name': v.contact_name, 'email': v.email, 'phone': v.phone, 'specialty': v.specialty, 'website': v.website} for v in vendors])
     return jsonify([])
 
 @main.route('/api/users/search')
 @login_required
 def api_user_search():
-    users = User.query.filter_by(is_active=True).all()
+    users = User.query.filter_by(is_active=True).order_by(User.name).all()
+    # Format for Tribute.js: 'key' is display/insert, 'value' is for lookup matching
     user_list = [{'key': user.name, 'value': user.name.replace(' ', '')} for user in users]
     return jsonify(user_list)
 
@@ -1401,7 +1623,7 @@ def send_work_order_email(request_id):
     recipient = request.form.get('recipient')
     cc = request.form.get('cc')
     subject = request.form.get('subject')
-    body = request.form.get('body')
+    body = request.form.get('body') # This is HTML from CKEditor
     files = request.files.getlist('attachments')
 
     if not recipient:
@@ -1413,43 +1635,65 @@ def send_work_order_email(request_id):
     attachments_for_email = []
     temp_upload_path = None
     if files:
-        temp_upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp_email')
-        os.makedirs(temp_upload_path, exist_ok=True)
-        for file in files:
-            if file and file.filename:
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(temp_upload_path, f"{uuid.uuid4().hex}_{filename}")
-                file.save(filepath)
-                attachments_for_email.append({
-                    'path': filepath,
-                    'filename': filename,
-                    'mimetype': file.mimetype
-                })
+        # Create a unique temporary directory for this email's attachments
+        temp_dir_name = f"temp_email_{uuid.uuid4().hex}"
+        temp_upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_dir_name)
+        try:
+            os.makedirs(temp_upload_path, exist_ok=True)
+            for file in files:
+                if file and file.filename:
+                    filename = secure_filename(file.filename)
+                    filepath = os.path.join(temp_upload_path, filename) # Use original filename within temp dir
+                    file.save(filepath)
+                    attachments_for_email.append({
+                        'path': filepath,
+                        'filename': filename,
+                        'mimetype': file.mimetype or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+                    })
+        except Exception as e:
+             current_app.logger.error(f"Error saving temporary email attachments: {e}", exc_info=True)
+             # Clean up any files already saved in temp dir if creation fails mid-way
+             if temp_upload_path and os.path.exists(temp_upload_path):
+                 import shutil
+                 shutil.rmtree(temp_upload_path, ignore_errors=True)
+             return jsonify({'success': False, 'message': 'Error preparing attachments.'}), 500
 
+
+    # Generate text version from HTML body
     text_version_of_body = bleach.clean(body, tags=[], strip=True).strip()
+    # Pass necessary context to text template
     text_body = render_template('email/work_order_email.txt', work_order=work_order, body=text_version_of_body)
+    # HTML body comes directly from CKEditor
     html_body = render_template('email/work_order_email.html', work_order=work_order, body=body)
 
-    send_notification_email(
-        subject=subject,
-        recipients=recipients,
-        cc=cc_list,
-        text_body=text_body,
-        html_body=html_body,
-        attachments=attachments_for_email
-    )
+    try:
+        send_notification_email(
+            subject=subject,
+            recipients=recipients,
+            cc=cc_list,
+            text_body=text_body,
+            html_body=html_body,
+            attachments=attachments_for_email
+        )
 
-    if temp_upload_path:
-        for att in attachments_for_email:
-            try:
-                os.remove(att['path'])
-            except OSError as e:
-                current_app.logger.error(f"Error removing temp email attachment: {e}")
+        # AuditLog timestamp defaults to Denver time
+        db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
+        db.session.commit()
 
-    db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
-    db.session.commit()
+        return jsonify({'success': True, 'message': 'Email sent successfully!'})
 
-    return jsonify({'success': True, 'message': 'Email sent successfully!'})
+    except Exception as e:
+        current_app.logger.error(f"Error sending email or committing log: {e}", exc_info=True)
+        db.session.rollback() # Rollback audit log if email fails
+        return jsonify({'success': False, 'message': 'Failed to send email.'}), 500
+
+    finally:
+        # Clean up temporary attachment directory and files
+        if temp_upload_path and os.path.exists(temp_upload_path):
+             import shutil
+             shutil.rmtree(temp_upload_path, ignore_errors=True)
+             current_app.logger.debug(f"Cleaned up temporary directory: {temp_upload_path}")
+
 
 @main.route('/request/<int:request_id>/add_quote', methods=['POST'])
 @login_required
@@ -1463,13 +1707,15 @@ def add_quote(request_id):
         attachment_obj = save_attachment(file, work_order.id, file_type='Quote')
 
         if attachment_obj:
+            # Quote creation, date_sent defaults to Denver time
             quote = Quote(
                 work_order_id=work_order.id,
                 vendor_id=vendor.id,
                 attachment_id=attachment_obj.id
             )
             db.session.add(quote)
-            db.session.add(AuditLog(text=f"Quote '{attachment_obj.filename}' for vendor '{vendor.company_name}' uploaded.", user_id=current_user.id, work_order_id=work_order.id))
+            # AuditLog timestamp defaults to Denver time
+            db.session.add(AuditLog(text=f"Quote '{secure_filename(file.filename)}' for vendor '{vendor.company_name}' uploaded.", user_id=current_user.id, work_order_id=work_order.id))
             db.session.commit()
             flash(f'Quote for {vendor.company_name} uploaded successfully.', 'success')
         else:
@@ -1487,93 +1733,63 @@ def delete_quote(quote_id):
     quote = Quote.query.get_or_404(quote_id)
     work_order_id = quote.work_order_id
     attachment = Attachment.query.get(quote.attachment_id)
+    form = DeleteRestoreRequestForm() # Use for CSRF
 
-    if attachment:
-        try:
-            os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename))
-        except OSError as e:
-            current_app.logger.error(f"Error deleting file {attachment.filename}: {e}")
-            pass
+    if form.validate_on_submit():
+        if attachment:
+            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], attachment.filename)
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                else:
+                    current_app.logger.warning(f"Quote file not found for deletion: {file_path}")
 
-        db.session.delete(attachment)
+                db.session.delete(attachment) # Delete attachment record first
 
-    vendor_name = quote.vendor.company_name if quote.vendor else 'N/A'
+            except OSError as e:
+                current_app.logger.error(f"Error deleting quote file {attachment.filename}: {e}")
+                # Don't necessarily stop the quote deletion if file removal fails
+                pass
 
-    db.session.add(AuditLog(text=f"Deleted quote from vendor '{vendor_name}'.", user_id=current_user.id, work_order_id=work_order_id))
+        vendor_name = quote.vendor.company_name if quote.vendor else 'N/A'
 
-    db.session.delete(quote)
-    db.session.commit()
+        # AuditLog timestamp defaults to Denver time
+        db.session.add(AuditLog(text=f"Deleted quote from vendor '{vendor_name}'.", user_id=current_user.id, work_order_id=work_order_id))
 
-    flash('Quote has been deleted successfully.', 'success')
+        db.session.delete(quote) # Delete quote record
+        db.session.commit()
+
+        flash('Quote has been deleted successfully.', 'success')
+    else:
+        flash('Invalid request to delete quote.', 'danger')
+
     return redirect(url_for('main.view_request', request_id=work_order_id))
 
 
-def get_date_range(range_name, start_str, end_str):
-    today = datetime.utcnow().date()
-    start_date, end_date = None, None
-
-    if range_name == 'today':
-        start_date = today
-        end_date = today
-    elif range_name == 'yesterday':
-        start_date = today - timedelta(days=1)
-        end_date = start_date
-    elif range_name == 'this_week':
-        start_date = today - timedelta(days=today.weekday())
-        end_date = start_date + timedelta(days=6)
-    elif range_name == 'last_week':
-        end_of_last_week = today - timedelta(days=today.weekday() + 1)
-        start_date = end_of_last_week - timedelta(days=6)
-        end_date = end_of_last_week
-    elif range_name == 'this_month':
-        start_date = today.replace(day=1)
-        next_month = start_date.replace(day=28) + timedelta(days=4)
-        end_date = next_month - timedelta(days=next_month.day)
-    elif range_name == 'last_month':
-        end_of_last_month = today.replace(day=1) - timedelta(days=1)
-        start_date = end_of_last_month.replace(day=1)
-        end_date = end_of_last_month
-    elif range_name == 'this_year':
-        start_date = today.replace(month=1, day=1)
-        end_date = today.replace(month=12, day=31)
-    elif range_name == 'last_year':
-        last_year = today.year - 1
-        start_date = datetime(last_year, 1, 1).date()
-        end_date = datetime(last_year, 12, 31).date()
-    elif range_name == 'custom_date':
-        if start_str:
-            start_date = datetime.strptime(start_str, '%m/%d/%Y').date()
-            end_date = start_date
-    elif range_name == 'custom_range':
-        if start_str:
-            start_date = datetime.strptime(start_str, '%m/%d/%Y').date()
-        if end_str:
-            end_date = datetime.strptime(end_str, '%m/%d/%Y').date()
-
-    if start_date:
-        start_date = datetime.combine(start_date, time.min)
-    if end_date:
-        end_date = datetime.combine(end_date, time.max)
-
-    return start_date, end_date
-
 def send_reminders():
-    today = datetime.utcnow().date()
+    # Use Denver's current date for comparison
+    today = get_denver_now().date() # <-- Get Denver's date
     work_orders_for_follow_up = WorkOrder.query.filter(
-        WorkOrder.follow_up_date <= today,
-        WorkOrder.tag.like('%Follow-up needed%')
+        WorkOrder.follow_up_date <= today, # Comparing Date to Date is fine
+        WorkOrder.tag.like('%Follow-up needed%'),
+        WorkOrder.is_deleted == False # Added check for deleted orders
     ).all()
 
+    current_app.logger.info(f"Found {len(work_orders_for_follow_up)} work orders for follow-up reminder.")
+
     for wo in work_orders_for_follow_up:
+        current_app.logger.info(f"Processing reminder for WO #{wo.id}")
         admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
         for user in admins_and_schedulers:
             notification_text = f"Follow-up reminder for Request #{wo.id}"
+            # Notification timestamp defaults to Denver time
             notification = Notification(
                 text=notification_text,
                 link=url_for('main.view_request', request_id=wo.id),
                 user_id=user.id
             )
             db.session.add(notification)
+            current_app.logger.info(f"Added notification for user {user.id} for WO #{wo.id}")
 
             send_push_notification(
                 user.id,
@@ -1596,15 +1812,27 @@ def send_reminders():
                 )
             )
 
+        # Remove tag and date after sending notifications
         current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
         current_tags.discard('Follow-up needed')
         wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         wo.follow_up_date = None
-        audit_user_id = User.query.filter_by(role='Super User').first().id if User.query.filter_by(role='Super User').first() else 1
+        # Try to get Super User ID for audit log, default to a system/admin ID if needed
+        audit_user = User.query.filter_by(role='Super User').first()
+        # Fallback needed if no Super User exists (e.g., during setup)
+        audit_user_id = audit_user.id if audit_user else 1 # Assuming user ID 1 is an admin/system user
+        # AuditLog timestamp defaults to Denver time
         db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=audit_user_id, work_order_id=wo.id))
+        current_app.logger.info(f"Removed follow-up tag and date for WO #{wo.id}")
 
+    # Commit all changes after the loop
+    try:
+        db.session.commit()
+        current_app.logger.info("Committed reminder updates.")
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error committing reminder updates: {e}", exc_info=True)
 
-    db.session.commit()
 
 @main.route('/subscribe', methods=['POST'])
 @login_required
@@ -1624,6 +1852,12 @@ def subscribe():
     if not subscription_data:
         current_app.logger.warning("DEBUG SUB: Subscription endpoint called with no data.")
         return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
+
+    # Basic validation of subscription data structure
+    if not isinstance(subscription_data, dict) or 'endpoint' not in subscription_data:
+         current_app.logger.warning(f"DEBUG SUB: Invalid subscription data structure: {subscription_data}")
+         return jsonify({'success': False, 'message': 'Invalid subscription data structure.'}), 400
+
 
     subscription_json = json.dumps(subscription_data)
     subscription = PushSubscription.query.filter_by(
@@ -1653,15 +1887,10 @@ def subscribe():
 
 @main.route('/vapid_public_key', methods=['GET'])
 def vapid_public_key():
-    """Return the VAPID public key as JSON so the client can fetch it at runtime.
-
-    This avoids templating/quoting issues when environment variables contain
-    surrounding quotes.
-    """
+    """Return the VAPID public key as JSON so the client can fetch it at runtime."""
     key = current_app.config.get('VAPID_PUBLIC_KEY')
     if not key:
         current_app.logger.warning('DEBUG SUB: VAPID_PUBLIC_KEY requested but not configured.')
-        # Return a consistent JSON error so clients don't get HTML login pages
         return jsonify({'success': False, 'message': 'VAPID public key not configured.'}), 500
     current_app.logger.debug('DEBUG SUB: VAPID_PUBLIC_KEY served to client')
     return jsonify({'success': True, 'vapidPublicKey': key})
@@ -1670,57 +1899,77 @@ def vapid_public_key():
 @main.route('/test_push', methods=['GET'])
 @login_required
 def test_push():
-    """Trigger a test push notification to the current user's subscriptions.
-
-    Useful for debugging mobile behavior — visit this URL while logged in from the
-    mobile browser you want to test and confirm whether you receive a push.
-    """
+    """Trigger a test push notification to the current user's subscriptions."""
     try:
-        # Compose a friendly test payload
         title = 'Test Notification'
-        body = f'This is a test push to {current_user.name}. If you see this on mobile, push works.'
+        body = f'This is a test push to {current_user.name}. Time: {get_denver_now().strftime("%I:%M:%S %p")}'
         link = url_for('main.index', _external=True)
-        # Use the shared helper to send pushes to all stored subscriptions for this user
         send_push_notification(current_user.id, title, body, link)
-        return jsonify({'success': True, 'message': 'Test push sent (server attempted sends). Check server logs for results.'})
+        flash('Test push notification sent (or attempted). Check your device and server logs.', 'info')
+        # Return simple success page or redirect
+        # return jsonify({'success': True, 'message': 'Test push sent (server attempted sends). Check server logs for results.'})
+        return redirect(request.referrer or url_for('main.index'))
     except Exception as e:
         current_app.logger.error(f"ERROR in test_push: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
+        flash(f'Error sending test push: {e}', 'danger')
+        # return jsonify({'success': False, 'message': str(e)}), 500
+        return redirect(request.referrer or url_for('main.index'))
 
 
 @main.route('/my_subscriptions', methods=['GET'])
 @login_required
 def my_subscriptions():
-    """Return the current user's stored push subscriptions (for debugging).
-
-    JSON output: [{id, subscription_json}, ...]
-    """
+    """Return the current user's stored push subscriptions (for debugging)."""
     try:
         subs = PushSubscription.query.filter_by(user_id=current_user.id).all()
         out = []
         for s in subs:
             try:
                 parsed = json.loads(s.subscription_json)
+                endpoint_short = parsed.get('endpoint', 'N/A')[:60] + '...' if parsed.get('endpoint') else 'N/A'
             except Exception:
-                parsed = None
-            out.append({'id': s.id, 'subscription': parsed, 'raw': s.subscription_json})
-        return jsonify({'success': True, 'subscriptions': out})
+                parsed = {'error': 'Could not parse JSON'}
+                endpoint_short = 'Error parsing'
+
+            out.append({
+                'id': s.id,
+                'endpoint_short': endpoint_short,
+                'keys': parsed.get('keys', {}) if isinstance(parsed, dict) else {},
+                # 'raw': s.subscription_json # Optionally include raw for deep debugging
+                })
+        # Render a simple HTML page instead of just JSON
+        return render_template('debug/subscriptions.html', title='My Push Subscriptions', subscriptions=out)
+        # return jsonify({'success': True, 'subscriptions': out})
     except Exception as e:
         current_app.logger.error(f"ERROR in my_subscriptions: {e}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
-@main.route('/subscriptions/<int:sub_id>', methods=['DELETE'])
+@main.route('/subscriptions/<int:sub_id>', methods=['POST']) # Changed to POST for CSRF
 @login_required
 def delete_subscription(sub_id):
     """Delete a stored push subscription by id (authorized for the owner only)."""
-    try:
-        sub = PushSubscription.query.get_or_404(sub_id)
-        if sub.user_id != current_user.id:
-            return jsonify({'success': False, 'message': 'Not authorized.'}), 403
-        db.session.delete(sub)
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        current_app.logger.error(f"ERROR deleting subscription {sub_id}: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
+    # Use a simple form for CSRF protection
+    form = DeleteRestoreRequestForm()
+    if form.validate_on_submit():
+        try:
+            sub = PushSubscription.query.get_or_404(sub_id)
+            if sub.user_id != current_user.id:
+                 flash('Not authorized to delete this subscription.', 'danger')
+                 return redirect(url_for('main.my_subscriptions'))
+                 # return jsonify({'success': False, 'message': 'Not authorized.'}), 403
+
+            db.session.delete(sub)
+            db.session.commit()
+            flash(f'Subscription {sub_id} deleted successfully.', 'success')
+            return redirect(url_for('main.my_subscriptions'))
+            # return jsonify({'success': True})
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"ERROR deleting subscription {sub_id}: {e}", exc_info=True)
+            flash(f'Error deleting subscription: {e}', 'danger')
+            return redirect(url_for('main.my_subscriptions'))
+            # return jsonify({'success': False, 'message': str(e)}), 500
+    else:
+         flash('Invalid request to delete subscription.', 'danger')
+         return redirect(url_for('main.my_subscriptions'))

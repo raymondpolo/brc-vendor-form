@@ -22,7 +22,10 @@
                     </td>
                     <td class="px-6 py-4">{{ req.property }}</td>
                     <td class="px-6 py-4">{{ req.requester_name }}</td>
-                    <td class="px-6 py-4">{{ req.deleted_at.strftime('%m/%d/%Y %I:%M %p') if req.deleted_at else 'N/A' }}</td>
+                    <td class="px-6 py-4">
+                        {# Use format_denver filter for deleted_at #}
+                        {{ req.deleted_at | format_denver if req.deleted_at else 'N/A' }}
+                    </td>
                     <td class="px-6 py-4">
                         <form method="POST" action="{{ url_for('main.restore_request', request_id=req.id) }}" class="inline">
                             {{ form.hidden_tag() }}

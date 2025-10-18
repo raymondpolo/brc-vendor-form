@@ -3,6 +3,7 @@ from app.extensions import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from app.utils import get_denver_now # <-- Import the helper
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -20,7 +21,7 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), nullable=False, default='Requester')
     is_active = db.Column(db.Boolean, default=False, nullable=False)
-    last_message_read_time = db.Column(db.DateTime)
+    last_message_read_time = db.Column(db.DateTime, nullable=True) # Set when user reads messages
     signature = db.Column(db.Text, nullable=True)
 
     requests = db.relationship('WorkOrder', backref='author', lazy='dynamic', cascade="all, delete-orphan")
@@ -45,7 +46,15 @@ class User(db.Model, UserMixin):
         return False
 
     def new_messages(self):
-        last_read_time = self.last_message_read_time or datetime(1900, 1, 1)
+        # Use Denver time for comparison baseline if last_message_read_time is None
+        # Make a timezone-aware datetime far in the past
+        baseline_past = get_denver_now().replace(year=1900, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_read_time = self.last_message_read_time or baseline_past
+        # Ensure last_read_time is Denver-aware if loaded from DB potentially naive
+        if last_read_time.tzinfo is None:
+             last_read_time = DENVER_TZ.localize(last_read_time)
+
+        # Assuming Message.timestamp is also Denver-aware now
         return Message.query.filter_by(recipient=self).filter(
             Message.timestamp > last_read_time).count()
 
@@ -93,22 +102,22 @@ class WorkOrder(db.Model):
     contact_person_phone = db.Column(db.String(20), nullable=True)
     status = db.Column(db.String(50), nullable=False, default='New')
     tag = db.Column(db.String(255), nullable=True)
-    date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    scheduled_date = db.Column(db.Date, nullable=True)
-    date_completed = db.Column(db.DateTime, nullable=True)
-    preferred_date_1 = db.Column(db.Date, nullable=True)
-    preferred_date_2 = db.Column(db.Date, nullable=True)
-    preferred_date_3 = db.Column(db.Date, nullable=True)
+    date_created = db.Column(db.DateTime, nullable=False, default=get_denver_now) # <-- Use Denver time default
+    scheduled_date = db.Column(db.Date, nullable=True) # Date type has no timezone
+    date_completed = db.Column(db.DateTime, nullable=True) # Set manually, ensure Denver time is used
+    preferred_date_1 = db.Column(db.Date, nullable=True) # Date type
+    preferred_date_2 = db.Column(db.Date, nullable=True) # Date type
+    preferred_date_3 = db.Column(db.Date, nullable=True) # Date type
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
     property_id = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
-    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True) # Set manually, ensure Denver time is used
     approved_quote_id = db.Column(db.Integer, db.ForeignKey('quote.id'), nullable=True)
-    follow_up_date = db.Column(db.Date, nullable=True)
-    last_follow_up_sent = db.Column(db.DateTime, nullable=True)
+    follow_up_date = db.Column(db.Date, nullable=True) # Date type
+    last_follow_up_sent = db.Column(db.DateTime, nullable=True) # Set manually, ensure Denver time is used
     preferred_vendor = db.Column(db.String(150), nullable=True)
-    
+
     request_type_id = db.Column(db.Integer, db.ForeignKey('request_type.id'), nullable=False)
 
     notes = db.relationship('Note', backref='work_order', lazy=True, cascade="all, delete-orphan")
@@ -130,7 +139,7 @@ class Property(db.Model):
 class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.Text, nullable=False)
-    date_posted = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_posted = db.Column(db.DateTime, nullable=False, default=get_denver_now) # <-- Use Denver time default
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
 
@@ -140,12 +149,12 @@ class Notification(db.Model):
     link = db.Column(db.String(255), nullable=False)
     is_read = db.Column(db.Boolean, default=False, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, index=True, default=get_denver_now) # <-- Use Denver time default
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.String(255), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=get_denver_now) # <-- Use Denver time default
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
 
@@ -166,7 +175,7 @@ class Message(db.Model):
     cc = db.Column(db.Text, nullable=True)
     subject = db.Column(db.String(255))
     body = db.Column(db.Text)
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, index=True, default=get_denver_now) # <-- Use Denver time default
     is_read = db.Column(db.Boolean, default=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=True)
     attachments = db.relationship('MessageAttachment', backref='message', lazy=True, cascade="all, delete-orphan")
@@ -178,7 +187,7 @@ class MessageAttachment(db.Model):
 
 class Quote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date_sent = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_sent = db.Column(db.DateTime, nullable=False, default=get_denver_now) # <-- Use Denver time default
     status = db.Column(db.String(50), nullable=False, default='Pending')
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=False)

@@ -36,7 +36,8 @@
         {% endif %}
         <div class="flex items-baseline">
             <span class="font-medium text-gray-500 w-24">Date:</span>
-            <span class="text-gray-800">{{ message.timestamp.strftime('%m/%d/%Y at %I:%M %p') }}</span>
+            {# Use format_denver filter for timestamp with specific format #}
+            <span class="text-gray-800">{{ message.timestamp | format_denver('%m/%d/%Y at %I:%M %p') }}</span>
         </div>
         <div class="flex items-baseline">
             <span class="font-medium text-gray-500 w-24">Subject:</span>

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ title }} - BRC Vendor Form</title>
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.ckeditor.com/ckeditor5/41.4.2/super-build/ckeditor.js"></script>
@@ -13,7 +13,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/tributejs"></script>
-    
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -63,7 +63,7 @@
     </a>
 
     <div x-data="{ isSidebarOpen: window.innerWidth > 1024 }" @keydown.escape.window="isSidebarOpen = false" class="relative min-h-screen lg:flex">
-        
+
         {% if current_user.is_authenticated %}
             <div class="fixed bottom-4 right-4 z-40 lg:hidden">
                 <a href="{{ url_for('main.new_request') }}" class="flex items-center justify-center w-14 h-14 bg-brand rounded-full text-white shadow-lg hover:bg-brand-dark transition-colors">
@@ -97,7 +97,7 @@
             </main>
         </div>
     </div>
-    
+
     <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white p-4 rounded-lg shadow-lg hidden">
         <p id="notification-toast-text"></p>
     </div>
@@ -127,7 +127,7 @@
         setInterval(updateTime, 1000); // Update every second
         updateTime(); // Initial call to display time immediately
 
-        // Socket.IO Connection
+        // --- Keep Socket.IO Connection ---
         document.addEventListener('DOMContentLoaded', function () {
             const socket = io({ transports: ['websocket'] });
             socket.on('connect', () => console.log('Connected to WebSocket server.'));
@@ -141,7 +141,7 @@
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
         });
 
-        // --- PUSH NOTIFICATION SCRIPT ---
+        // --- Keep PUSH NOTIFICATION SCRIPT ---
         {% if current_user.is_authenticated %}
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
@@ -160,6 +160,7 @@
         }
         {% endif %}
 
+        // --- Keep Push Helper Functions ---
         function urlBase64ToUint8Array(base64String) {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
             const base64 = (base64String + padding)
@@ -227,7 +228,7 @@
                 console.error("DEBUG SUB JS: ERROR converting VAPID key (is it valid?):", e);
                 return;
             }
-            
+
             // Prefer using the registration returned by navigator.serviceWorker.register()
             // If that's not provided, fall back to navigator.serviceWorker.ready
             const doSubscribe = (reg) => {
@@ -238,24 +239,6 @@
                         reg.pushManager.getSubscription().then(existingSub => {
                             console.log('DEBUG SUB JS: Existing subscription for registration:', existingSub);
                         }).catch(err => console.warn('DEBUG SUB JS: getSubscription() failed:', err));
-
-                        // Diagnostic: check permissionState for push (may reveal browser policy)
-                        if (reg.pushManager.permissionState) {
-                            reg.pushManager.permissionState({userVisibleOnly: true, applicationServerKey: applicationServerKey})
-                            .then(state => console.log('DEBUG SUB JS: pushManager.permissionState:', state))
-                            .catch(err => console.warn('DEBUG SUB JS: pushManager.permissionState() failed:', err));
-                        } else {
-                            console.log('DEBUG SUB JS: pushManager.permissionState not supported in this UA');
-                        }
-
-                        // Diagnostic: other useful context
-                        try {
-                            console.log('DEBUG SUB JS: window.isSecureContext =', window.isSecureContext);
-                            console.log('DEBUG SUB JS: navigator.serviceWorker.controller =', navigator.serviceWorker.controller);
-                            navigator.serviceWorker.getRegistrations().then(regs => console.log('DEBUG SUB JS: navigator.serviceWorker.getRegistrations():', regs)).catch(e => console.warn('DEBUG SUB JS: getRegistrations failed', e));
-                        } catch (e) {
-                            console.warn('DEBUG SUB JS: error collecting extra diagnostics', e);
-                        }
 
                         // Diagnostic: log applicationServerKey details
                         try {

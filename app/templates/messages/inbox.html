@@ -11,7 +11,6 @@
         </a>
     </div>
 
-    <!-- Navigation Tabs -->
     <div class="mb-4 border-b border-gray-200">
         <nav class="-mb-px flex space-x-8" aria-label="Tabs">
             <a href="{{ url_for('main.messages', box='inbox') }}" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
@@ -33,7 +32,6 @@
         </nav>
     </div>
 
-    <!-- Message List -->
     <div class="overflow-x-auto">
         <table class="w-full text-sm text-left text-gray-500">
             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -68,7 +66,10 @@
                             {% endif %}
                         </a>
                     </td>
-                    <td class="px-6 py-4">{{ msg.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</td>
+                    <td class="px-6 py-4">
+                        {# Use format_denver filter for timestamp #}
+                        {{ msg.timestamp | format_denver }}
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
