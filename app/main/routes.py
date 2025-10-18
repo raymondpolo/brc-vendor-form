@@ -123,6 +123,24 @@ def send_push_notification(user_id, title, body, link):
                 current_app.logger.error(f"DEBUG PUSH: An unexpected error occurred in webpush: {e}", exc_info=True)
 
 
+# Serve the root-level service worker so browsers can fetch it at '/service-worker.js'
+# Some hosting setups don't serve files from the repository root as static files, so
+# provide a Flask route to return the file from the project root directory.
+@main.route('/service-worker.js')
+def service_worker_root():
+    try:
+        # Project root is parent of the app package root
+        project_root = os.path.abspath(os.path.join(current_app.root_path, '..'))
+        sw_path = os.path.join(project_root, 'service-worker.js')
+        if not os.path.exists(sw_path):
+            current_app.logger.error(f"Service worker requested but not found at {sw_path}")
+            abort(404)
+        return send_from_directory(os.path.dirname(sw_path), os.path.basename(sw_path), mimetype='application/javascript')
+    except Exception as e:
+        current_app.logger.error(f"Error serving service-worker.js: {e}", exc_info=True)
+        abort(500)
+
+
 @main.route('/')
 @login_required
 def index():
