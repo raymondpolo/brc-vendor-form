@@ -7,7 +7,7 @@ import base64
 import mimetypes
 import json
 import uuid
-from flask import current_app # Import current_app for logging
+from flask import current_app
 from markupsafe import Markup
 from functools import wraps
 from collections import Counter
@@ -71,39 +71,38 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
-    # Use Flask logger instead of print
-    current_app.logger.info(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
+    print(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
     app = current_app._get_current_object()
     with app.app_context():
         user = User.query.get(user_id)
         if not user:
-            current_app.logger.warning(f"DEBUG PUSH: User with id {user_id} not found. Exiting function.")
+            print(f"DEBUG PUSH: User with id {user_id} not found. Exiting function.")
             return
 
         subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
         if not subscriptions:
-            current_app.logger.info(f"DEBUG PUSH: No push subscriptions found for user {user.name}. Exiting function.")
+            print(f"DEBUG PUSH: No push subscriptions found for user {user.name}. Exiting function.")
             return
 
-        current_app.logger.info(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
+        print(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
 
         vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
         vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
 
         for sub in subscriptions:
             try:
-                current_app.logger.info(f"DEBUG PUSH: Sending to subscription endpoint: {json.loads(sub.subscription_json)['endpoint'][:50]}...")
+                print(f"DEBUG PUSH: Sending to subscription endpoint: {json.loads(sub.subscription_json)['endpoint'][:50]}...")
                 webpush(
                     subscription_info=json.loads(sub.subscription_json),
                     data=json.dumps({'title': title, 'body': body, 'link': link}),
                     vapid_private_key=vapid_private_key,
                     vapid_claims=vapid_claims
                 )
-                current_app.logger.info("DEBUG PUSH: Successfully sent push notification.")
+                print("DEBUG PUSH: Successfully sent push notification.")
             except WebPushException as ex:
-                current_app.logger.error(f"DEBUG PUSH: Web push failed with exception: {ex}")
+                print(f"DEBUG PUSH: Web push failed with exception: {ex}")
             except Exception as e:
-                current_app.logger.error(f"DEBUG PUSH: An unexpected error occurred in webpush: {e}", exc_info=True)
+                print(f"DEBUG PUSH: An unexpected error occurred in webpush: {e}")
 
 
 @main.route('/')
@@ -342,29 +341,22 @@ def view_request(request_id):
 @login_required
 @csrf.exempt # <<< TEMPORARILY disable CSRF for this route
 def post_note(request_id):
-    # Use Flask's logger - Log entry immediately
-    current_app.logger.info(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
+    # Use print() for high-visibility logging
+    print(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
     try:
         # Just log that we received the data and return success
         note_text_received = request.form.get('text', 'No text found in form')
-        current_app.logger.info(f"DEBUG NOTE: Received note text: '{note_text_received}'")
-        current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
+        print(f"DEBUG NOTE: Received note text: '{note_text_received}'")
+        print(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
         work_order = WorkOrder.query.get_or_404(request_id) # Verify work order exists
-        current_app.logger.info(f"DEBUG NOTE: Found WorkOrder ID: {work_order.id}")
-
-        # --- Temporarily skip validation, DB saving, mentions, and notifications ---
-        # note_form = NoteForm()
-        # validation_result = note_form.validate_on_submit()
-        # if validation_result:
-        #    ... (original logic) ...
-        # else: ...
+        print(f"DEBUG NOTE: Found WorkOrder ID: {work_order.id}")
 
         # Directly return success after logging
-        current_app.logger.info("DEBUG NOTE: Skipping full processing, returning success JSON for testing.")
+        print("DEBUG NOTE: Skipping full processing, returning success JSON for testing.")
         return jsonify({'success': True})
 
     except Exception as e:
-        current_app.logger.error(f"DEBUG NOTE: Exception occurred in simplified post_note: {e}", exc_info=True)
+        print(f"DEBUG NOTE: Exception occurred in simplified post_note: {e}")
         return jsonify({'success': False, 'message': 'Simplified route error.'}), 500
 # --- END SIMPLIFIED ROUTE ---
 
@@ -971,9 +963,7 @@ def view_attachment(attachment_id):
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
 
-    # *** THIS IS THE LINE WITH THE SYNTAX ERROR ***
-    # It was: abort(4Note.query.filter(User.name.ilike(name.strip())).first())
-    # It is now corrected to:
+    # *** THIS IS THE LINE WITH THE FIXED SYNTAX ERROR ***
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
     # *** END CORRECTION ***
