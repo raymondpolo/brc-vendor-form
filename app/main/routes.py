@@ -47,7 +47,7 @@ def save_attachment(file, work_order_id, file_type='Attachment'):
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
     unique_filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
-    
+
     attachment = Attachment(filename=unique_filename, user_id=current_user.id, work_order_id=work_order_id, file_type=file_type)
     db.session.add(attachment)
     db.session.commit()
@@ -72,7 +72,6 @@ def work_order_to_dict(req):
 
 def send_push_notification(user_id, title, body, link):
     print(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
-    # It's crucial to get the app context correctly when running in threads or background tasks
     app = current_app._get_current_object()
     with app.app_context():
         user = User.query.get(user_id)
@@ -84,9 +83,9 @@ def send_push_notification(user_id, title, body, link):
         if not subscriptions:
             print(f"DEBUG PUSH: No push subscriptions found for user {user.name}. Exiting function.")
             return
-        
+
         print(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
-        
+
         vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
         vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
 
@@ -124,7 +123,7 @@ def dashboard():
         'New', 'Open', 'Pending', 'Quote Requested', 'Quote Sent',
         'Scheduled', 'Closed', 'Cancelled'
     ]
-    
+
     base_query = WorkOrder.query.filter_by(is_deleted=False)
 
     status_counts_query = base_query.with_entities(WorkOrder.status, func.count(WorkOrder.id)).group_by(WorkOrder.status).all()
@@ -139,7 +138,7 @@ def dashboard():
         if wo.tag:
             all_tags.extend(filter(None, wo.tag.split(',')))
     tag_counts = Counter(all_tags)
-    
+
     tag_stats = {
         "approved": tag_counts.get('Approved', 0),
         "declined": tag_counts.get('Declined', 0),
@@ -151,10 +150,10 @@ def dashboard():
     type_counts = Counter(req.request_type_relation.name for req in all_work_orders)
     property_counts = Counter(req.property for req in all_work_orders)
     vendor_counts = Counter(req.vendor.company_name for req in all_work_orders if req.vendor)
-    
+
     approved_by_pm = Counter(wo.property_manager for wo in all_work_orders if wo.tag and 'Approved' in wo.tag.split(','))
     declined_by_pm = Counter(wo.property_manager for wo in all_work_orders if wo.tag and 'Declined' in wo.tag.split(','))
-    
+
     goback_work_orders = base_query.filter(WorkOrder.tag.like('%Go-back%')).all()
     goback_by_vendor = Counter(wo.vendor.company_name if wo.vendor else 'Unassigned' for wo in goback_work_orders)
 
@@ -222,7 +221,7 @@ def dashboard():
             "colors": generic_chart_colors
         }
     }
-    
+
     return render_template(
         'dashboard.html', title='Dashboard', stats=stats, all_statuses=all_statuses,
         tag_stats=tag_stats, chart_data=chart_data, status_colors=status_colors, tag_colors=tag_colors
@@ -234,7 +233,7 @@ def dashboard():
 def all_requests():
     requests_data = WorkOrder.query.filter_by(is_deleted=False).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
-    return render_template('all_requests.html', title='All Requests', 
+    return render_template('all_requests.html', title='All Requests',
                            requests_json=json.dumps(requests_list))
 
 @main.route('/my-requests')
@@ -245,10 +244,10 @@ def my_requests():
         query = query.filter(WorkOrder.property_manager == current_user.name)
     else:
         query = query.filter_by(author=current_user)
-    
+
     user_requests = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in user_requests]
-    return render_template('my_requests.html', title='My Requests', 
+    return render_template('my_requests.html', title='My Requests',
                            requests_json=json.dumps(requests_list))
 
 @main.route('/shared-with-me')
@@ -257,7 +256,7 @@ def shared_requests():
     query = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.viewers.contains(current_user))
     requests_data = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
-    return render_template('shared_requests.html', title='Shared With Me', 
+    return render_template('shared_requests.html', title='Shared With Me',
                            requests_json=json.dumps(requests_list))
 
 @main.route('/requests/status/<status>')
@@ -266,7 +265,7 @@ def shared_requests():
 def requests_by_status(status):
     filtered_requests = WorkOrder.query.filter_by(is_deleted=False, status=status).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in filtered_requests]
-    return render_template('requests_by_status.html', title=f'Requests: {status}', 
+    return render_template('requests_by_status.html', title=f'Requests: {status}',
                            requests_json=json.dumps(requests_list), status=status)
 
 @main.route('/requests/tag/<tag_name>')
@@ -275,17 +274,17 @@ def requests_by_status(status):
 def requests_by_tag(tag_name):
     tagged_requests = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in tagged_requests]
-    return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}', 
+    return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}',
                            requests_json=json.dumps(requests_list), tag_name=tag_name)
 
-@main.route('/request/<int:request_id>', methods=['GET', 'POST'])
+@main.route('/request/<int:request_id>', methods=['GET']) # REMOVED POST from methods
 @login_required
 def view_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
 
+    # --- Keep permission checks ---
     if work_order.is_deleted and current_user.role != 'Super User':
         abort(404)
-
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -293,99 +292,33 @@ def view_request(request_id):
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
 
-    note_form = NoteForm()
+    # --- Keep GET request logic ---
+    if not work_order.is_deleted and is_admin_staff and work_order.status == 'New':
+        work_order.status = 'Open'
+        db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
+        flash('Request status has been updated to Open.', 'info')
+        needs_commit = db.session.new or db.session.dirty
+        if needs_commit:
+             try:
+                 db.session.commit()
+             except Exception as e:
+                 db.session.rollback()
+                 print(f"Error committing status change: {e}")
+                 flash('Error updating status.', 'danger')
 
-    if 'post_note' in request.form:
-        if note_form.validate_on_submit():
-            try:
-                note_text = note_form.text.data
-                note = Note(text=note_text, author=current_user, work_order=work_order)
-                db.session.add(note)
-                
-                notified_users = set()
-                # Ensure author is added if they aren't the one posting
-                if work_order.author and work_order.author != current_user:
-                     notified_users.add(work_order.author)
+    # Log viewing action (commit happens below or if status was changed)
+    db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
+    try:
+        db.session.commit() # Commit viewing log and potential status change
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error committing view log: {e}")
 
-                tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
-                print(f"DEBUG NOTE: Found mentions: {tagged_names}")
-                for name in tagged_names:
-                    # Use case-insensitive search and handle potential spaces
-                    search_name = name.strip()
-                    tagged_user = User.query.filter(func.lower(User.name) == func.lower(search_name)).first()
-                    if tagged_user:
-                        print(f"DEBUG NOTE: Found tagged user: {tagged_user.name} (ID: {tagged_user.id})")
-                        if tagged_user not in work_order.viewers:
-                            work_order.viewers.append(tagged_user)
-                        if tagged_user != current_user:
-                            notified_users.add(tagged_user)
-                    else:
-                        print(f"DEBUG NOTE: Could not find user for mention: @{search_name}")
 
-                db.session.commit() # Commit note and viewer changes first
-
-                broadcast_new_note(work_order.id, note)
-
-                print(f"DEBUG NOTE: Users to notify: {[user.name for user in notified_users]}")
-                for user in notified_users:
-                    print(f"DEBUG NOTE: Processing notification for user: {user.name} (ID: {user.id})")
-                    notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
-                    notification = Notification(
-                        text=notification_text,
-                        link=url_for('main.view_request', request_id=work_order.id),
-                        user_id=user.id
-                    )
-                    db.session.add(notification)
-
-                    print(f"DEBUG PUSH (Pre-call): Preparing to send push for user {user.id} ({user.name})")
-                    push_link = url_for('main.view_request', request_id=work_order.id, _external=True)
-                    print(f"DEBUG PUSH (Pre-call): Link generated: {push_link}")
-
-                    send_push_notification(
-                        user.id,
-                        'New Mention',
-                        notification_text,
-                        push_link
-                    )
-
-                    email_body = f"""
-                    <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-                    <p><b>Note:</b></p>
-                    <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-                    """
-                    send_notification_email(
-                        subject=f"New Note on Request #{work_order.id}",
-                        recipients=[user.email],
-                        text_body=notification_text,
-                        html_body=render_template(
-                            'email/notification_email.html',
-                            title="New Note on Request",
-                            user=user,
-                            body_content=email_body,
-                            link=url_for('main.view_request', request_id=work_order.id, _external=True)
-                        )
-                    )
-                db.session.commit() # Commit notifications
-                return jsonify({'success': True})
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"Error posting note: {e}")
-                print(f"Exception during note processing: {e}")
-                return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
-        else:
-            return jsonify({'success': False, 'errors': note_form.errors}), 400
-
-    if request.method == 'GET':
-        if not work_order.is_deleted and is_admin_staff and work_order.status == 'New':
-            work_order.status = 'Open'
-            db.session.add(AuditLog(text='Status changed to Open.', user_id=current_user.id, work_order_id=work_order.id))
-            flash('Request status has been updated to Open.', 'info')
-        db.session.add(AuditLog(text='Viewed the request.', user_id=current_user.id, work_order_id=work_order.id))
-        db.session.commit()
-
+    # --- Keep data fetching and form initializations ---
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
-    
+    note_form = NoteForm() # Still needed for rendering
     status_form = ChangeStatusForm()
     attachment_form = AttachmentForm()
     assign_vendor_form = AssignVendorForm()
@@ -399,6 +332,7 @@ def view_request(request_id):
     quotes = work_order.quotes
     all_users = User.query.filter_by(is_active=True).all()
 
+    # --- Keep template rendering ---
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
@@ -406,6 +340,145 @@ def view_request(request_id):
                            delete_form=delete_form, tag_form=tag_form, reassign_form=reassign_form,
                            follow_up_form=follow_up_form, all_users=all_users, completed_form=completed_form)
 
+
+# +++ NEW ROUTE for handling note posts via AJAX +++
+@main.route('/request/<int:request_id>/post_note', methods=['POST'])
+@login_required
+def post_note(request_id):
+    print(f"DEBUG NOTE: Entered post_note route for request_id: {request_id}. Method: {request.method}")
+    work_order = WorkOrder.query.get_or_404(request_id)
+
+    # --- Basic permission check (can add more granular checks if needed) ---
+    is_author = work_order.author == current_user
+    is_viewer = current_user in work_order.viewers
+    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name # Added PM check
+    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+    if not (is_author or is_viewer or is_admin_staff or is_property_manager): # Added PM check
+         print(f"DEBUG NOTE: Permission denied for user {current_user.id} ({current_user.name}) on request {request_id}")
+         return jsonify({'success': False, 'message': 'Permission denied.'}), 403
+    print("DEBUG NOTE: Permission check passed.")
+
+    note_form = NoteForm()
+    print("DEBUG NOTE: NoteForm instantiated.")
+    print(f"DEBUG NOTE: Request form data: {request.form}")
+
+    # --- Explicitly check validation ---
+    validation_result = note_form.validate_on_submit()
+    print(f"DEBUG NOTE: note_form.validate_on_submit() returned: {validation_result}")
+
+    if validation_result:
+        print("DEBUG NOTE: Note form validated successfully. Entering try block.")
+        try:
+            note_text = note_form.text.data
+            print(f"DEBUG NOTE: Note text extracted: '{note_text}'")
+            note = Note(text=note_text, author=current_user, work_order=work_order)
+            db.session.add(note)
+            print("DEBUG NOTE: Note object created and added to session.")
+
+            notified_users = set()
+            # Ensure author is added if they aren't the one posting
+            if work_order.author and work_order.author != current_user:
+                 notified_users.add(work_order.author)
+                 print(f"DEBUG NOTE: Added author {work_order.author.name} to notified_users.")
+
+            tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
+            print(f"DEBUG NOTE: Found mentions: {tagged_names}")
+            for name in tagged_names:
+                search_name = name.strip()
+                # Use case-insensitive search
+                tagged_user = User.query.filter(func.lower(User.name) == func.lower(search_name)).first()
+                if tagged_user:
+                    print(f"DEBUG NOTE: Found tagged user: {tagged_user.name} (ID: {tagged_user.id})")
+                    if tagged_user not in work_order.viewers:
+                        work_order.viewers.append(tagged_user)
+                        print(f"DEBUG NOTE: Added {tagged_user.name} to work_order viewers.")
+                    if tagged_user != current_user:
+                        notified_users.add(tagged_user)
+                        print(f"DEBUG NOTE: Added {tagged_user.name} to notified_users.")
+                    else:
+                        print(f"DEBUG NOTE: Tagged user {tagged_user.name} is the current user, not adding to notify list.")
+                else:
+                    print(f"DEBUG NOTE: Could not find user for mention: @{search_name}")
+
+            print("DEBUG NOTE: Committing note and viewer changes...")
+            db.session.commit() # Commit note and viewer changes first
+            print("DEBUG NOTE: Commit successful.")
+
+            print("DEBUG NOTE: Broadcasting note via Socket.IO...")
+            broadcast_new_note(work_order.id, note) # Notify via Socket.IO
+            print("DEBUG NOTE: Broadcast complete.")
+
+            print(f"DEBUG NOTE: Users to notify via Push/Email: {[user.name for user in notified_users]}")
+            if not notified_users:
+                 print("DEBUG NOTE: No users found in notified_users set.")
+
+            for user in notified_users:
+                print(f"DEBUG NOTE: Processing PUSH/EMAIL for user: {user.name} (ID: {user.id})")
+                notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
+                notification = Notification(
+                    text=notification_text,
+                    link=url_for('main.view_request', request_id=work_order.id),
+                    user_id=user.id
+                )
+                db.session.add(notification)
+                print(f"DEBUG NOTE: Added Notification object for user {user.id} to session.")
+
+                print(f"DEBUG PUSH (Pre-call): Preparing to send push for user {user.id} ({user.name})")
+                push_link = url_for('main.view_request', request_id=work_order.id, _external=True)
+                print(f"DEBUG PUSH (Pre-call): Link generated: {push_link}")
+
+                # Call the push notification function
+                send_push_notification(
+                    user.id,
+                    'New Mention',
+                    notification_text,
+                    push_link
+                )
+                print(f"DEBUG PUSH (Post-call): Returned from send_push_notification for user {user.id}")
+
+                # Send email notification
+                print(f"DEBUG EMAIL (Pre-call): Preparing email for user {user.id} ({user.name})")
+                email_body = f"""
+                <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
+                <p><b>Note:</b></p>
+                <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
+                """
+                send_notification_email(
+                    subject=f"New Note on Request #{work_order.id}",
+                    recipients=[user.email],
+                    text_body=notification_text,
+                    html_body=render_template(
+                        'email/notification_email.html',
+                        title="New Note on Request",
+                        user=user,
+                        body_content=email_body,
+                        link=url_for('main.view_request', request_id=work_order.id, _external=True)
+                    )
+                )
+                print(f"DEBUG EMAIL (Post-call): Returned from send_notification_email for user {user.id}")
+
+            print("DEBUG NOTE: Committing notifications...")
+            db.session.commit() # Commit notifications
+            print("DEBUG NOTE: Notifications commit successful. Returning success JSON.")
+            return jsonify({'success': True})
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error posting note: {e}", exc_info=True) # Log full traceback
+            print(f"DEBUG NOTE: Exception during note processing: {e}")
+            return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
+    else:
+        print(f"DEBUG NOTE: Note form validation FAILED. Errors: {note_form.errors}")
+        return jsonify({'success': False, 'errors': note_form.errors}), 400
+# --- END NEW ROUTE ---
+
+
+# --- Keep ALL other existing routes ---
+# mark_as_completed, send_follow_up, delete_request, restore_request, permanently_delete_request,
+# deleted_requests, change_status, quote_action, tag_request, cancel_request, assign_vendor, unassign_vendor,
+# mark_notification_read, new_request, edit_request, upload_attachment, download_attachment, view_attachment,
+# delete_attachment, account, upload_image, uploaded_file, reports_page, download_all_work_orders,
+# download_summary_report, calendar, api_events, search_vendors, api_user_search, send_work_order_email,
+# add_quote, delete_quote, get_date_range, send_reminders, subscribe
 
 @main.route('/request/<int:request_id>/mark_as_completed', methods=['POST'])
 @login_required
@@ -437,7 +510,7 @@ def send_follow_up(request_id):
 
         recipients = [recipient]
         cc_list = [email.strip() for email in cc.split(',')] if cc else []
-        
+
         html_body = f"<p>{body.replace(chr(10), '<br>')}</p>"
 
         send_notification_email(
@@ -526,10 +599,10 @@ def change_status(request_id):
     form.status.choices = [c for c in form.status.choices if c[0] != 'New']
     if current_user.role in ['Admin', 'Scheduler', 'Super User']:
         form.status.choices = [c for c in form.status.choices if c[0] not in ['Approved', 'Quote Declined']]
-    
+
     if form.validate_on_submit():
         new_status = form.status.data
-        
+
         if new_status == 'Scheduled':
             if not work_order.vendor_id:
                 flash('A vendor must be assigned before scheduling.', 'danger')
@@ -544,19 +617,19 @@ def change_status(request_id):
 
         work_order.status = new_status
         log_text = f'Changed status from {old_status} to {new_status}.'
-        
+
         if new_status == 'Scheduled':
             work_order.scheduled_date = datetime.strptime(form.scheduled_date.data, '%m/%d/%Y').date()
             log_text += f' for {work_order.scheduled_date.strftime("%Y-%m-%d")}'
         else:
             work_order.scheduled_date = None
-            
+
         current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
         if new_status == 'Closed':
             current_tags.add('Completed')
             work_order.date_completed = datetime.utcnow()
             log_text += " and tagged as 'Completed'."
-        
+
         if old_status == 'Closed' and new_status != 'Closed':
             current_tags.discard('Completed')
 
@@ -567,11 +640,11 @@ def change_status(request_id):
             notification_text = f'Status for Request #{work_order.id} changed to {new_status}.'
             notification = Notification(
                 text=notification_text,
-                link=url_for('main.view_request', request_id=work_order.id), 
+                link=url_for('main.view_request', request_id=work_order.id),
                 user_id=work_order.user_id
             )
             db.session.add(notification)
-            
+
             send_push_notification(
                 work_order.user_id,
                 'Request Status Updated',
@@ -592,7 +665,7 @@ def change_status(request_id):
                     link=url_for('main.view_request', request_id=work_order.id, _external=True)
                 )
             )
-        
+
         if new_status == 'Quote Sent' and work_order.property_manager:
             manager = User.query.filter_by(name=work_order.property_manager, role='Property Manager').first()
             if manager:
@@ -602,7 +675,7 @@ def change_status(request_id):
                     link=url_for('main.view_request', request_id=work_order.id),
                     user_id=manager.id)
                 db.session.add(manager_notification)
-                
+
                 send_push_notification(
                     manager.id,
                     'Quote Approval Needed',
@@ -680,10 +753,10 @@ def quote_action(request_id, quote_id, action):
 def tag_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     form = TagForm()
-    
+
     can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
     can_super_user = current_user.role == 'Super User'
-    
+
     # Define roles that can remove any tag vs. roles with restrictions
     can_remove_any_tag = current_user.role in ['Property Manager', 'Super User']
 
@@ -691,7 +764,7 @@ def tag_request(request_id):
         remove_form = DeleteRestoreRequestForm()
         if remove_form.validate_on_submit():
             tag_to_remove = request.form.get('tag_to_remove')
-            
+
             # Authorization check for removing tags
             if tag_to_remove in ['Approved', 'Declined'] and not (can_pm or can_super_user):
                 flash(f"You do not have permission to remove the '{tag_to_remove}' tag.", 'danger')
@@ -714,14 +787,14 @@ def tag_request(request_id):
 
     if form.validate_on_submit():
         tag_to_add = form.tag.data
-        
+
         # This check is now implicitly handled by the form choices, but kept for defense-in-depth
         if tag_to_add in ['Approved', 'Declined'] and not (can_pm or can_super_user):
             flash('You do not have permission to approve or decline requests.', 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
 
         current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
-        
+
         if tag_to_add == 'Follow-up needed':
             follow_up_date_str = form.follow_up_date.data
             if not follow_up_date_str:
@@ -747,7 +820,7 @@ def tag_request(request_id):
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f"Error in {getattr(form, field).label.text}: {error}", 'danger')
-            
+
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
@@ -841,7 +914,7 @@ def new_request():
             preferred_date_3=date3, user_id=current_user.id,
             preferred_vendor=form.vendor_assigned.data
             )
-        
+
         if selected_property:
             new_order.property_id = selected_property.id
             new_order.address = selected_property.address
@@ -857,20 +930,20 @@ def new_request():
 
         db.session.add(new_order)
         db.session.commit()
-        
+
         db.session.add(AuditLog(text='Request created.', user_id=current_user.id, work_order_id=new_order.id))
         db.session.commit()
 
         for file in form.attachments.data:
             save_attachment(file, new_order.id)
-            
+
         admins_and_schedulers = User.query.filter(User.role.in_(['Admin', 'Scheduler', 'Super User'])).all()
         for user in admins_and_schedulers:
             if user != current_user:
                 notification_text = f'New request #{new_order.id} submitted by {current_user.name}.'
                 notification = Notification(
                     text=notification_text,
-                    link=url_for('main.view_request', request_id=new_order.id), 
+                    link=url_for('main.view_request', request_id=new_order.id),
                     user_id=user.id
                 )
                 db.session.add(notification)
@@ -883,12 +956,12 @@ def new_request():
         db.session.commit()
         flash('Your request has been created!', 'success')
         return redirect(url_for('main.my_requests'))
-    
+
     elif request.method == 'POST':
         print("--- FORM VALIDATION FAILED ---")
         print("Errors:", form.errors)
         print("----------------------------")
-        
+
     return render_template('request_form.html', title='New Request', form=form,
         properties=properties, property_data=json.dumps(properties_dict))
 
@@ -898,7 +971,7 @@ def edit_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     is_author = work_order.author == current_user
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
-    
+
     if not (is_author or is_admin_staff):
         flash('You do not have permission to edit this request.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
@@ -906,13 +979,13 @@ def edit_request(request_id):
     if is_author and work_order.status in ['Closed', 'Cancelled']:
         flash('This request cannot be edited because it is already closed.', 'warning')
         return redirect(url_for('main.view_request', request_id=work_order.id))
-        
+
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     reassign_form = ReassignRequestForm()
-    
+
     del form.attachments
 
     if form.validate_on_submit():
@@ -926,11 +999,11 @@ def edit_request(request_id):
         work_order.contact_person = form.contact_person.data
         work_order.contact_person_phone = form.contact_person_phone.data
         work_order.preferred_vendor = form.vendor_assigned.data
-        
+
         work_order.preferred_date_1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
         work_order.preferred_date_2 = datetime.strptime(form.date_2.data, '%m/%d/%Y').date() if form.date_2.data else None
         work_order.preferred_date_3 = datetime.strptime(form.date_3.data, '%m/%d/%Y').date() if form.date_3.data else None
-        
+
         selected_property = Property.query.filter_by(name=form.property.data).first()
         if selected_property:
             work_order.property_id = selected_property.id
@@ -948,7 +1021,7 @@ def edit_request(request_id):
         db.session.commit()
         flash('Request has been updated.', 'success')
         return redirect(url_for('main.view_request', request_id=work_order.id))
-        
+
     elif request.method == 'POST':
         print("--- EDIT FORM VALIDATION FAILED ---")
         print("Errors:", form.errors)
@@ -959,7 +1032,7 @@ def edit_request(request_id):
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
-    
+
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
                            properties=properties, property_data=json.dumps(properties_dict), reassign_form=reassign_form)
 
@@ -973,7 +1046,7 @@ def upload_attachment(request_id):
             if file and file.filename:
                 file_type = request.form.get('file_type', 'Attachment')
                 attachment_obj = save_attachment(file, request_id, file_type)
-                
+
                 if attachment_obj:
                     db.session.add(AuditLog(text=f'Uploaded {file_type}: {secure_filename(file.filename)}', user_id=current_user.id, work_order_id=work_order.id))
                     flash(f'{file_type} "{secure_filename(file.filename)}" uploaded successfully.', 'success')
@@ -992,7 +1065,7 @@ def upload_attachment(request_id):
 def download_attachment(attachment_id):
     attachment = Attachment.query.get_or_404(attachment_id)
     work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
-    
+
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
@@ -1000,7 +1073,7 @@ def download_attachment(attachment_id):
 
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
-        
+
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=True)
 
 @main.route('/view_attachment/<int:attachment_id>')
@@ -1008,15 +1081,15 @@ def download_attachment(attachment_id):
 def view_attachment(attachment_id):
     attachment = Attachment.query.get_or_404(attachment_id)
     work_order = WorkOrder.query.get_or_404(attachment.work_order_id)
-    
+
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
-    
+
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
         abort(403)
-        
+
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
 
 @main.route('/delete_attachment/<int:attachment_id>', methods=['POST'])
@@ -1057,31 +1130,31 @@ def account():
                 'img': ['src', 'alt', 'width', 'height', 'style'],
                 'font': ['color', 'face', 'size']
             }
-            
+
             signature_html = request.form.get('signature')
 
             def embed_local_images(html_content):
                 upload_folder = current_app.config['UPLOAD_FOLDER']
                 img_tags = re.findall(r'<img[^>]+src=[\'"](https?://[^/]+/uploads/([^\'"]+))[\'"]', html_content)
-                
+
                 for full_url, filename_with_params in img_tags:
                     filepath = os.path.join(upload_folder, filename_with_params.split('?')[0])
-                    
+
                     if os.path.exists(filepath):
                         try:
                             with open(filepath, "rb") as image_file:
                                 encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                            
+
                             mime_type, _ = mimetypes.guess_type(filepath)
                             if not mime_type:
                                 mime_type = 'image/png'
-                                
+
                             data_uri = f"data:{mime_type};base64,{encoded_string}"
-                            
+
                             html_content = html_content.replace(full_url, data_uri, 1)
                         except Exception as e:
                             current_app.logger.error(f"Error embedding image {filename_with_params}: {e}")
-                
+
                 return html_content
 
             embedded_html = embed_local_images(signature_html)
@@ -1092,13 +1165,13 @@ def account():
                 attributes=allowed_attrs,
                 protocols=['http', 'https', 'mailto', 'data']
             )
-            
+
             current_user.signature = clean_html
-        
+
         db.session.commit()
         flash('Your account has been updated!', 'success')
         return redirect(url_for('main.account'))
-        
+
     if 'change_password' in request.form and password_form.validate_on_submit():
         if current_user.check_password(password_form.current_password.data):
             current_user.set_password(password_form.new_password.data)
@@ -1121,10 +1194,10 @@ def upload_image():
             ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
             unique_filename = f"{uuid.uuid4().hex}.{ext}"
             file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
-            
+
             cache_buster = int(datetime.utcnow().timestamp())
             url = url_for('main.uploaded_file', filename=unique_filename, v=cache_buster, _external=True)
-            
+
             return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
     return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
 
@@ -1148,9 +1221,9 @@ def download_all_work_orders():
     end_date_str = request.args.get('end_date')
 
     query = WorkOrder.query
-    
+
     start_date, end_date = get_date_range(request.args.get('date_range'), start_date_str, end_date_str)
-    
+
     date_column = getattr(WorkOrder, date_type)
     if start_date:
         query = query.filter(date_column >= start_date)
@@ -1158,7 +1231,7 @@ def download_all_work_orders():
         query = query.filter(date_column <= end_date)
 
     work_orders = query.order_by(WorkOrder.date_created.asc()).all()
-    
+
     string_io = io.StringIO()
     csv_writer = csv.writer(string_io)
     headers = [
@@ -1168,16 +1241,16 @@ def download_all_work_orders():
     csv_writer.writerow(headers)
     for wo in work_orders:
         csv_writer.writerow([
-            wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor.company_name if wo.vendor else '', 
+            wo.id, wo.wo_number, wo.status, wo.tag, wo.vendor.company_name if wo.vendor else '',
             wo.date_created.strftime('%Y-%m-%d %H:%M'),
             wo.date_completed.strftime('%Y-%m-%d %H:%M') if wo.date_completed else '',
             wo.requester_name, wo.request_type_relation.name, wo.property, wo.unit,
             wo.address, wo.description
         ])
-    
+
     output = string_io.getvalue()
     string_io.close()
-    
+
     return Response(
         output,
         mimetype="text/csv",
@@ -1193,7 +1266,7 @@ def download_summary_report():
     end_date_str = request.args.get('end_date')
 
     start_date, end_date = get_date_range(request.args.get('date_range'), start_date_str, end_date_str)
-    
+
     base_query = WorkOrder.query
     date_column = getattr(WorkOrder, date_type)
 
@@ -1207,7 +1280,7 @@ def download_summary_report():
     status_counts = Counter(req.status for req in filtered_orders)
     type_counts = Counter(req.request_type_relation.name for req in filtered_orders)
     property_counts = Counter(req.property for req in filtered_orders)
-    
+
     string_io = io.StringIO()
     csv_writer = csv.writer(string_io)
     csv_writer.writerow(['Summary by Status'])
@@ -1224,10 +1297,10 @@ def download_summary_report():
     csv_writer.writerow(['Property', 'Count'])
     for prop, count in property_counts.items():
         csv_writer.writerow([prop, count])
-    
+
     output = string_io.getvalue()
     string_io.close()
-    
+
     return Response(
         output,
         mimetype="text/csv",
@@ -1287,7 +1360,7 @@ def api_events():
             }
         })
     return jsonify(event_list)
-    
+
 @main.route('/api/vendors/search')
 @login_required
 def search_vendors():
@@ -1356,7 +1429,7 @@ def send_work_order_email(request_id):
                 os.remove(att['path'])
             except OSError as e:
                 current_app.logger.error(f"Error removing temp email attachment: {e}")
-    
+
     db.session.add(AuditLog(text=f"Work order emailed to {recipient}", user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()
 
@@ -1372,7 +1445,7 @@ def add_quote(request_id):
         vendor = form.vendor.data
         file = form.quote_file.data
         attachment_obj = save_attachment(file, work_order.id, file_type='Quote')
-        
+
         if attachment_obj:
             quote = Quote(
                 work_order_id=work_order.id,
@@ -1405,16 +1478,16 @@ def delete_quote(quote_id):
         except OSError as e:
             print(f"Error deleting file {attachment.filename}: {e}")
             pass  # Continue even if file is not found
-        
+
         db.session.delete(attachment)
 
     vendor_name = quote.vendor.company_name if quote.vendor else 'N/A'
-    
+
     db.session.add(AuditLog(text=f"Deleted quote from vendor '{vendor_name}'.", user_id=current_user.id, work_order_id=work_order_id))
-    
+
     db.session.delete(quote)
     db.session.commit()
-    
+
     flash('Quote has been deleted successfully.', 'success')
     return redirect(url_for('main.view_request', request_id=work_order_id))
 
@@ -1465,7 +1538,7 @@ def get_date_range(range_name, start_str, end_str):
         start_date = datetime.combine(start_date, time.min)
     if end_date:
         end_date = datetime.combine(end_date, time.max)
-        
+
     return start_date, end_date
 
 def send_reminders():
@@ -1486,14 +1559,14 @@ def send_reminders():
                 user_id=user.id
             )
             db.session.add(notification)
-            
+
             send_push_notification(
                 user.id,
                 'Follow-up Reminder',
                 notification_text,
                 url_for('main.view_request', request_id=wo.id, _external=True)
             )
-            
+
             email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
             send_notification_email(
                 subject=f"Follow-up Reminder for Request #{wo.id}",
@@ -1507,12 +1580,15 @@ def send_reminders():
                     link=url_for('main.view_request', request_id=wo.id, _external=True)
                 )
             )
-        
+
         current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
         current_tags.discard('Follow-up needed')
         wo.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         wo.follow_up_date = None
-        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=1, work_order_id=wo.id))
+        # Assuming user_id=1 exists and is a system/admin user for logging automated tasks
+        audit_user_id = User.query.filter_by(role='Super User').first().id if User.query.filter_by(role='Super User').first() else 1
+        db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=audit_user_id, work_order_id=wo.id))
+
 
     db.session.commit()
 
