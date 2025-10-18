@@ -15,16 +15,17 @@ def create_app(config_class=Config):
 
     # --- CONFIGURE LOGGING ---
     # Set up a stream handler to output logs to stdout (which Render captures)
-    handler = logging.StreamHandler(os.sys.stdout)
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s [in %(pathname)s:%(lineno)d]'))
-    
-    # Set the log level
-    log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
-    app.logger.setLevel(log_level)
-    
-    app.logger.addHandler(handler)
-    app.logger.info('Flask application starting up...') # Test log
+    if not app.debug:
+        handler = logging.StreamHandler(os.sys.stdout)
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s [in %(pathname)s:%(lineno)d]'))
+        
+        # Set the log level
+        log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
+        app.logger.setLevel(log_level)
+        
+        app.logger.addHandler(handler)
+        app.logger.info('Flask application starting up...') # Test log
     # --- END LOGGING CONFIG ---
 
     # Initialize extensions with the app
@@ -36,6 +37,7 @@ def create_app(config_class=Config):
     csrf.init_app(app)
 
     redis_url = os.environ.get('REDIS_URL')
+    # Use logger=True and engineio_logger=True for debugging socket.io
     socketio.init_app(app, cors_allowed_origins="*", message_queue=redis_url, logger=True, engineio_logger=True)
 
     # Ensure the instance and upload folders exist
@@ -89,12 +91,6 @@ def create_app(config_class=Config):
             """Sends follow-up reminders."""
             from app.main.routes import send_reminders
             send_reminders()
-
-        @app.cli.command("send-follow-ups")
-        def send_follow_ups_command():
-            """Sends automated follow-up emails for stalled requests."""
-            from app.main.routes import send_automated_follow_ups
-            send_automated_follow_ups()
 
     # CORRECTED: Use a relative import to load the event handlers
     from . import events

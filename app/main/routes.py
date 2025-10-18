@@ -337,13 +337,13 @@ def view_request(request_id):
                            follow_up_form=follow_up_form, all_users=all_users, completed_form=completed_form)
 
 
-# +++ RESTORED ROUTE for handling note posts via AJAX +++
+# +++ FULL ROUTE for handling note posts via AJAX +++
 @main.route('/request/<int:request_id>/post_note', methods=['POST'])
 @login_required
-# @csrf.exempt # Removed exemption, JS is sending the token
+# @csrf.exempt # No longer needed, as we confirmed the token is being sent
 def post_note(request_id):
     current_app.logger.info(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
-    
+
     current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
     work_order = WorkOrder.query.get_or_404(request_id)
     current_app.logger.info(f"DEBUG NOTE: Fetched WorkOrder ID: {work_order.id}")
@@ -462,7 +462,7 @@ def post_note(request_id):
     else:
         current_app.logger.warning(f"DEBUG NOTE: Note form validation FAILED. Errors: {note_form.errors}")
         return jsonify({'success': False, 'errors': note_form.errors}), 400
-# --- END RESTORED ROUTE ---
+# --- END ROUTE ---
 
 
 # --- Keep ALL other existing routes ---
