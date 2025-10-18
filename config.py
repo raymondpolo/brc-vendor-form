@@ -41,3 +41,7 @@ class Config:
     
     # +++ ADD THIS LINE TO FIX HTTP LINKS +++
     PREFERRED_URL_SCHEME = 'https'
+    # Application timezone (default to Denver). Use TZ database name like 'America/Denver'.
+    TIMEZONE = _strip_quotes(os.environ.get('TIMEZONE')) or 'America/Denver'
+    # NOTE: All database DateTime fields default to the app timezone via app.utils.get_denver_now()
+    # and templates should use the 'local_dt' Jinja filter to render times in the application timezone.

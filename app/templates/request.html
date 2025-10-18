@@ -41,7 +41,7 @@
                         <td class="px-6 py-4">
                             <a href="{{ url_for('main.view_request', request_id=req.id) }}" class="font-medium text-indigo-600 hover:underline">#{{ req.id }}</a>
                         </td>
-                        <td class="px-6 py-4">{{ req.date_created.strftime('%m/%d/%Y') }}</td>
+                        <td class="px-6 py-4">{{ req.date_created | local_dt('%m/%d/%Y') }}</td>
                         <td class="px-6 py-4">{{ req.wo_number }}</td>
                         <td class="px-6 py-4">{{ req.requester_name }}</td>
                         <td class="px-6 py-4">{{ req.property }}</td>

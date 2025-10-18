@@ -69,13 +69,13 @@
         <div class="bg-white rounded-lg shadow-md p-6">
             {% if work_order.is_deleted %}
             <div class="p-4 mb-4 text-sm text-yellow-700 bg-yellow-100 rounded-lg" role="alert">
-                <span class="font-medium">This request was deleted on {{ work_order.deleted_at.strftime('%m/%d/%Y') }}.</span>
+                <span class="font-medium">This request was deleted on {{ work_order.deleted_at | local_dt('%m/%d/%Y') }}.</span>
             </div>
             {% endif %}
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <h1 class="text-2xl md:text-3xl font-bold text-text">{{ title }}</h1>
-                    <p class="text-sm text-text-secondary">Created on: {{ work_order.date_created.strftime('%m/%d/%Y %I:%M %p') }} by {{ work_order.requester_name }}</p>
+                    <p class="text-sm text-text-secondary">Created on: {{ work_order.date_created | local_dt('%m/%d/%Y %I:%M %p') }} by {{ work_order.requester_name }}</p>
                 </div>
                 <span class="px-3 py-1 text-sm font-semibold rounded-full bg-brand-light text-brand-dark bg-opacity-50">
                     {{ work_order.status }}
@@ -200,7 +200,7 @@
                             <p>{{ note.text }}</p>
                         </div>
                         <div class="mt-2 text-xs text-text-subtle">
-                            <span>{{ note.date_posted.strftime('%m/%d/%Y at %I:%M %p') }}</span>
+                            <span>{{ note.date_posted | local_dt('%m/%d/%Y at %I:%M %p') }}</span>
                         </div>
                     </div>
                 </div>
@@ -522,7 +522,7 @@
                         </div>
                         <div>
                             <p class="text-sm text-text-secondary">{{ log.text }} by <strong>{{ log.user.name }}</strong></p>
-                            <p class="text-xs text-text-subtle">{{ log.timestamp.strftime('%m/%d/%Y %I:%M %p') }}</p>
+                            <p class="text-xs text-text-subtle">{{ log.timestamp | local_dt('%m/%d/%Y %I:%M %p') }}</p>
                         </div>
                     </li>
                     {% else %}

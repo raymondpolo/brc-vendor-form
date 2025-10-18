@@ -57,14 +57,19 @@ def create_app(config_class=Config):
 
     # --- ADD JINJA FILTER ---
     def format_datetime_denver(value, format="%m/%d/%Y %I:%M %p"):
-        """Format a datetime object for display, converting to Denver time if necessary."""
+        """Format a datetime object for display, converting to application timezone if necessary.
+
+        This uses the app.config['TIMEZONE'] value implicitly via convert_to_denver which
+        currently targets Denver. If TIMEZONE is changed, update app.utils accordingly.
+        """
         if value is None:
             return ""
-        # Convert to Denver timezone using the utility function
         denver_time = convert_to_denver(value)
         return denver_time.strftime(format)
 
+    # Keep legacy name and add a clearer alias 'local_dt'
     app.jinja_env.filters['format_denver'] = format_datetime_denver
+    app.jinja_env.filters['local_dt'] = format_datetime_denver
     # --- END JINJA FILTER ---
 
 

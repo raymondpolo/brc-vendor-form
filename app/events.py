@@ -55,7 +55,7 @@ def broadcast_new_note(request_id, note):
                 <p>{note.text}</p>
             </div>
             <div class="mt-2 text-xs text-text-subtle">
-                <span>{note.date_posted.strftime('%m/%d/%Y at %I:%M %p')}</span>
+                <span>{{ note.date_posted | local_dt('%m/%d/%Y at %I:%M %p') }}</span>
             </div>
         </div>
     </div>

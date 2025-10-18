@@ -30,7 +30,7 @@ from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
 from app.events import broadcast_new_note
-from app.utils import get_denver_now, convert_to_denver, DENVER_TZ, make_denver_aware_start_of_day, make_denver_aware_end_of_day # Import helpers
+from app.utils import get_denver_now, convert_to_denver, make_denver_aware_start_of_day, make_denver_aware_end_of_day, format_app_dt # Import helpers
 
 
 def get_requester_initials(name):
@@ -60,7 +60,11 @@ def work_order_to_dict(req):
     denver_created_date = convert_to_denver(req.date_created)
     return {
         'id': req.id,
-        'date_created': denver_created_date.strftime('%m/%d/%Y') if denver_created_date else '', # Changed format
+        # Keep legacy short date for compact UIs
+        'date_created': denver_created_date.strftime('%m/%d/%Y') if denver_created_date else '',
+        # Add explicit app-local formatted datetime and ISO-like string for APIs
+        'date_created_local': denver_created_date.strftime('%m/%d/%Y %I:%M %p') if denver_created_date else '',
+        'date_created_iso': format_app_dt(req.date_created) if req.date_created else None,
         'wo_number': req.wo_number,
         'requester_name': req.requester_name,
         'property': req.property,
@@ -72,6 +76,42 @@ def work_order_to_dict(req):
         'tag': req.tag,
         'vendor_name': req.vendor.company_name if req.vendor else 'N/A'
     }
+
+
+def get_date_range(range_key, start_date_str=None, end_date_str=None):
+    """Return (start_dt, end_dt) as timezone-aware datetimes based on range_key or explicit strings.
+
+    - range_key: optional value like 'last_7', 'this_month', or 'custom'
+    - start_date_str / end_date_str: strings in '%m/%d/%Y' when provided
+    Returns (start_dt, end_dt) where each may be None.
+    """
+    try:
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, '%m/%d/%Y').date()
+            start_dt = make_denver_aware_start_of_day(start_date)
+        else:
+            start_dt = None
+
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%m/%d/%Y').date()
+            end_dt = make_denver_aware_end_of_day(end_date)
+        else:
+            end_dt = None
+
+        # Handle simple named ranges
+        if not start_dt and not end_dt and range_key:
+            now = get_denver_now()
+            if range_key == 'last_7':
+                end_dt = make_denver_aware_end_of_day(now.date())
+                start_dt = make_denver_aware_start_of_day((now - timedelta(days=6)).date())
+            elif range_key == 'this_month':
+                start_dt = make_denver_aware_start_of_day(now.replace(day=1).date())
+                end_dt = make_denver_aware_end_of_day(now.date())
+            # Add more named ranges as needed
+
+        return (start_dt, end_dt)
+    except Exception:
+        return (None, None)
 
 def send_push_notification(user_id, title, body, link):
     # Use Flask logger instead of print
@@ -1458,7 +1498,7 @@ def download_all_work_orders():
         # Convert DB times (now potentially Denver-aware) to Denver before formatting
         created_dt = convert_to_denver(wo.date_created)
         completed_dt = convert_to_denver(wo.date_completed)
-        # Format using mm/dd/yyyy HH:MM
+        # Format using mm/dd/yyyy HH:MM in application timezone
         created_str = created_dt.strftime('%m/%d/%Y %H:%M') if created_dt else ''
         completed_str = completed_dt.strftime('%m/%d/%Y %H:%M') if completed_dt else ''
 
@@ -1567,9 +1607,12 @@ def api_events():
 
     event_list = []
     for event in events_scheduled:
+        # Convert the DB date to an app-local datetime at start of day and format as ISO-like string
+        start_local_iso = format_app_dt(make_denver_aware_start_of_day(event.scheduled_date)) if event.scheduled_date else None
         event_list.append({
             'title': f"#{event.id} - {event.property}",
-            'start': event.scheduled_date.strftime('%Y-%m-%d'), # FullCalendar prefers ISO format for dates
+            'start': start_local_iso,  # App-local ISO datetime (start of day)
+            'allDay': True,
             'url': url_for('main.view_request', request_id=event.id),
             'color': status_colors.get(event.status, '#6B7280'), # Default to gray
             'extendedProps': {
@@ -1585,9 +1628,11 @@ def api_events():
     follow_up_events = follow_up_events_query.all()
 
     for event in follow_up_events:
+        start_local_iso = format_app_dt(make_denver_aware_start_of_day(event.follow_up_date)) if event.follow_up_date else None
         event_list.append({
             'title': f"Follow-up for #{event.id}",
-            'start': event.follow_up_date.strftime('%Y-%m-%d'), # FullCalendar prefers ISO format for dates
+            'start': start_local_iso,  # App-local ISO datetime (start of day)
+            'allDay': True,
             'url': url_for('main.view_request', request_id=event.id),
             'color': status_colors.get('Follow-up'),
             'extendedProps': {
