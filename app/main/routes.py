@@ -20,7 +20,7 @@ from sqlalchemy import or_, func, case
 import bleach
 from pywebpush import webpush, WebPushException
 
-from app import db, csrf # Make sure csrf is imported
+from app import db, csrf
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType, PushSubscription)
@@ -71,7 +71,6 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
-    # Use Flask logger instead of print
     current_app.logger.info(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
     app = current_app._get_current_object()
     with app.app_context():
@@ -1073,8 +1072,7 @@ def view_attachment(attachment_id):
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
 
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
-        abort(403)
-
+        abort(4Note.query.filter(User.name.ilike(name.strip())).first())
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
 
 
@@ -1579,6 +1577,7 @@ def send_reminders():
 @main.route('/subscribe', methods=['POST'])
 @login_required
 def subscribe():
+    current_app.logger.info(f"DEBUG SUB: --- !!! ENTERED /subscribe route !!! --- User: {current_user.name}") # ADDED
     subscription_data = request.get_json()
     if not subscription_data:
         current_app.logger.warning("DEBUG SUB: Subscription endpoint called with no data.")
@@ -1592,12 +1591,18 @@ def subscribe():
 
     if not subscription:
         current_app.logger.info(f"DEBUG SUB: New subscription for user {current_user.name}. Saving to DB.")
-        new_subscription = PushSubscription(
-            subscription_json=subscription_json,
-            user_id=current_user.id
-        )
-        db.session.add(new_subscription)
-        db.session.commit()
+        try:
+            new_subscription = PushSubscription(
+                subscription_json=subscription_json,
+                user_id=current_user.id
+            )
+            db.session.add(new_subscription)
+            db.session.commit()
+            current_app.logger.info(f"DEBUG SUB: Successfully saved new subscription for user {current_user.name}.") # ADDED
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"DEBUG SUB: Error saving subscription to DB: {e}", exc_info=True) # ADDED
+            return jsonify({'success': False, 'message': 'Error saving subscription.'}), 500
     else:
         current_app.logger.info(f"DEBUG SUB: Subscription already exists for user {current_user.name}.")
 
