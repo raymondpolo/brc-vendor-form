@@ -135,7 +135,7 @@
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
                 // Add versioning to force update
-                navigator.serviceWorker.register('/static/js/service-worker.js?v=2')
+                navigator.serviceWorker.register('/static/js/service-worker.js?v=3') // Incremented version
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                         // Ask for permission and subscribe
@@ -174,7 +174,17 @@
         }
 
         function subscribeUser() {
-            const applicationServerKey = urlBase64ToUint8Array('{{ config.VAPID_PUBLIC_KEY }}');
+            // +++ ADDED LOGGING to check the key +++
+            const vapidPublicKey = '{{ config.VAPID_PUBLIC_KEY }}';
+            console.log("DEBUG SUB JS: VAPID Public Key from template:", vapidPublicKey);
+
+            if (!vapidPublicKey) {
+                console.error("DEBUG SUB JS: VAPID_PUBLIC_KEY is EMPTY. Cannot subscribe. Check environment variables and template rendering.");
+                return;
+            }
+            // +++ END LOGGING +++
+
+            const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
             navigator.serviceWorker.ready.then(registration => {
                 registration.pushManager.subscribe({
                     userVisibleOnly: true,
@@ -182,7 +192,6 @@
                 })
                 .then(subscription => {
                     console.log('DEBUG SUB JS: Browser push subscription successful:', subscription);
-                    // ADDED LOGGING FOR THE FETCH REQUEST
                     console.log('DEBUG SUB JS: Sending subscription to /subscribe...');
                     fetch('/subscribe', {
                         method: 'POST',
