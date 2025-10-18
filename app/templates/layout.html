@@ -132,6 +132,7 @@
         });
 
         // --- PUSH NOTIFICATION SCRIPT ---
+        {% if current_user.is_authenticated %}
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             window.addEventListener('load', () => {
                 // Incremented version to v=6
@@ -147,6 +148,7 @@
                     });
             });
         }
+        {% endif %}
 
         function urlBase64ToUint8Array(base64String) {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
