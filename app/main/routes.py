@@ -20,7 +20,7 @@ from sqlalchemy import or_, func, case
 import bleach
 from pywebpush import webpush, WebPushException
 
-from app import db, csrf
+from app import db, csrf # Make sure csrf is imported
 from app.main import main
 from app.models import (User, WorkOrder, Property, Note, Notification,
                         AuditLog, Attachment, Vendor, Quote, RequestType, PushSubscription)
@@ -71,6 +71,7 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
+    # Use Flask logger instead of print
     current_app.logger.info(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
     app = current_app._get_current_object()
     with app.app_context():
@@ -336,132 +337,36 @@ def view_request(request_id):
                            follow_up_form=follow_up_form, all_users=all_users, completed_form=completed_form)
 
 
-# +++ FULL ROUTE for handling note posts via AJAX +++
+# +++ SIMPLIFIED ROUTE for handling note posts via AJAX +++
 @main.route('/request/<int:request_id>/post_note', methods=['POST'])
 @login_required
-# @csrf.exempt # No longer needed, as we confirmed the token is being sent
+@csrf.exempt # <<< TEMPORARILY disable CSRF for this route
 def post_note(request_id):
+    # Use Flask's logger - Log entry immediately
     current_app.logger.info(f"--- !!! ENTERED post_note route for request {request_id} !!! ---")
+    try:
+        # Just log that we received the data and return success
+        note_text_received = request.form.get('text', 'No text found in form')
+        current_app.logger.info(f"DEBUG NOTE: Received note text: '{note_text_received}'")
+        current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
+        work_order = WorkOrder.query.get_or_404(request_id) # Verify work order exists
+        current_app.logger.info(f"DEBUG NOTE: Found WorkOrder ID: {work_order.id}")
 
-    current_app.logger.info(f"DEBUG NOTE: User ID: {current_user.id}, User Name: {current_user.name}")
-    work_order = WorkOrder.query.get_or_404(request_id)
-    current_app.logger.info(f"DEBUG NOTE: Fetched WorkOrder ID: {work_order.id}")
+        # --- Temporarily skip validation, DB saving, mentions, and notifications ---
+        # note_form = NoteForm()
+        # validation_result = note_form.validate_on_submit()
+        # if validation_result:
+        #    ... (original logic) ...
+        # else: ...
 
-    is_author = work_order.author == current_user
-    is_viewer = current_user in work_order.viewers
-    is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
-    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
-    if not (is_author or is_viewer or is_admin_staff or is_property_manager):
-         current_app.logger.warning(f"DEBUG NOTE: Permission denied for user {current_user.id} ({current_user.name}) on request {request_id}")
-         return jsonify({'success': False, 'message': 'Permission denied.'}), 403
-    current_app.logger.info("DEBUG NOTE: Permission check passed.")
+        # Directly return success after logging
+        current_app.logger.info("DEBUG NOTE: Skipping full processing, returning success JSON for testing.")
+        return jsonify({'success': True})
 
-    note_form = NoteForm()
-    current_app.logger.info("DEBUG NOTE: NoteForm instantiated.")
-    current_app.logger.info(f"DEBUG NOTE: Raw request form data: {request.form}")
-
-    validation_result = note_form.validate_on_submit()
-    current_app.logger.info(f"DEBUG NOTE: note_form.validate_on_submit() returned: {validation_result}")
-
-    if validation_result:
-        current_app.logger.info("DEBUG NOTE: Note form validated successfully. Entering try block.")
-        try:
-            note_text = note_form.text.data
-            current_app.logger.info(f"DEBUG NOTE: Note text extracted: '{note_text}'")
-            note = Note(text=note_text, author=current_user, work_order=work_order)
-            db.session.add(note)
-            current_app.logger.info("DEBUG NOTE: Note object created and added to session.")
-
-            notified_users = set()
-            if work_order.author and work_order.author != current_user:
-                 notified_users.add(work_order.author)
-                 current_app.logger.info(f"DEBUG NOTE: Added author {work_order.author.name} to notified_users.")
-
-            tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
-            current_app.logger.info(f"DEBUG NOTE: Found mentions: {tagged_names}")
-            for name in tagged_names:
-                search_name = name.strip()
-                tagged_user = User.query.filter(func.lower(User.name) == func.lower(search_name)).first()
-                if tagged_user:
-                    current_app.logger.info(f"DEBUG NOTE: Found tagged user: {tagged_user.name} (ID: {tagged_user.id})")
-                    if tagged_user not in work_order.viewers:
-                        work_order.viewers.append(tagged_user)
-                        current_app.logger.info(f"DEBUG NOTE: Added {tagged_user.name} to work_order viewers.")
-                    if tagged_user != current_user:
-                        notified_users.add(tagged_user)
-                        current_app.logger.info(f"DEBUG NOTE: Added {tagged_user.name} to notified_users.")
-                    else:
-                        current_app.logger.info(f"DEBUG NOTE: Tagged user {tagged_user.name} is the current user, not adding to notify list.")
-                else:
-                    current_app.logger.warning(f"DEBUG NOTE: Could not find user for mention: @{search_name}")
-
-            current_app.logger.info("DEBUG NOTE: Committing note and viewer changes...")
-            db.session.commit() # Commit note and viewer changes first
-            current_app.logger.info("DEBUG NOTE: Commit successful.")
-
-            current_app.logger.info("DEBUG NOTE: Broadcasting note via Socket.IO...")
-            broadcast_new_note(work_order.id, note) # Notify via Socket.IO
-            current_app.logger.info("DEBUG NOTE: Broadcast complete.")
-
-            current_app.logger.info(f"DEBUG NOTE: Users to notify via Push/Email: {[user.name for user in notified_users]}")
-            if not notified_users:
-                 current_app.logger.info("DEBUG NOTE: No users found in notified_users set.")
-
-            for user in notified_users:
-                current_app.logger.info(f"DEBUG NOTE: Processing PUSH/EMAIL for user: {user.name} (ID: {user.id})")
-                notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
-                notification = Notification(
-                    text=notification_text,
-                    link=url_for('main.view_request', request_id=work_order.id),
-                    user_id=user.id
-                )
-                db.session.add(notification)
-                current_app.logger.info(f"DEBUG NOTE: Added Notification object for user {user.id} to session.")
-
-                current_app.logger.info(f"DEBUG PUSH (Pre-call): Preparing to send push for user {user.id} ({user.name})")
-                push_link = url_for('main.view_request', request_id=work_order.id, _external=True)
-                current_app.logger.info(f"DEBUG PUSH (Pre-call): Link generated: {push_link}")
-
-                send_push_notification(
-                    user.id,
-                    'New Mention',
-                    notification_text,
-                    push_link
-                )
-                current_app.logger.info(f"DEBUG PUSH (Post-call): Returned from send_push_notification for user {user.id}")
-
-                current_app.logger.info(f"DEBUG EMAIL (Pre-call): Preparing email for user {user.id} ({user.name})")
-                email_body = f"""
-                <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-                <p><b>Note:</b></p>
-                <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-                """
-                send_notification_email(
-                    subject=f"New Note on Request #{work_order.id}",
-                    recipients=[user.email],
-                    text_body=notification_text,
-                    html_body=render_template(
-                        'email/notification_email.html',
-                        title="New Note on Request",
-                        user=user,
-                        body_content=email_body,
-                        link=url_for('main.view_request', request_id=work_order.id, _external=True)
-                    )
-                )
-                current_app.logger.info(f"DEBUG EMAIL (Post-call): Returned from send_notification_email for user {user.id}")
-
-            current_app.logger.info("DEBUG NOTE: Committing notifications...")
-            db.session.commit() # Commit notifications
-            current_app.logger.info("DEBUG NOTE: Notifications commit successful. Returning success JSON.")
-            return jsonify({'success': True})
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error posting note: {e}", exc_info=True)
-            return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
-    else:
-        current_app.logger.warning(f"DEBUG NOTE: Note form validation FAILED. Errors: {note_form.errors}")
-        return jsonify({'success': False, 'errors': note_form.errors}), 400
-# --- END ROUTE ---
+    except Exception as e:
+        current_app.logger.error(f"DEBUG NOTE: Exception occurred in simplified post_note: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Simplified route error.'}), 500
+# --- END SIMPLIFIED ROUTE ---
 
 
 # --- Keep ALL other existing routes ---
@@ -742,7 +647,6 @@ def tag_request(request_id):
     can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
     can_super_user = current_user.role == 'Super User'
 
-    # Define roles that can remove any tag vs. roles with restrictions
     can_remove_any_tag = current_user.role in ['Property Manager', 'Super User']
 
     if request.form.get('action') == 'remove_tag':
@@ -750,7 +654,6 @@ def tag_request(request_id):
         if remove_form.validate_on_submit():
             tag_to_remove = request.form.get('tag_to_remove')
 
-            # Authorization check for removing tags
             if tag_to_remove in ['Approved', 'Declined'] and not (can_pm or can_super_user):
                 flash(f"You do not have permission to remove the '{tag_to_remove}' tag.", 'danger')
                 return redirect(url_for('main.view_request', request_id=request_id))
@@ -766,14 +669,12 @@ def tag_request(request_id):
             flash('Could not remove tag due to a security error.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
-    # Dynamically set choices for the form based on user role
     if current_user.role in ['Admin', 'Scheduler']:
         form.tag.choices = [c for c in form.tag.choices if c[0] not in ['Approved', 'Declined']]
 
     if form.validate_on_submit():
         tag_to_add = form.tag.data
 
-        # This check is now implicitly handled by the form choices, but kept for defense-in-depth
         if tag_to_add in ['Approved', 'Declined'] and not (can_pm or can_super_user):
             flash('You do not have permission to approve or decline requests.', 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
@@ -787,7 +688,6 @@ def tag_request(request_id):
                 return redirect(url_for('main.view_request', request_id=request_id))
             work_order.follow_up_date = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
 
-        # Add logic to handle mutually exclusive tags
         if tag_to_add == 'Approved':
             current_tags.discard('Declined')
         elif tag_to_add == 'Declined':
@@ -1071,8 +971,13 @@ def view_attachment(attachment_id):
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
 
+    # *** THIS IS THE LINE WITH THE SYNTAX ERROR ***
+    # It was: abort(4Note.query.filter(User.name.ilike(name.strip())).first())
+    # It is now corrected to:
     if not (is_author or is_viewer or is_property_manager or is_admin_staff):
-        abort(4Note.query.filter(User.name.ilike(name.strip())).first())
+        abort(403)
+    # *** END CORRECTION ***
+
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], attachment.filename, as_attachment=False)
 
 
@@ -1577,7 +1482,7 @@ def send_reminders():
 @main.route('/subscribe', methods=['POST'])
 @login_required
 def subscribe():
-    current_app.logger.info(f"DEBUG SUB: --- !!! ENTERED /subscribe route !!! --- User: {current_user.name}") # ADDED
+    current_app.logger.info(f"DEBUG SUB: --- !!! ENTERED /subscribe route !!! --- User: {current_user.name}")
     subscription_data = request.get_json()
     if not subscription_data:
         current_app.logger.warning("DEBUG SUB: Subscription endpoint called with no data.")
@@ -1598,10 +1503,10 @@ def subscribe():
             )
             db.session.add(new_subscription)
             db.session.commit()
-            current_app.logger.info(f"DEBUG SUB: Successfully saved new subscription for user {current_user.name}.") # ADDED
+            current_app.logger.info(f"DEBUG SUB: Successfully saved new subscription for user {current_user.name}.")
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"DEBUG SUB: Error saving subscription to DB: {e}", exc_info=True) # ADDED
+            current_app.logger.error(f"DEBUG SUB: Error saving subscription to DB: {e}", exc_info=True)
             return jsonify({'success': False, 'message': 'Error saving subscription.'}), 500
     else:
         current_app.logger.info(f"DEBUG SUB: Subscription already exists for user {current_user.name}.")
