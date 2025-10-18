@@ -87,21 +87,38 @@ def send_push_notification(user_id, title, body, link):
 
         current_app.logger.info(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
 
-        vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
-        vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
+        vapid_private_key = current_app.config.get('VAPID_PRIVATE_KEY')
+        vapid_claims = {"sub": f"mailto:{current_app.config.get('VAPID_CLAIM_EMAIL', '')}"}
+
+        if not vapid_private_key:
+            current_app.logger.error('DEBUG PUSH: VAPID_PRIVATE_KEY is not configured. Cannot send push notifications.')
+            return
 
         for sub in subscriptions:
             try:
-                current_app.logger.info(f"DEBUG PUSH: Sending to subscription endpoint: {json.loads(sub.subscription_json)['endpoint'][:50]}...")
+                try:
+                    sub_json = json.loads(sub.subscription_json)
+                except Exception as parse_ex:
+                    current_app.logger.error(f"DEBUG PUSH: Could not parse subscription JSON for PushSubscription id={sub.id}: {parse_ex}")
+                    current_app.logger.debug(f"DEBUG PUSH: Raw subscription_json: {sub.subscription_json}")
+                    continue
+
+                endpoint = sub_json.get('endpoint', '')[:80]
+                current_app.logger.info(f"DEBUG PUSH: Sending to subscription endpoint: {endpoint} (subscription id={sub.id})")
+
                 webpush(
-                    subscription_info=json.loads(sub.subscription_json),
+                    subscription_info=sub_json,
                     data=json.dumps({'title': title, 'body': body, 'link': link}),
                     vapid_private_key=vapid_private_key,
                     vapid_claims=vapid_claims
                 )
+
                 current_app.logger.info("DEBUG PUSH: Successfully sent push notification.")
             except WebPushException as ex:
                 current_app.logger.error(f"DEBUG PUSH: Web push failed with exception: {ex}")
+                # Log more details if available
+                if hasattr(ex, 'response'):
+                    current_app.logger.error(f"DEBUG PUSH: WebPushException response: {getattr(ex, 'response', None)}")
             except Exception as e:
                 current_app.logger.error(f"DEBUG PUSH: An unexpected error occurred in webpush: {e}", exc_info=True)
 
