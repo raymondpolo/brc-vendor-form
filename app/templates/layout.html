@@ -166,19 +166,28 @@
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
                     console.log('DEBUG SUB JS: Notification permission granted.');
-                    subscribeUser();
+                    // Fetch the VAPID public key from the server at runtime to avoid templating/quoting issues
+                    fetch('/vapid_public_key', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                        .then(resp => resp.json())
+                        .then(data => {
+                            if (data && data.success && data.vapidPublicKey) {
+                                subscribeUser(data.vapidPublicKey);
+                            } else {
+                                console.error('DEBUG SUB JS: Could not retrieve VAPID public key from server', data);
+                            }
+                        })
+                        .catch(err => console.error('DEBUG SUB JS: Error fetching VAPID public key:', err));
                 } else {
                     console.log('DEBUG SUB JS: Notification permission denied.');
                 }
             });
         }
 
-        function subscribeUser() {
-            const vapidPublicKey = '{{ config.VAPID_PUBLIC_KEY }}';
-            console.log("DEBUG SUB JS: VAPID Public Key from template:", vapidPublicKey);
+        function subscribeUser(vapidPublicKey) {
+            console.log("DEBUG SUB JS: VAPID Public Key from server:", vapidPublicKey);
 
             if (!vapidPublicKey) {
-                console.error("DEBUG SUB JS: VAPID_PUBLIC_KEY is EMPTY. Cannot subscribe. Check environment variables and template rendering.");
+                console.error("DEBUG SUB JS: VAPID_PUBLIC_KEY is EMPTY. Cannot subscribe. Check environment variables and server endpoint.");
                 return;
             }
 
@@ -188,7 +197,7 @@
                 console.log("DEBUG SUB JS: VAPID key successfully converted to Uint8Array.");
             } catch (e) {
                 console.error("DEBUG SUB JS: ERROR converting VAPID key (is it valid?):", e);
-                return; 
+                return;
             }
             
             console.log("DEBUG SUB JS: Waiting for navigator.serviceWorker.ready...");
@@ -206,20 +215,30 @@
                     console.log('DEBUG SUB JS: Sending subscription to /subscribe...');
                     fetch('/subscribe', {
                         method: 'POST',
+                        credentials: 'same-origin', // important: send cookies (session + CSRF linkage)
                         body: JSON.stringify(subscription),
                         headers: {
                             'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                         }
                     })
-                    .then(response => {
-                        console.log('DEBUG SUB JS: Received response from /subscribe:', response.status);
-                        if (response.ok) return response.json();
-                        throw new Error('Failed to save subscription on server.');
-                    })
-                    .then(data => {
-                        if(data.success) console.log('DEBUG SUB JS: Server successfully saved subscription.');
-                        else console.error('DEBUG SUB JS: Server reported failure in saving subscription.');
+                    .then(async response => {
+                        console.log('DEBUG SUB JS: Received response from /subscribe:', response.status, response.url);
+                        const text = await response.text();
+                        // Try to parse JSON, otherwise log raw text for debugging
+                        try {
+                            const data = JSON.parse(text || '{}');
+                            if (response.ok) {
+                                if (data.success) console.log('DEBUG SUB JS: Server successfully saved subscription.');
+                                else console.error('DEBUG SUB JS: Server reported failure in saving subscription:', data);
+                                return data;
+                            }
+                            throw new Error(data.message || 'Failed to save subscription on server.');
+                        } catch (e) {
+                            console.error('DEBUG SUB JS: Could not parse JSON response from /subscribe. Raw response:', text);
+                            throw e;
+                        }
                     })
                     .catch(err => {
                         console.error('DEBUG SUB JS: Error sending subscription to /subscribe:', err);

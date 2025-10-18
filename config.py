@@ -27,9 +27,17 @@ class Config:
     SHARED_MAIL_USERNAME = os.environ.get('SHARED_MAIL_USERNAME')
 
     # --- Push Notifications (VAPID Keys) ---
-    VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
-    VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
-    VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL')
+    def _strip_quotes(val):
+        if not val:
+            return val
+        val = val.strip()
+        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+            return val[1:-1]
+        return val
+
+    VAPID_PUBLIC_KEY = _strip_quotes(os.environ.get('VAPID_PUBLIC_KEY'))
+    VAPID_PRIVATE_KEY = _strip_quotes(os.environ.get('VAPID_PRIVATE_KEY'))
+    VAPID_CLAIM_EMAIL = _strip_quotes(os.environ.get('VAPID_CLAIM_EMAIL'))
     
     # +++ ADD THIS LINE TO FIX HTTP LINKS +++
     PREFERRED_URL_SCHEME = 'https'

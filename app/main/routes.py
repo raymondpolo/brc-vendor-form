@@ -1574,8 +1574,18 @@ def send_reminders():
 @main.route('/subscribe', methods=['POST'])
 @login_required
 def subscribe():
-    current_app.logger.info(f"DEBUG SUB: --- !!! ENTERED /subscribe route !!! --- User: {current_user.name}")
-    subscription_data = request.get_json()
+    current_app.logger.info(f"DEBUG SUB: --- !!! ENTERED /subscribe route !!! --- User: {getattr(current_user, 'name', 'anonymous')}")
+    # Log helpful debug info for troubleshooting
+    current_app.logger.debug(f"DEBUG SUB: Request headers: {dict(request.headers)}")
+    current_app.logger.debug(f"DEBUG SUB: X-CSRFToken header: {request.headers.get('X-CSRFToken')}")
+    current_app.logger.debug(f"DEBUG SUB: request.is_json: {request.is_json}")
+    current_app.logger.debug(f"DEBUG SUB: current_user.is_authenticated: {current_user.is_authenticated}")
+
+    subscription_data = None
+    try:
+        subscription_data = request.get_json()
+    except Exception as e:
+        current_app.logger.warning(f"DEBUG SUB: Exception parsing JSON body: {e}")
     if not subscription_data:
         current_app.logger.warning("DEBUG SUB: Subscription endpoint called with no data.")
         return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
@@ -1604,3 +1614,18 @@ def subscribe():
         current_app.logger.info(f"DEBUG SUB: Subscription already exists for user {current_user.name}.")
 
     return jsonify({'success': True})
+
+
+@main.route('/vapid_public_key', methods=['GET'])
+@login_required
+def vapid_public_key():
+    """Return the VAPID public key as JSON so the client can fetch it at runtime.
+
+    This avoids templating/quoting issues when environment variables contain
+    surrounding quotes.
+    """
+    key = current_app.config.get('VAPID_PUBLIC_KEY')
+    if not key:
+        current_app.logger.warning('DEBUG SUB: VAPID_PUBLIC_KEY requested but not configured.')
+        return jsonify({'success': False, 'message': 'VAPID public key not configured.'}), 500
+    return jsonify({'success': True, 'vapidPublicKey': key})
