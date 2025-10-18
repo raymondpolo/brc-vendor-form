@@ -1,5 +1,7 @@
 # app/__init__.py
 import os
+import logging # Import logging
+from logging.handlers import RotatingFileHandler
 from flask import Flask
 from config import Config
 from app.extensions import db, login_manager, migrate, csrf, socketio
@@ -11,6 +13,20 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # --- CONFIGURE LOGGING ---
+    # Set up a stream handler to output logs to stdout (which Render captures)
+    handler = logging.StreamHandler(os.sys.stdout)
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s [in %(pathname)s:%(lineno)d]'))
+    
+    # Set the log level
+    log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
+    app.logger.setLevel(log_level)
+    
+    app.logger.addHandler(handler)
+    app.logger.info('Flask application starting up...') # Test log
+    # --- END LOGGING CONFIG ---
+
     # Initialize extensions with the app
     db.init_app(app)
     login_manager.init_app(app)
@@ -19,10 +35,8 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
     csrf.init_app(app)
 
-    # CORRECTED: Robustly handle Redis URL for Socket.IO message queue
-    # This prevents connection errors if REDIS_URL is not set in the environment.
     redis_url = os.environ.get('REDIS_URL')
-    socketio.init_app(app, cors_allowed_origins="*", message_queue=redis_url)
+    socketio.init_app(app, cors_allowed_origins="*", message_queue=redis_url, logger=True, engineio_logger=True)
 
     # Ensure the instance and upload folders exist
     os.makedirs(app.instance_path, exist_ok=True)
@@ -76,7 +90,13 @@ def create_app(config_class=Config):
             from app.main.routes import send_reminders
             send_reminders()
 
-    # Use a relative import to load the event handlers
+        @app.cli.command("send-follow-ups")
+        def send_follow_ups_command():
+            """Sends automated follow-up emails for stalled requests."""
+            from app.main.routes import send_automated_follow_ups
+            send_automated_follow_ups()
+
+    # CORRECTED: Use a relative import to load the event handlers
     from . import events
 
     return app
