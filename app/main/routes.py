@@ -469,7 +469,6 @@ def post_note(request_id):
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error posting note: {e}", exc_info=True) # Log full traceback
-            #print(f"DEBUG NOTE: Exception during note processing: {e}") # Replaced by logger
             return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
     else:
         current_app.logger.warning(f"DEBUG NOTE: Note form validation FAILED. Errors: {note_form.errors}")
@@ -899,7 +898,7 @@ def mark_notification_read(notification_id):
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required
 def new_request():
-    # ... (function body) ...
+    # ... (function body - including push notifications for admins/schedulers) ...
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
@@ -1613,6 +1612,7 @@ def send_reminders():
         # Assuming user_id=1 exists and is a system/admin user for logging automated tasks
         audit_user_id = User.query.filter_by(role='Super User').first().id if User.query.filter_by(role='Super User').first() else 1
         db.session.add(AuditLog(text="Follow-up reminder sent and tag removed.", user_id=audit_user_id, work_order_id=wo.id))
+
 
     db.session.commit()
 
