@@ -71,37 +71,39 @@ def work_order_to_dict(req):
     }
 
 def send_push_notification(user_id, title, body, link):
-    print(f"Attempting to send push notification to user_id: {user_id}") # ADDED LOGGING
+    print(f"DEBUG PUSH: Entered send_push_notification function for user_id: {user_id}")
     # It's crucial to get the app context correctly when running in threads or background tasks
     app = current_app._get_current_object()
     with app.app_context():
         user = User.query.get(user_id)
         if not user:
-            print(f"User with id {user_id} not found.") # ADDED LOGGING
+            print(f"DEBUG PUSH: User with id {user_id} not found. Exiting function.")
             return
 
         subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
         if not subscriptions:
-            print(f"No push subscriptions found for user {user.name}.") # ADDED LOGGING
+            print(f"DEBUG PUSH: No push subscriptions found for user {user.name}. Exiting function.")
             return
         
-        print(f"Found {len(subscriptions)} subscriptions for user {user.name}.") # ADDED LOGGING
+        print(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
         
         vapid_private_key = current_app.config['VAPID_PRIVATE_KEY']
         vapid_claims = {"sub": f"mailto:{current_app.config['VAPID_CLAIM_EMAIL']}"}
 
         for sub in subscriptions:
             try:
-                print(f"Sending to subscription: {sub.subscription_json[:50]}...") # ADDED LOGGING
+                print(f"DEBUG PUSH: Sending to subscription endpoint: {json.loads(sub.subscription_json)['endpoint'][:50]}...")
                 webpush(
                     subscription_info=json.loads(sub.subscription_json),
                     data=json.dumps({'title': title, 'body': body, 'link': link}),
                     vapid_private_key=vapid_private_key,
                     vapid_claims=vapid_claims
                 )
-                print("Successfully sent push notification.") # ADDED LOGGING
+                print("DEBUG PUSH: Successfully sent push notification.")
             except WebPushException as ex:
-                print(f"Web push failed: {ex}")
+                print(f"DEBUG PUSH: Web push failed with exception: {ex}")
+            except Exception as e:
+                print(f"DEBUG PUSH: An unexpected error occurred in webpush: {e}")
 
 
 @main.route('/')
@@ -300,46 +302,50 @@ def view_request(request_id):
                 note = Note(text=note_text, author=current_user, work_order=work_order)
                 db.session.add(note)
                 
-                notified_users = {work_order.author} if work_order.author != current_user else set()
+                notified_users = set()
+                # Ensure author is added if they aren't the one posting
+                if work_order.author and work_order.author != current_user:
+                     notified_users.add(work_order.author)
+
                 tagged_names = re.findall(r'@(\w+(?:\s\w+)?)', note_text)
+                print(f"DEBUG NOTE: Found mentions: {tagged_names}")
                 for name in tagged_names:
-                    tagged_user = User.query.filter(User.name.ilike(name.strip())).first()
+                    # Use case-insensitive search and handle potential spaces
+                    search_name = name.strip()
+                    tagged_user = User.query.filter(func.lower(User.name) == func.lower(search_name)).first()
                     if tagged_user:
-                        print(f"Found tagged user: {tagged_user.name} (ID: {tagged_user.id})") # ADDED LOGGING
+                        print(f"DEBUG NOTE: Found tagged user: {tagged_user.name} (ID: {tagged_user.id})")
                         if tagged_user not in work_order.viewers:
                             work_order.viewers.append(tagged_user)
                         if tagged_user != current_user:
                             notified_users.add(tagged_user)
                     else:
-                        print(f"Could not find user for mention: @{name.strip()}") # ADDED LOGGING
+                        print(f"DEBUG NOTE: Could not find user for mention: @{search_name}")
 
                 db.session.commit() # Commit note and viewer changes first
 
                 broadcast_new_note(work_order.id, note)
 
+                print(f"DEBUG NOTE: Users to notify: {[user.name for user in notified_users]}")
                 for user in notified_users:
-                    print(f"Processing notification for user: {user.name} (ID: {user.id})") # ADDED LOGGING
+                    print(f"DEBUG NOTE: Processing notification for user: {user.name} (ID: {user.id})")
                     notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
                     notification = Notification(
                         text=notification_text,
-                        link=url_for('main.view_request', request_id=work_order.id), 
+                        link=url_for('main.view_request', request_id=work_order.id),
                         user_id=user.id
                     )
                     db.session.add(notification)
-                    
-                    # ADDED LOGGING before push call
-                    print(f"--- Preparing to send push notification (inside loop) ---")
-                    print(f"Target User ID: {user.id}")
-                    print(f"Target User Name: {user.name}")
-                    print(f"Current App Context: {current_app.name}")
-                    print(f"VAPID Public Key Loaded: {'Yes' if current_app.config.get('VAPID_PUBLIC_KEY') else 'No'}")
-                    # --- END ADDED LOGGING ---
+
+                    print(f"DEBUG PUSH (Pre-call): Preparing to send push for user {user.id} ({user.name})")
+                    push_link = url_for('main.view_request', request_id=work_order.id, _external=True)
+                    print(f"DEBUG PUSH (Pre-call): Link generated: {push_link}")
 
                     send_push_notification(
                         user.id,
                         'New Mention',
                         notification_text,
-                        url_for('main.view_request', request_id=work_order.id, _external=True)
+                        push_link
                     )
 
                     email_body = f"""
@@ -364,7 +370,7 @@ def view_request(request_id):
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error posting note: {e}")
-                print(f"Exception during note processing: {e}") # ADDED LOGGING
+                print(f"Exception during note processing: {e}")
                 return jsonify({'success': False, 'message': 'An internal error occurred.'}), 500
         else:
             return jsonify({'success': False, 'errors': note_form.errors}), 400
@@ -817,7 +823,6 @@ def new_request():
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm()
-    # MODIFIED: Populate the request_type choices from the database
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     if form.validate_on_submit():
         date1 = datetime.strptime(form.date_1.data, '%m/%d/%Y').date() if form.date_1.data else None
@@ -828,7 +833,6 @@ def new_request():
 
         new_order = WorkOrder(
             wo_number=form.wo_number.data, requester_name=current_user.name,
-            # MODIFIED: Save the request_type_id
             request_type_id=form.request_type.data, description=form.description.data,
             property=form.property.data, unit=form.unit.data,
             tenant_name=form.tenant_name.data, tenant_phone=form.tenant_phone.data,
@@ -906,7 +910,6 @@ def edit_request(request_id):
     properties = Property.query.all()
     properties_dict = {p.name: {"address": p.address, "manager": p.property_manager} for p in properties}
     form = NewRequestForm(obj=work_order)
-    # MODIFIED: Populate the request_type choices from the database
     form.request_type.choices = [(rt.id, rt.name) for rt in RequestType.query.order_by(RequestType.name).all()]
     reassign_form = ReassignRequestForm()
     
@@ -914,7 +917,6 @@ def edit_request(request_id):
 
     if form.validate_on_submit():
         work_order.wo_number = form.wo_number.data
-        # MODIFIED: Save the request_type_id
         work_order.request_type_id = form.request_type.data
         work_order.description = form.description.data
         work_order.property = form.property.data
@@ -953,7 +955,6 @@ def edit_request(request_id):
         print("---------------------------------")
 
     if request.method == 'GET':
-        # MODIFIED: Set the initial value of the dropdown
         form.request_type.data = work_order.request_type_id
         form.date_1.data = work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else ''
         form.date_2.data = work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else ''
@@ -1061,10 +1062,8 @@ def account():
 
             def embed_local_images(html_content):
                 upload_folder = current_app.config['UPLOAD_FOLDER']
-                # --- FINAL, MORE ROBUST REGEX ---
                 img_tags = re.findall(r'<img[^>]+src=[\'"](https?://[^/]+/uploads/([^\'"]+))[\'"]', html_content)
                 
-                # img_tags will be a list of tuples, e.g., [('full_url', 'filename.png?v=123')]
                 for full_url, filename_with_params in img_tags:
                     filepath = os.path.join(upload_folder, filename_with_params.split('?')[0])
                     
@@ -1079,7 +1078,6 @@ def account():
                                 
                             data_uri = f"data:{mime_type};base64,{encoded_string}"
                             
-                            # Replace the full URL with the data URI
                             html_content = html_content.replace(full_url, data_uri, 1)
                         except Exception as e:
                             current_app.logger.error(f"Error embedding image {filename_with_params}: {e}")
@@ -1124,11 +1122,8 @@ def upload_image():
             unique_filename = f"{uuid.uuid4().hex}.{ext}"
             file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
             
-            # --- MODIFICATION START ---
-            # Add a unique timestamp as a query parameter to "bust" the cache
             cache_buster = int(datetime.utcnow().timestamp())
             url = url_for('main.uploaded_file', filename=unique_filename, v=cache_buster, _external=True)
-            # --- MODIFICATION END ---
             
             return jsonify({'uploaded': 1, 'fileName': unique_filename, 'url': url})
     return jsonify({'uploaded': 0, 'error': {'message': 'Upload failed'}})
@@ -1526,7 +1521,7 @@ def send_reminders():
 def subscribe():
     subscription_data = request.get_json()
     if not subscription_data:
-        print("Subscription endpoint called with no data.") # ADDED LOGGING
+        print("DEBUG SUB: Subscription endpoint called with no data.")
         return jsonify({'success': False, 'message': 'No subscription data received.'}), 400
 
     subscription_json = json.dumps(subscription_data)
@@ -1536,7 +1531,7 @@ def subscribe():
     ).first()
 
     if not subscription:
-        print(f"New subscription for user {current_user.name}. Saving to DB.") # ADDED LOGGING
+        print(f"DEBUG SUB: New subscription for user {current_user.name}. Saving to DB.")
         new_subscription = PushSubscription(
             subscription_json=subscription_json,
             user_id=current_user.id
@@ -1544,7 +1539,7 @@ def subscribe():
         db.session.add(new_subscription)
         db.session.commit()
     else:
-        print(f"Subscription already exists for user {current_user.name}.") # ADDED LOGGING
+        print(f"DEBUG SUB: Subscription already exists for user {current_user.name}.")
 
 
     return jsonify({'success': True})
