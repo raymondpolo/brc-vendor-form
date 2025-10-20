@@ -223,12 +223,19 @@ class DeleteRestoreRequestForm(FlaskForm):
     """An empty form for CSRF protection."""
     pass
 
+# +++ ADD GoBackForm +++
+class GoBackForm(FlaskForm):
+    """Form for toggling the Go-back tag."""
+    pass
+# +++ END ADD +++
+
 class TagForm(FlaskForm):
     tag = SelectField('Tag', choices=[
-        ('Awaiting Approval', 'Awaiting Approval'),
+        #('Awaiting Approval', 'Awaiting Approval'), # Removed as per current code
         ('Follow-up needed', 'Follow-up needed'),
-        ('Completed', 'Completed'),
-        ('Go-back', 'Go-back')
+        #('Completed', 'Completed'), # Added automatically when Closed/Completed
+        ('Go-back', 'Go-back'),
+        # Add other relevant tags if needed, but Approved/Declined are handled via quotes
     ], validators=[DataRequired()])
     follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
     submit = SubmitField('Add Tag')
