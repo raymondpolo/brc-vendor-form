@@ -224,7 +224,7 @@
                 </div>
                 <div>
                     <h3 class="font-semibold text-text">Request Type</h3>
-                    <p class="text-text-secondary">{{ work_order.request_type_relation.name }}</p>
+                    <p class="text-text-secondary">{{ work_order.request_type_relation.name if work_order.request_type_relation else 'N/A' }}</p> {# Added check #}
                 </div>
                 <div>
                     <h3 class="font-semibold text-text">Preferred Dates</h3>
@@ -331,7 +331,7 @@
                 {% for note in notes %}
                 <div class="flex space-x-3">
                     <div class="flex-shrink-0">
-                        <img class="h-8 w-8 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ note.author.name[0].upper() if note.author and note.author.name else '?' }}" alt="User Avatar">
+                         <img class="h-8 w-8 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ note.author.name[0].upper() if note.author and note.author.name else '?' }}" alt="User Avatar">
                     </div>
                     <div>
                         <div class="text-sm">
@@ -374,8 +374,8 @@
                 {{ status_form.status.label(class="block text-sm font-medium text-text") }}
                 {{ status_form.status(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", **{'x-model': 'selectedStatus'}) }}
 
-                <div x-show="selectedStatus === 'Scheduled'" class="mt-4">
-                    <div x-show="!isEditingDate && '{{ work_order.scheduled_date }}'">
+                <div x-show="selectedStatus === 'Scheduled'" class="mt-4" :style="selectedStatus === 'Scheduled' ? '' : 'display: none;'"> {# Use :style for initial load #}
+                    <div x-show="!isEditingDate && '{{ work_order.scheduled_date }}'" :style="!isEditingDate && '{{ work_order.scheduled_date }}' ? '' : 'display: none;'">
                         <label class="block text-sm font-medium text-text">Scheduled Date</label>
                         <div class="flex items-center justify-between mt-1">
                             <p class="text-text">{{ work_order.scheduled_date.strftime('%m/%d/%Y') if work_order.scheduled_date }}</p>
@@ -383,7 +383,7 @@
                         </div>
                     </div>
 
-                    <div x-show="isEditingDate || !'{{ work_order.scheduled_date }}'">
+                    <div x-show="isEditingDate || !'{{ work_order.scheduled_date }}'" :style="isEditingDate || !'{{ work_order.scheduled_date }}' ? '' : 'display: none;'">
                         {{ status_form.scheduled_date.label(class="block text-sm font-medium text-text") }}
                         {{ status_form.scheduled_date(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", value=work_order.scheduled_date.strftime('%m/%d/%Y') if work_order.scheduled_date else '') }} {# Pre-fill if exists #}
                     </div>
@@ -488,7 +488,7 @@
                     </button>
                     {% endif %}
                 </div>
-                <div x-show="initial.id" class="mt-4 border-t pt-4 space-y-2 text-sm">
+                <div x-show="initial.id" class="mt-4 border-t pt-4 space-y-2 text-sm" :style="initial.id ? '' : 'display: none;'">
                     <div class="flex justify-between items-start">
                         <div>
                             <div>
@@ -538,7 +538,7 @@
                 </div>
             </div>
 
-            <div x-show="isEditing">
+            <div x-show="isEditing" :style="isEditing ? '' : 'display: none;'">
                 <form x-ref="vendorForm" method="POST" action="{{ url_for('main.assign_vendor', request_id=work_order.id) }}">
                     {{ assign_vendor_form.csrf_token }}
                     <input type="hidden" name="vendor_id" x-model="selectedVendorId">
@@ -553,7 +553,7 @@
                             </button>
                         </div>
 
-                        <div x-show="results.length > 0"
+                        <div x-show="results.length > 0" :style="results.length > 0 ? '' : 'display: none;'"
                             class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                             <ul>
                                 <template x-for="vendor in results" :key="vendor.id">
@@ -566,7 +566,7 @@
                         </div>
                     </div>
 
-                    <div x-show="selectedVendorId" class="mt-4 border-t pt-4 space-y-2 text-sm">
+                    <div x-show="selectedVendorId" class="mt-4 border-t pt-4 space-y-2 text-sm" :style="selectedVendorId ? '' : 'display: none;'">
                         <div>
                             <span class="font-semibold text-text-secondary">Contact:</span>
                             <span class="text-text" x-text="selectedVendorContact || 'N/A'"></span>
@@ -609,34 +609,25 @@
 
         {# --- MODIFIED: Tag Management Section --- #}
          {% if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager'] and not work_order.is_deleted %}
-        <div x-data="{ selectedTag: '', showFollowUpDate: false }" class="bg-white p-6 rounded-lg shadow-md">
+        <div x-data="{ selectedTag: '{{ tag_form.tag.data or '' }}', showFollowUpDate: {{ 'true' if tag_form.tag.data == 'Follow-up needed' else 'false' }} }" class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-text mb-4">Add Tag</h3>
             <form method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}">
                 {{ tag_form.hidden_tag() }}
-                {# Filter choices based on role #}
-                {% set allowed_tags = [] %}
-                {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-                    {% set _ = allowed_tags.append('Follow-up needed') %}
-                    {# Go-back handled by toggle button now #}
-                    {#% set _ = allowed_tags.append('Go-back') %#}
-                    {# Add others if needed #}
-                {% endif %}
-                {# PMs can't add tags via this form in this design, only remove or use Approve/Decline buttons #}
+                {# Choices are now set in the route handler #}
 
-                {% if allowed_tags %}
+                {% if tag_form.tag.choices %} {# Check if there are any choices allowed for the user #}
                     <div class="mb-4">
                         {{ tag_form.tag.label(class="block text-sm font-medium text-text") }}
-                        {# Update choices dynamically based on permissions #}
-                        {% set tag_form.tag.choices = [(tag, tag) for tag in allowed_tags] %}
+                        {# Render the select field - choices are already set in the route #}
                         {{ tag_form.tag(
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm",
                             **{'x-model': 'selectedTag', '@change': "showFollowUpDate = selectedTag === 'Follow-up needed'"}
                         ) }}
                     </div>
 
-                    <div x-show="showFollowUpDate" class="mb-4" style="display: none;">
+                    <div x-show="showFollowUpDate" class="mb-4" :style="showFollowUpDate ? '' : 'display: none;'"> {# Use :style for initial state #}
                         {{ tag_form.follow_up_date.label(class="block text-sm font-medium text-text") }}
-                        {{ tag_form.follow_up_date(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", placeholder="MM/DD/YYYY") }}
+                        {{ tag_form.follow_up_date(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", placeholder="MM/DD/YYYY", value=work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else '') }} {# Pre-fill date #}
                     </div>
 
                     <div class="mt-4">
@@ -776,7 +767,7 @@
                             <p>We would like to schedule this request:</p>
                             <p>&nbsp;</p>
                             <p><strong>Work Order #:</strong> {{ work_order.wo_number }}-{% set names = (work_order.author.name if work_order.author else work_order.requester_name).split() %}{{ names[0][0] if names else '' }}{{ names[-1][0] if names|length > 1 else '' }}<br>
-                            <strong>Type of Request:</strong> {{ work_order.request_type_relation.name }}<br>
+                            <strong>Type of Request:</strong> {{ work_order.request_type_relation.name if work_order.request_type_relation else 'N/A' }}<br> {# Added check #}
                             <strong>Description / Instructions:</strong><br>
                             &nbsp;&nbsp;&nbsp;&nbsp;{{ work_order.description }}</p>
                             <p><strong>Property:</strong> {{ work_order.property }}<br>
@@ -903,8 +894,8 @@
         const closeAttachmentModalBtn = document.getElementById('closeAttachmentModalBtn');
         const attachmentFrame = document.getElementById('attachmentFrame');
         const attachmentModalTitle = document.getElementById('attachmentModalTitle');
-        const notificationToast = document.getElementById('notificationToast');
-        // const notificationMessage = document.getElementById('notificationMessage'); // This ID wasn't in the original toast, remove if not used
+        const notificationToast = document.getElementById('notification-toast');
+        const notificationToastText = document.getElementById('notification-toast-text'); // Added
         let editor; // CKEditor instance
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content'); // Ensure csrfToken is defined
@@ -958,19 +949,18 @@
          }
 
          function showNotification(message, isSuccess = true) {
-            const toast = document.getElementById('notification-toast');
-            const toastText = document.getElementById('notification-toast-text'); // Make sure this ID exists
-            if (toast && toastText) {
-                toastText.textContent = message;
-                toast.classList.remove('hidden', 'bg-red-500', 'bg-green-500');
-                toast.classList.add(isSuccess ? 'bg-green-500' : 'bg-red-500');
-                setTimeout(() => {
-                    toast.classList.add('hidden');
-                }, 5000);
-            } else {
+             // Use the existing notification toast mechanism
+             if (notificationToast && notificationToastText) {
+                 notificationToastText.textContent = message;
+                 notificationToast.classList.remove('hidden', 'bg-red-500', 'bg-green-500');
+                 notificationToast.classList.add(isSuccess ? 'bg-green-500' : 'bg-red-500');
+                 setTimeout(() => {
+                     notificationToast.classList.add('hidden');
+                 }, 5000);
+             } else {
                  console.warn("Notification elements not found");
                  alert(message); // Fallback
-            }
+             }
          }
 
 
@@ -1228,12 +1218,18 @@
                     console.log("DEBUG JS: Received response status:", response.status);
                     if (!response.ok) {
                         // Log detailed error if possible
-                         response.text().then(text => {
-                             console.error("DEBUG JS: Fetch error response body:", text);
+                         response.json().then(errData => { // Try to parse error as JSON
+                             console.error("DEBUG JS: Fetch error JSON response body:", errData);
+                             showNotification(errData.message || `Error: ${response.status}`, false);
+                         }).catch(() => { // Fallback if error isn't JSON
+                             response.text().then(text => {
+                                 console.error("DEBUG JS: Fetch error text response body:", text);
+                                 showNotification(`Error: ${response.status}`, false);
+                             });
                          });
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
-                    return response.json(); // Attempt to parse response as JSON
+                    return response.json(); // Attempt to parse success response as JSON
                 })
                 .then(data => {
                     console.log("DEBUG JS: Received JSON data:", data);
@@ -1242,14 +1238,17 @@
                         console.log("DEBUG JS: Note posted successfully.");
                         // Note will be added via WebSocket 'new_note' event
                     } else {
-                        console.error("DEBUG JS: Failed to post note:", data.errors || data.message);
-                        // Optionally display error to user
-                        showNotification("Error posting note: " + (data.message || JSON.stringify(data.errors)), false);
+                        // Error message handled in the .then(response => ...) block
+                        console.error("DEBUG JS: Failed to post note (server reported failure):", data.errors || data.message);
                     }
                 })
                 .catch(error => {
-                    console.error("DEBUG JS: Error during fetch:", error);
-                     showNotification("A network or server error occurred while posting the note.", false);
+                    // Network errors or errors thrown from response handling
+                    console.error("DEBUG JS: Error during fetch or processing:", error);
+                    // Avoid showing generic network error if a specific one was already shown
+                    if (!error.message.startsWith('HTTP error')) {
+                         showNotification("A network or server error occurred while posting the note.", false);
+                    }
                 });
             });
         }
