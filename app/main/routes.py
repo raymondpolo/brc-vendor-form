@@ -420,6 +420,7 @@ def my_requests():
     return render_template('my_requests.html', title='My Requests',
                            requests_json=json.dumps(requests_list))
 
+
 @main.route('/shared-with-me')
 @login_required
 def shared_requests():
@@ -493,7 +494,9 @@ def view_request(request_id):
     # Fetch related data for the template
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
-    quotes = work_order.quotes.all() # Fetch quotes relationship
+    # *** FIX: Remove .all() here ***
+    quotes = work_order.quotes # Fetch quotes relationship (it's already a list or lazy loadable)
+    # *** END FIX ***
     all_users = User.query.filter_by(is_active=True).all() # For CC options etc.
 
     # Instantiate forms needed on the page
@@ -520,7 +523,7 @@ def view_request(request_id):
 
     if base_choices_dict.get('Follow-up needed') and is_admin_staff:
         allowed_tags_for_form.append(('Follow-up needed', 'Follow-up needed'))
-    # Add other conditions for different tags if needed (e.g., if 'Go-back' was added back to TagForm)
+    # Add other conditions for different tags if needed
 
     # Update the choices on the form instance passed to the template
     tag_form.tag.choices = allowed_tags_for_form
@@ -836,6 +839,24 @@ def change_status(request_id):
     # Set default value in form to current status
     if request.method == 'GET': # Should normally not be GET, but handle defensively
          form.status.data = work_order.status
+    elif request.method == 'POST' and not form.is_submitted(): # Pre-populate on initial POST load if needed
+         form.status.data = work_order.status
+
+    # Fetch context needed for re-rendering template in case of validation error
+    notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
+    audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
+    quotes = work_order.quotes
+    all_users = User.query.filter_by(is_active=True).all()
+    template_context = {
+        'title': f'Request #{work_order.id}', 'work_order': work_order, 'notes': notes,
+        'note_form': NoteForm(), 'status_form': form, 'audit_logs': audit_logs, # Pass back the current form instance
+        'attachment_form': AttachmentForm(), 'assign_vendor_form': AssignVendorForm(),
+        'requester_initials': get_requester_initials(work_order.requester_name), 'quote_form': QuoteForm(), 'quotes': quotes,
+        'delete_form': DeleteRestoreRequestForm(), 'tag_form': TagForm(), 'reassign_form': ReassignRequestForm(), # Instantiate other forms needed
+        'follow_up_form': SendFollowUpForm(), 'all_users': all_users, 'completed_form': MarkAsCompletedForm(),
+        'go_back_form': GoBackForm()
+    }
+
 
     if form.validate_on_submit():
         new_status = form.status.data
@@ -847,25 +868,17 @@ def change_status(request_id):
                 return redirect(url_for('main.view_request', request_id=request_id))
             if not form.scheduled_date.data:
                 flash('A scheduled date is required to change the status to "Scheduled".', 'danger')
-                # Re-render with error (need to pass all context back)
-                # ... (fetch notes, logs, etc. again) ...
+                # Re-render with error
                 form.status.data = work_order.status # Reset dropdown to current
-                return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order,
-                                       status_form=form, # Pass back form with errors
-                                       # ... (pass all other necessary variables) ...
-                                       )
+                return render_template('view_request.html', **template_context)
             try:
                 # Ensure date format is valid before proceeding
                 new_scheduled_date_obj = datetime.strptime(form.scheduled_date.data, '%m/%d/%Y').date()
             except ValueError:
                  flash('Invalid date format for scheduled date (MM/DD/YYYY).', 'danger')
                  # Re-render with error
-                 # ... (fetch notes, logs, etc. again) ...
                  form.status.data = work_order.status # Reset dropdown
-                 return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order,
-                                        status_form=form, # Pass back form with errors
-                                        # ... (pass all other necessary variables) ...
-                                        )
+                 return render_template('view_request.html', **template_context)
 
 
         old_status = work_order.status
@@ -954,13 +967,10 @@ def change_status(request_id):
     else:
         # Log form errors for debugging
         current_app.logger.warning(f"ChangeStatusForm validation failed: {form.errors}")
-        # Flash specific errors
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"Error updating status: {error}", 'danger')
-        # Fallback generic message if no specific errors found (e.g., CSRF)
-        if not form.errors:
-             flash('Could not update status. Please check the form.', 'danger')
+        # Flash specific errors (already handled by WTForms in template generally)
+        flash('Could not update status. Please check errors below.', 'danger')
+        # Re-render the template with errors
+        return render_template('view_request.html', **template_context)
 
 
     return redirect(url_for('main.view_request', request_id=request_id))
@@ -1147,7 +1157,8 @@ def tag_request(request_id):
     if base_choices_dict.get('Follow-up needed') and is_admin_staff:
         allowed_choices_list.append(('Follow-up needed', 'Follow-up needed'))
     # Add other tag choices based on roles here if needed
-    tag_form.tag.choices = allowed_choices_list
+    tag_form.tag.choices = allowed_choices_list # Update the choices on the form instance
+
 
     # --- Handle REMOVE action ---
     if request.form.get('action') == 'remove_tag':
@@ -1191,9 +1202,22 @@ def tag_request(request_id):
     # Fetch data needed for re-rendering template in case of validation error
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
-    quotes = work_order.quotes.all()
+    quotes = work_order.quotes
     all_users = User.query.filter_by(is_active=True).all()
     status_form = ChangeStatusForm()
+    # Pre-populate status form's current value for re-rendering
+    status_form.status.data = work_order.status
+    # Re-filter status choices for the current user
+    base_choices = [('Open','Open'), ('Pending','Pending'), ('Quote Requested','Quote Requested'),
+                    ('Quote Sent','Quote Sent'), ('Scheduled','Scheduled'), ('Completed','Completed'),
+                    ('Closed','Closed'), ('Cancelled','Cancelled')]
+    if work_order.status == 'Approved': base_choices.append(('Approved', 'Approved'))
+    if work_order.status == 'Quote Declined': base_choices.append(('Quote Declined', 'Quote Declined'))
+    if current_user.role in ['Admin', 'Scheduler', 'Super User']:
+        status_form.status.choices = [c for c in base_choices if c[0] not in ['Approved', 'Quote Declined']]
+    else: # Should not happen, but default case
+         status_form.status.choices = base_choices
+
     attachment_form = AttachmentForm()
     assign_vendor_form = AssignVendorForm()
     quote_form = QuoteForm()
@@ -2669,11 +2693,13 @@ def my_subscriptions():
                 'auth_short': auth,
                 })
         # Render a simple debug template
+        # Ensure 'debug/subscriptions.html' exists in your templates folder
         return render_template('debug/subscriptions.html', title='My Push Subscriptions', subscriptions=subscriptions_data)
     except Exception as e:
         current_app.logger.error(f"ERROR in my_subscriptions for user {current_user.id}: {e}", exc_info=True)
         flash(f'Error retrieving subscriptions: {e}', 'danger')
-        return redirect(url_for('main.index'))
+        # Redirect to a safe page like account or index on error
+        return redirect(url_for('main.account'))
 
 
 # --- DELETE A SUBSCRIPTION (for debugging/cleanup) ---
