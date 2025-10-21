@@ -991,6 +991,8 @@ def quote_action(request_id, quote_id, action):
     log_text = "" # Initialize log text
     flash_text = "" # Initialize flash message
 
+    current_app.logger.info(f"Quote action requested: action={action}, quote_id={quote_id}, current_status={quote.status}")
+
     if action == 'approve':
         if quote.status == 'Approved':
             if request.accept_mimetypes.accept_json:
@@ -1100,7 +1102,7 @@ def quote_action(request_id, quote_id, action):
     flash(flash_text, 'success')
     # If AJAX requested JSON, return structured info for client-side updates
     if request.accept_mimetypes.accept_json:
-        return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': work_order.tag})
+        return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': work_order.tag, 'message': flash_text})
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
