@@ -136,10 +136,6 @@
                         <p class="text-xs text-text-secondary">No tags assigned.</p>
                     {% endif %}
                  </div>
-                          <div class="mt-2 text-sm text-text-secondary">
-                              <span>Follow-up date: </span>
-                              <span id="follow-up-display">{{ work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else 'None' }}</span>
-                          </div>
             </div>
             {# --- END MODIFICATION --- #}
 
@@ -1444,12 +1440,10 @@
                         }
                         return resp.json().catch(() => null);
                     }).then(json => {
-                        if (json && json.success && json.tags !== undefined) {
+                            if (json && json.success && json.tags !== undefined) {
                             console.log("DEBUG JS: Remove tag successful. Updating UI.");
                             updateTagsContainer(json.tags); // Update tags display
                             if(dateInput) dateInput.value = ''; // Clear date input
-                            const followUpDisplay = document.getElementById('follow-up-display');
-                            if (followUpDisplay) followUpDisplay.textContent = 'None'; // Update date display span
                         } else {
                             console.error('Follow-up toggle (remove) failed or invalid response', json);
                             // *** Revert checkbox state on failure ***
@@ -1600,11 +1594,10 @@
                     }
                     return response.json();
                 }).then(json => {
-                    if (json && json.success) {
+                        if (json && json.success) {
                         console.log("DEBUG JS: Save follow-up successful. Updating UI.");
                         updateTagsContainer(json.tags); // Update tags UI
-                        const followUpDisplay = document.getElementById('follow-up-display');
-                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None'; // Update date display
+                        // follow-up date is no longer displayed in the tags area per UX request
                         showNotification('Follow-up date saved.', true);
                     } else {
                         console.error('Failed to save follow-up:', json);

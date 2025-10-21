@@ -1175,8 +1175,11 @@ def tag_request(request_id):
     # *** Instantiate form with request data for validation ***
     form = TagForm(request.form)
 
-    # Permissions
+    # Permissions - mirror template logic: Admin/Scheduler/Super User; Property Manager for their property; Super User always
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
+    is_property_manager_for_this = (current_user.role == 'Property Manager' and current_user.name == work_order.property_manager)
+    can_remove_other = is_admin_staff or is_property_manager_for_this
+    can_remove_approved_declined = is_property_manager_for_this or current_user.role == 'Super User'
 
     action = request.form.get('action')
     # Determine tag name based on action
@@ -1199,7 +1202,13 @@ def tag_request(request_id):
     # --- Handle REMOVE action ---
     if action == 'remove_tag':
         current_app.logger.info(f"Processing remove_tag for '{tag_name}' on WO #{request_id}")
-        if not is_admin_staff:
+        # Decide permission based on tag type (approved/declined vs others)
+        if tag_name in ['Approved', 'Declined']:
+            allowed = can_remove_approved_declined
+        else:
+            allowed = can_remove_other
+
+        if not allowed:
              current_app.logger.warning(f"Permission denied for user {current_user.id} to remove tag '{tag_name}' on WO #{request_id}")
              flash(f"You do not have permission to remove the '{tag_name}' tag.", 'danger')
              if request.accept_mimetypes.accept_json:
