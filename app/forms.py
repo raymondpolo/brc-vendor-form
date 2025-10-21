@@ -180,10 +180,10 @@ class ChangeStatusForm(FlaskForm):
     # +++ END ADD +++
     submit = SubmitField('Update Status')
 
-    # Custom validation for follow-up date
-    def validate_follow_up_date(self, field):
-        if self.add_follow_up.data and not field.data:
-            raise ValidationError('Follow-up date is required when adding the follow-up tag.')
+    # Custom validation for follow-up date (REMOVED - now handled in route/JS)
+    # def validate_follow_up_date(self, field):
+    #     if self.add_follow_up.data and not field.data:
+    #         raise ValidationError('Follow-up date is required when adding the follow-up tag.')
         # Date format validation is handled by date_format validator
 
 
@@ -251,17 +251,12 @@ class GoBackForm(FlaskForm):
     pass
 
 class TagForm(FlaskForm):
-    # --- REMOVED Follow-up and Go-back ---
-    tag = SelectField('Tag', choices=[
-        #('Awaiting Approval', 'Awaiting Approval'), # Handled via status/quotes
-        #('Follow-up needed', 'Follow-up needed'), # Moved to ChangeStatusForm
-        #('Completed', 'Completed'), # Added automatically
-        #('Go-back', 'Go-back') # Handled via checkbox
-        # Add any OTHER tags here if needed
-    ], validators=[Optional()]) # Make optional if no choices left
-    # --- REMOVED follow_up_date ---
-    # follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
-    submit = SubmitField('Add Tag')
+    # --- REMOVED 'tag' SelectField ---
+    # tag = SelectField('Tag', choices=[], validators=[Optional()])
+
+    # --- KEEP 'follow_up_date' ---
+    follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
+    submit = SubmitField('Add Tag') # Button might not be used directly now
 
 # ADDED: Form for adding/editing request types
 class RequestTypeForm(FlaskForm):

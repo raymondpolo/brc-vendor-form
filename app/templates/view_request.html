@@ -75,6 +75,21 @@
     .quote-status-approved { color: #16a34a; /* green-600 */ font-weight: 600; }
     .quote-status-declined { color: #dc2626; /* red-600 */ font-weight: 600; }
     .quote-status-pending { color: #64748b; /* text-secondary */ }
+
+    /* Style for the date picker container */
+    .follow-up-date-container {
+        /* Add some margin */
+        margin-top: 0.75rem; /* mt-3 */
+        /* Smooth transition for showing/hiding */
+        transition: all 0.3s ease-in-out;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+    }
+    .follow-up-date-container.visible {
+        max-height: 100px; /* Adjust if needed */
+        opacity: 1;
+    }
 </style>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -406,18 +421,9 @@
                     </div>
                 </div>
 
+                {# REMOVED FOLLOW UP CHECKBOX FROM HERE #}
+
                 <div class="mt-4">
-                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-                    <label class="inline-flex items-center space-x-2 text-sm mb-3">
-                        <input id="followup_checkbox" type="checkbox" class="rounded" {% if 'Follow-up needed' in current_tags %} checked {% endif %} />
-                        <span class="text-text">Follow-up needed</span>
-                    </label>
-                    <form id="followup-form" method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}" style="display:none;">
-                        {{ tag_form.hidden_tag() }}
-                        <input type="hidden" name="tag_to_add" value="Follow-up needed" />
-                        <input type="hidden" name="action" value="add_tag" />
-                    </form>
-                    {% endif %}
                     <button type="submit" name="update_status" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Update Status</button>
                 </div>
             </form>
@@ -635,40 +641,57 @@
         </div>
         {% endif %}
 
-        {# --- MODIFIED: Tag Management Section --- #}
-         {% if current_user.role in ['Admin', 'Scheduler', 'Super User', 'Property Manager'] and not work_order.is_deleted %}
-        <div x-data="{ selectedTag: '{{ tag_form.tag.data or '' }}', showFollowUpDate: {{ 'true' if tag_form.tag.data == 'Follow-up needed' else 'false' }} }" class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-text mb-4">Add Tag</h3>
-            <form method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}">
-                {{ tag_form.hidden_tag() }}
-                {# Choices are now set in the route handler #}
+        {# --- *** MODIFIED: Follow-up Checkbox & Date Picker Section *** --- #}
+         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
+        <div x-data="{ isChecked: {{ 'true' if 'Follow-up needed' in current_tags else 'false' }} }" class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-semibold text-text mb-4">Follow-up</h3>
+             {# Use a single form for both adding and removing #}
+            <form id="followup-form" method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}">
+                {{ tag_form.hidden_tag() }} {# Use tag_form for CSRF #}
+                {# Hidden input to control action based on checkbox state #}
+                <input type="hidden" name="action" :value="isChecked ? 'add_tag' : 'remove_tag'">
+                <input type="hidden" name="tag_to_add" value="Follow-up needed" x-show="isChecked">
+                <input type="hidden" name="tag_to_remove" value="Follow-up needed" x-show="!isChecked">
 
-                {% if tag_form.tag.choices %} {# Check if there are any choices allowed for the user #}
-                    <div class="mb-4">
-                        {{ tag_form.tag.label(class="block text-sm font-medium text-text") }}
-                        {# Render the select field - choices are already set in the route #}
-                        {{ tag_form.tag(
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm",
-                            **{'x-model': 'selectedTag', '@change': "showFollowUpDate = selectedTag === 'Follow-up needed'"}
-                        ) }}
-                    </div>
+                <div class="flex items-center justify-between">
+                    <label class="inline-flex items-center space-x-2 text-sm">
+                        <input id="followup_checkbox" type="checkbox" class="rounded" x-model="isChecked" name="followup_active_flag" value="yes">
+                        <span class="text-text">Follow-up needed</span>
+                    </label>
+                     {# Save button appears only when checked and maybe date is set? Or always enabled when checked? #}
+                    <button type="submit" x-show="isChecked"
+                            class="px-3 py-1 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
+                            :disabled="!document.getElementById('follow_up_date_input').value && isChecked"
+                            >
+                        Save Date
+                    </button>
+                    <button type="submit" x-show="!isChecked && {{ 'true' if 'Follow-up needed' in current_tags else 'false' }}"
+                            class="px-3 py-1 border rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300">
+                        Remove Tag
+                    </button>
+                </div>
 
-                    <div x-show="showFollowUpDate" class="mb-4" :style="showFollowUpDate ? '' : 'display: none;'"> {# Use :style for initial state #}
-                        {{ tag_form.follow_up_date.label(class="block text-sm font-medium text-text") }}
-                        {{ tag_form.follow_up_date(class="mt-1 block w-full rounded-md border-gray-300 shadow-sm", placeholder="MM/DD/YYYY", value=work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else '') }} {# Pre-fill date #}
-                    </div>
-
-                    <div class="mt-4">
-                        <button type="submit" name="add_tag" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Add Tag</button>
-                    </div>
-                {% else %}
-                     <p class="text-sm text-text-secondary">You do not have permission to add tags via this form.</p>
-                {% endif %}
+                {# Date Picker Container - uses Alpine x-show based on checkbox state #}
+                <div id="follow-up-date-container" class="follow-up-date-container" :class="{ 'visible': isChecked }">
+                    <label for="follow_up_date_input" class="block text-sm font-medium text-text">Follow-up Date</label>
+                    {# Render the date input directly, using name from the form field #}
+                    <input type="text" id="follow_up_date_input" name="follow_up_date"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                           placeholder="MM/DD/YYYY"
+                           value="{{ work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else '' }}">
+                    {# Display validation errors if needed #}
+                    {% if tag_form.follow_up_date.errors %}
+                        <div class="text-red-500 text-xs mt-1">
+                            {% for error in tag_form.follow_up_date.errors %}<span>{{ error }}</span>{% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
             </form>
-            {# --- REMOVED: Go-back Checkbox (moved into request details area above) --- #}
         </div>
         {% endif %}
-        {# --- END MODIFICATION --- #}
+        {# --- *** END MODIFICATION *** --- #}
+
+        {# --- REMOVED: Old "Add Tag" Section --- #}
 
 
         <div class="bg-white p-6 rounded-lg shadow-md">
@@ -887,8 +910,8 @@
     document.addEventListener('DOMContentLoaded', function () {
         // --- Keep flatpickr setup for scheduled_date ---
         flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
-        // +++ ADD flatpickr setup for follow_up_date +++
-        flatpickr("input[name='follow_up_date']", { dateFormat: "m/d/Y" });
+        // --- Initialize flatpickr for the NEW follow_up_date input ---
+        flatpickr("#follow_up_date_input", { dateFormat: "m/d/Y" });
 
         // --- Keep modal variables and setup ---
         const emailModal = document.getElementById('emailModal');
@@ -1193,8 +1216,9 @@
                 setTimeout(() => wrapper.classList.remove('opacity-0'), 100); // Fade in
             });
 
-            // --- Go-back checkbox handler ---
+            // --- Keep Go-back logic ---
             const goBackCheckbox = document.getElementById('go_back_checkbox');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content'); // Ensure csrfToken is defined
             if (goBackCheckbox) {
                 goBackCheckbox.addEventListener('change', (e) => {
                     const form = document.getElementById('goback-form');
@@ -1206,45 +1230,18 @@
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'X-CSRFToken': csrfToken
                         },
-                        body: new URLSearchParams({})
+                        // Body needs CSRF token for GoBackForm
+                        body: new URLSearchParams({'csrf_token': form.querySelector('[name=csrf_token]').value })
                     }).then(resp => {
                         if (!resp.ok) console.error('Go-back toggle failed', resp.status);
                         return resp.text();
                     }).then(() => {
-                        // Optionally show a toast or update UI - reload tags via small refresh
-                        location.reload();
+                        location.reload(); // Reload to show tag changes
                     }).catch(err => console.error('Go-back toggle error', err));
                 });
             }
 
-            // --- Follow-up checkbox handler ---
-            const followupCheckbox = document.getElementById('followup_checkbox');
-            if (followupCheckbox) {
-                followupCheckbox.addEventListener('change', (e) => {
-                    const form = document.getElementById('followup-form');
-                    if (!form) return;
-                    // If checked, POST to add tag; if unchecked, submit with action=remove_tag
-                    const formData = new URLSearchParams();
-                    if (followupCheckbox.checked) {
-                        formData.append('tag_to_add', 'Follow-up needed');
-                        formData.append('action', 'add_tag');
-                    } else {
-                        formData.append('action', 'remove_tag');
-                        formData.append('tag_to_remove', 'Follow-up needed');
-                    }
-                    fetch(form.action, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: formData
-                    }).then(resp => {
-                        if (!resp.ok) console.error('Follow-up toggle failed', resp.status);
-                        return resp.text();
-                    }).then(() => location.reload()).catch(err => console.error('Follow-up toggle error', err));
-                });
-            }
+            // --- REMOVED: Old Follow-up checkbox JS ---
 
              window.addEventListener('beforeunload', () => {
                  console.log("DEBUG JS: Leaving room:", `request_${requestId}`);
