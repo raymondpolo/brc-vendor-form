@@ -10,17 +10,6 @@
             {%- elif tag == 'Completed' -%} bg-gray-100 text-gray-800
             {%- else -%} bg-yellow-100 text-yellow-800 {%- endif -%}">
             <span>{{ tag }}</span>
-            {# Remove button logic mirrors main template permissions #}
-            {%- set can_remove_approved_declined = (current_user.role == 'Property Manager' and current_user.name == work_order.property_manager) or current_user.role == 'Super User' -%}
-            {%- set can_remove_other = current_user.role in ['Admin', 'Scheduler', 'Super User'] -%}
-            {% if (tag in ['Approved', 'Declined'] and can_remove_approved_declined) or (tag not in ['Approved', 'Declined'] and (can_remove_approved_declined or can_remove_other)) %}
-                <form method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}" class="inline">
-                    {{ delete_form.hidden_tag() }}
-                    <input type="hidden" name="action" value="remove_tag">
-                    <input type="hidden" name="tag_to_remove" value="{{ tag }}">
-                    <button type="submit" class="ml-1 text-gray-400 hover:text-red-600 focus:outline-none" title="Remove tag">&times;</button>
-                </form>
-            {% endif %}
         </div>
         {%- endif -%}
     {%- endfor -%}
