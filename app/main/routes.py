@@ -1165,8 +1165,6 @@ def toggle_go_back(request_id):
 
 
 # --- ADD/REMOVE OTHER TAGS (like Follow-up) ---
-# *** THIS IS THE ROUTE LIKELY CAUSING THE 404 ***
-# Ensure it exists and matches the URL `/tag_request/<int:request_id>`
 @main.route('/tag_request/<int:request_id>', methods=['POST'])
 @login_required
 def tag_request(request_id):
@@ -1175,7 +1173,9 @@ def tag_request(request_id):
     current_app.logger.debug(f"Request Form Data: {request.form}")
 
     work_order = WorkOrder.query.get_or_404(request_id)
-    form = TagForm() # Instantiate form for CSRF validation
+    # *** FIX: Instantiate form with request data for validation ***
+    form = TagForm(request.form)
+    # *** END FIX ***
 
     # Permissions
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
@@ -1191,8 +1191,6 @@ def tag_request(request_id):
     # Log action and tag name
     current_app.logger.debug(f"Action: {action}, Tag Name: {tag_name}")
 
-    # Ensure the tag being modified is 'Follow-up needed' for this specific logic block
-    # (If adding other tag types later, this check needs adjustment)
     if tag_name != 'Follow-up needed':
         current_app.logger.warning(f"Invalid tag operation attempted: {tag_name}")
         flash('Invalid tag operation.', 'danger')
@@ -1203,7 +1201,6 @@ def tag_request(request_id):
     # --- Handle REMOVE action ---
     if action == 'remove_tag':
         current_app.logger.info(f"Processing remove_tag for '{tag_name}' on WO #{request_id}")
-        # Permission check for removal (Admin/Scheduler/SU can remove Follow-up)
         if not is_admin_staff:
              current_app.logger.warning(f"Permission denied for user {current_user.id} to remove tag '{tag_name}' on WO #{request_id}")
              flash(f"You do not have permission to remove the '{tag_name}' tag.", 'danger')
@@ -1211,14 +1208,13 @@ def tag_request(request_id):
                  return jsonify({'success': False, 'message': 'Permission denied.'}), 403
              return redirect(url_for('main.view_request', request_id=request_id))
 
-        # Validate CSRF using the TagForm instance
+        # *** Use the form instance populated with request.form for validation ***
         if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
             if tag_name in current_tags:
                 current_tags.remove(tag_name)
                 log_text = f"Tag '{tag_name}' removed."
                 flash_text = f"Tag '{tag_name}' has been removed."
-                # Clear the date when removing the tag
                 work_order.follow_up_date = None
                 log_text += " Follow-up date cleared."
 
@@ -1228,7 +1224,6 @@ def tag_request(request_id):
                     db.session.commit()
                     flash(flash_text, 'info')
                     if request.accept_mimetypes.accept_json:
-                        # Render updated tags partial
                         rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
                         return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'removed', 'tag': tag_name})
                 except Exception as e:
@@ -1240,21 +1235,21 @@ def tag_request(request_id):
             else:
                  flash(f"Tag '{tag_name}' was not found.", 'warning')
                  if request.accept_mimetypes.accept_json:
-                     # Render updated tags partial even if tag wasn't found (state might be inconsistent)
                      rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
-                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'not_found', 'tag': tag_name}) # Still success from client perspective
+                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'not_found', 'tag': tag_name})
         else:
-            current_app.logger.warning("CSRF validation failed for tag removal.")
-            flash('Could not remove tag due to a security error (CSRF).', 'danger')
+            # *** Log CSRF specific error if possible ***
+            csrf_error_msg = 'CSRF validation failed.' if 'csrf_token' in form.errors else 'Form validation failed.'
+            current_app.logger.warning(f"{csrf_error_msg} for tag removal. Errors: {form.errors}")
+            flash(f'Could not remove tag. {csrf_error_msg}', 'danger')
             if request.accept_mimetypes.accept_json:
-                 return jsonify({'success': False, 'error': 'CSRF'}), 403
+                 return jsonify({'success': False, 'error': 'CSRF' if 'csrf_token' in form.errors else 'Validation'}), 400
         # Fallback redirect
         return redirect(url_for('main.view_request', request_id=request_id))
 
     # --- Handle ADD action ---
     elif action == 'add_tag':
         current_app.logger.info(f"Processing add_tag for '{tag_name}' on WO #{request_id}")
-        # Permission check for adding (Admin/Scheduler/SU can add Follow-up)
         if not is_admin_staff:
             current_app.logger.warning(f"Permission denied for user {current_user.id} to add tag '{tag_name}' on WO #{request_id}")
             flash(f"You do not have permission to add the '{tag_name}' tag.", 'danger')
@@ -1262,31 +1257,18 @@ def tag_request(request_id):
                  return jsonify({'success': False, 'message': 'Permission denied.'}), 403
             return redirect(url_for('main.view_request', request_id=request_id))
 
-        # Validate CSRF using the TagForm instance
+        # *** Use the form instance populated with request.form for validation ***
         if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
 
-            # --- Get and Validate Date Directly from Request Form ---
-            follow_up_date_str = request.form.get('follow_up_date') # Get date from the input field
-            follow_up_date_obj = None
-            validation_errors = {}
+            # --- Date Validation is now handled by WTForms validator via form.validate_on_submit() ---
+            follow_up_date_obj = form.follow_up_date.data # Get validated date data
 
-            if not follow_up_date_str:
-                validation_errors['follow_up_date'] = ['A follow-up date is required when adding the tag.']
-            else:
-                try:
-                    # Validate MM/DD/YYYY format
-                    follow_up_date_obj = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
-                except ValueError:
-                    validation_errors['follow_up_date'] = ['Invalid date format (MM/DD/YYYY).']
-
-            if validation_errors:
-                 current_app.logger.warning(f"Validation failed for add_tag: {validation_errors}")
-                 flash('Please correct the errors below.', 'danger') # Generic flash
+            # Check if date is provided (it's Optional in form, but required if adding this tag)
+            if not follow_up_date_obj:
+                 flash('A follow-up date is required when adding the "Follow-up needed" tag.', 'danger')
                  if request.accept_mimetypes.accept_json:
-                     # Return structured errors for AJAX
-                     return jsonify({'success': False, 'errors': validation_errors}), 400
-                 # Non-AJAX fallback: redirect and flash (errors should ideally show near field)
+                     return jsonify({'success': False, 'errors': {'follow_up_date': ['A valid MM/DD/YYYY date is required.']}}), 400
                  return redirect(url_for('main.view_request', request_id=request_id))
             # --- End Date Validation ---
 
@@ -1295,33 +1277,30 @@ def tag_request(request_id):
             commit_needed = False
             tag_added = False
 
-            # Add the tag if it's new
             if tag_name not in current_tags:
                  current_tags.add(tag_name)
                  log_text = f"Request tagged as '{tag_name}'."
                  commit_needed = True
                  tag_added = True
 
-            # Update follow-up date if it's different or tag is new
+            # Use date object directly
             if work_order.follow_up_date != follow_up_date_obj:
                   work_order.follow_up_date = follow_up_date_obj
                   date_log = f" Date set to {follow_up_date_obj.strftime('%m/%d/%Y')}."
-                  if commit_needed: # Adding tag and date
+                  if commit_needed:
                        log_text += date_log
-                  else: # Just updating date on existing tag
+                  else:
                        log_text = f"Follow-up date updated to {follow_up_date_obj.strftime('%m/%d/%Y')}."
                   commit_needed = True
 
-            # Commit if changes were made
             if commit_needed:
                 work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 try:
                     db.session.commit()
                     flash_text = log_text if tag_added else "Follow-up date updated."
-                    flash(flash_text, 'success') # Use specific flash message
+                    flash(flash_text, 'success')
                     if request.accept_mimetypes.accept_json:
-                        # Render updated tags partial
                         rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
                         return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
                 except Exception as e:
@@ -1333,16 +1312,19 @@ def tag_request(request_id):
             else:
                 flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
                 if request.accept_mimetypes.accept_json:
-                    # Render updated tags partial even if no DB change (state might be inconsistent client-side)
                     rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'no_change', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
 
 
-        else: # CSRF validation failed
-            current_app.logger.warning("CSRF validation failed for tag addition.")
-            flash('Error adding tag due to security validation failure (CSRF).', 'danger')
+        else: # Form validation failed (could be CSRF or date format)
+            # *** Log specific errors ***
+            csrf_error_msg = 'CSRF validation failed.' if 'csrf_token' in form.errors else ''
+            date_error_msg = form.errors.get('follow_up_date', [''])[0] if 'follow_up_date' in form.errors else ''
+            error_msg = f"Error adding tag. {csrf_error_msg} {date_error_msg}".strip()
+            current_app.logger.warning(f"{error_msg} Errors: {form.errors}")
+            flash(error_msg, 'danger')
             if request.accept_mimetypes.accept_json:
-                return jsonify({'success': False, 'error': 'CSRF'}), 403
+                return jsonify({'success': False, 'errors': form.errors}), 400
 
     else: # Invalid action
         current_app.logger.warning(f"Invalid action '{action}' received in tag_request.")
