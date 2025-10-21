@@ -506,7 +506,7 @@ def view_request(request_id):
     assign_vendor_form = AssignVendorForm()
     quote_form = QuoteForm()
     delete_form = DeleteRestoreRequestForm() # For CSRF on delete/restore/remove tag/quote delete
-    tag_form = TagForm() # Instantiate the form for adding tags
+    tag_form = TagForm() # Instantiate the form for follow-up date and CSRF
     reassign_form = ReassignRequestForm()
     follow_up_form = SendFollowUpForm()
     completed_form = MarkAsCompletedForm()
@@ -516,18 +516,9 @@ def view_request(request_id):
     requester_initials = get_requester_initials(work_order.requester_name)
 
 
-    # +++ FIX: Set TagForm choices based on role +++
-    allowed_tags_for_form = []
-    # Use the is_admin_staff variable defined earlier
-    base_choices_dict = dict(tag_form.tag.choices) # Get base choices defined in forms.py
-
-    if base_choices_dict.get('Follow-up needed') and is_admin_staff:
-        allowed_tags_for_form.append(('Follow-up needed', 'Follow-up needed'))
-    # Add other conditions for different tags if needed
-
-    # Update the choices on the form instance passed to the template
-    tag_form.tag.choices = allowed_tags_for_form
-    # +++ END FIX +++
+    # --- REMOVED Block for setting tag_form.tag.choices ---
+    # Since tag_form no longer has a 'tag' SelectField, this block is removed.
+    # --- END REMOVAL ---
 
 
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
@@ -1144,148 +1135,100 @@ def toggle_go_back(request_id):
 @login_required
 def tag_request(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
-    tag_form = TagForm() # Instantiate form first
+    # Use TagForm primarily for CSRF and potentially date validation structure
+    # The 'tag' select field is removed, so we don't validate it
+    form = TagForm() # Instantiate form
 
     # Permissions
-    can_pm = current_user.role == 'Property Manager' and current_user.name == work_order.property_manager
-    can_super_user = current_user.role == 'Super User'
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
 
-    # --- Dynamically set choices BEFORE validation ---
-    allowed_choices_list = []
-    base_choices_dict = dict(tag_form.tag.choices) # Get base choices defined in forms.py
-    if base_choices_dict.get('Follow-up needed') and is_admin_staff:
-        allowed_choices_list.append(('Follow-up needed', 'Follow-up needed'))
-    # Add other tag choices based on roles here if needed
-    tag_form.tag.choices = allowed_choices_list # Update the choices on the form instance
+    action = request.form.get('action')
+    tag_name = request.form.get('tag_to_add') or request.form.get('tag_to_remove')
 
+    # Ensure the tag being modified is 'Follow-up needed' if using the checkbox form
+    if tag_name != 'Follow-up needed':
+        flash('Invalid tag operation.', 'danger')
+        return redirect(url_for('main.view_request', request_id=request_id))
 
     # --- Handle REMOVE action ---
-    if request.form.get('action') == 'remove_tag':
-        remove_form = DeleteRestoreRequestForm() # Using for CSRF
-        if remove_form.validate_on_submit():
-            tag_to_remove = request.form.get('tag_to_remove')
+    if action == 'remove_tag':
+        # Permission check for removal (Admin/Scheduler/SU can remove Follow-up)
+        if not is_admin_staff:
+             flash(f"You do not have permission to remove the '{tag_name}' tag.", 'danger')
+             return redirect(url_for('main.view_request', request_id=request_id))
 
-            # Permission Check for Removal
-            can_remove = False
-            if tag_to_remove in ['Approved', 'Declined']:
-                can_remove = can_pm or can_super_user
-            else: # For Follow-up, Go-back, etc.
-                can_remove = is_admin_staff or can_pm or can_super_user
-
-            if not can_remove:
-                flash(f"You do not have permission to remove the '{tag_to_remove}' tag.", 'danger')
-                return redirect(url_for('main.view_request', request_id=request_id))
-
-            # Proceed with removal
+        if form.validate_on_submit(): # Validate CSRF
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
-            if tag_to_remove in current_tags:
-                current_tags.remove(tag_to_remove)
-                log_text = f"Tag '{tag_to_remove}' removed."
-                flash_text = f"Tag '{tag_to_remove}' has been removed."
-                # If removing 'Follow-up needed', clear the date
-                if tag_to_remove == 'Follow-up needed':
-                    work_order.follow_up_date = None
-                    log_text += " Follow-up date cleared."
+            if tag_name in current_tags:
+                current_tags.remove(tag_name)
+                log_text = f"Tag '{tag_name}' removed."
+                flash_text = f"Tag '{tag_name}' has been removed."
+                # Clear the date when removing the tag
+                work_order.follow_up_date = None
+                log_text += " Follow-up date cleared."
 
                 work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 db.session.commit()
                 flash(flash_text, 'info')
             else:
-                 flash(f"Tag '{tag_to_remove}' was not found.", 'warning')
+                 flash(f"Tag '{tag_name}' was not found.", 'warning')
         else:
-            flash('Could not remove tag due to a security error.', 'danger')
+            flash('Could not remove tag due to a security error (CSRF).', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
     # --- Handle ADD action ---
-    # Fetch data needed for re-rendering template in case of validation error
-    notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
-    audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
-    quotes = work_order.quotes
-    all_users = User.query.filter_by(is_active=True).all()
-    status_form = ChangeStatusForm()
-    # Pre-populate status form's current value for re-rendering
-    status_form.status.data = work_order.status
-    # Re-filter status choices for the current user
-    base_choices = [('Open','Open'), ('Pending','Pending'), ('Quote Requested','Quote Requested'),
-                    ('Quote Sent','Quote Sent'), ('Scheduled','Scheduled'), ('Completed','Completed'),
-                    ('Closed','Closed'), ('Cancelled','Cancelled')]
-    if work_order.status == 'Approved': base_choices.append(('Approved', 'Approved'))
-    if work_order.status == 'Quote Declined': base_choices.append(('Quote Declined', 'Quote Declined'))
-    if current_user.role in ['Admin', 'Scheduler', 'Super User']:
-        status_form.status.choices = [c for c in base_choices if c[0] not in ['Approved', 'Quote Declined']]
-    else: # Should not happen, but default case
-         status_form.status.choices = base_choices
-
-    attachment_form = AttachmentForm()
-    assign_vendor_form = AssignVendorForm()
-    quote_form = QuoteForm()
-    delete_form = DeleteRestoreRequestForm()
-    reassign_form = ReassignRequestForm()
-    follow_up_form = SendFollowUpForm()
-    completed_form = MarkAsCompletedForm()
-    requester_initials = get_requester_initials(work_order.requester_name)
-    go_back_form = GoBackForm()
-    # Template context dictionary
-    template_context = {
-        'title': f'Request #{work_order.id}', 'work_order': work_order, 'notes': notes,
-        'note_form': NoteForm(), 'status_form': status_form, 'audit_logs': audit_logs,
-        'attachment_form': attachment_form, 'assign_vendor_form': assign_vendor_form,
-        'requester_initials': requester_initials, 'quote_form': quote_form, 'quotes': quotes,
-        'delete_form': delete_form, 'tag_form': tag_form, 'reassign_form': reassign_form,
-        'follow_up_form': follow_up_form, 'all_users': all_users, 'completed_form': completed_form,
-        'go_back_form': go_back_form
-    }
-
-
-    if tag_form.validate_on_submit():
-        tag_to_add = tag_form.tag.data
-
-        # Double-check permission based on selected tag
-        if tag_to_add == 'Follow-up needed' and not is_admin_staff:
-            flash('You do not have permission to add the Follow-up tag.', 'danger')
+    elif action == 'add_tag':
+        # Permission check for adding (Admin/Scheduler/SU can add Follow-up)
+        if not is_admin_staff:
+            flash(f"You do not have permission to add the '{tag_name}' tag.", 'danger')
             return redirect(url_for('main.view_request', request_id=request_id))
-        # Add checks for other tags if needed
 
-        current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
+        if form.validate_on_submit(): # Validate CSRF
+            current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
 
-        # Handle Follow-up Date Requirement
-        follow_up_date_obj = None
-        if tag_to_add == 'Follow-up needed':
-            follow_up_date_str = tag_form.follow_up_date.data
+            # --- Get and Validate Date Directly from Request Form ---
+            follow_up_date_str = request.form.get('follow_up_date') # Get date from the input field
+            follow_up_date_obj = None
+            validation_error = False
+
             if not follow_up_date_str:
-                tag_form.follow_up_date.errors.append('A follow-up date is required for this tag.')
                 flash('A follow-up date is required when adding the "Follow-up needed" tag.', 'danger')
-                return render_template('view_request.html', **template_context)
-            try:
-                follow_up_date_obj = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
-            except ValueError:
-                tag_form.follow_up_date.errors.append('Invalid date format (MM/DD/YYYY).')
-                flash('Invalid date format for follow-up date (MM/DD/YYYY).', 'danger')
-                return render_template('view_request.html', **template_context)
+                validation_error = True
+            else:
+                try:
+                    # Use WTForms validator logic if possible, or manual check
+                    follow_up_date_obj = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
+                except ValueError:
+                    flash('Invalid date format for follow-up date (MM/DD/YYYY).', 'danger')
+                    validation_error = True
 
-        # Proceed if tag is not already present or if it's Follow-up and date might change
-        if tag_to_add not in current_tags or tag_to_add == 'Follow-up needed':
+            if validation_error:
+                 # Need to re-render the template with errors if we don't redirect
+                 # Redirecting is simpler for now
+                 return redirect(url_for('main.view_request', request_id=request_id))
+            # --- End Date Validation ---
+
+
+            # Proceed if validation passed
             log_text = ""
             commit_needed = False
 
             # Add the tag if it's new
-            if tag_to_add not in current_tags:
-                 current_tags.add(tag_to_add)
-                 log_text = f"Request tagged as '{tag_to_add}'."
+            if tag_name not in current_tags:
+                 current_tags.add(tag_name)
+                 log_text = f"Request tagged as '{tag_name}'."
                  commit_needed = True
 
-            # Update follow-up date if applicable
-            if tag_to_add == 'Follow-up needed':
-                 if work_order.follow_up_date != follow_up_date_obj:
-                      work_order.follow_up_date = follow_up_date_obj
-                      date_log = f" Date set to {follow_up_date_obj.strftime('%m/%d/%Y')}."
-                      if commit_needed: # Adding tag and date
-                           log_text += date_log
-                      else: # Just updating date
-                           log_text = f"Follow-up date updated to {follow_up_date_obj.strftime('%m/%d/%Y')}."
-                      commit_needed = True
+            # Update follow-up date if it's different or tag is new
+            if work_order.follow_up_date != follow_up_date_obj:
+                  work_order.follow_up_date = follow_up_date_obj
+                  date_log = f" Date set to {follow_up_date_obj.strftime('%m/%d/%Y')}."
+                  if commit_needed: # Adding tag and date
+                       log_text += date_log
+                  else: # Just updating date on existing tag
+                       log_text = f"Follow-up date updated to {follow_up_date_obj.strftime('%m/%d/%Y')}."
+                  commit_needed = True
 
             # Commit if changes were made
             if commit_needed:
@@ -1294,19 +1237,16 @@ def tag_request(request_id):
                 db.session.commit()
                 flash(log_text, 'success') # Use log text as flash message
             else:
-                flash(f"Request is already tagged as '{tag_to_add}' with the same date.", 'info')
+                flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
 
-        else: # Tag already exists and is not Follow-up date update case
-            flash(f"Request is already tagged as '{tag_to_add}'.", 'info')
+        else: # CSRF validation failed
+            flash('Error adding tag due to security validation failure (CSRF).', 'danger')
 
-    else: # Form validation failed
-        # Flash general error, specific errors should be shown by WTForms in template
-        flash('Error adding tag. Please check the form below.', 'danger')
-        # Re-render the template with the form containing errors
-        return render_template('view_request.html', **template_context)
+    else: # Invalid action
+        flash('Invalid tag action specified.', 'danger')
 
 
-    # Default redirect after successful add or if no action needed
+    # Default redirect after action
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
