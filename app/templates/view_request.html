@@ -226,14 +226,31 @@
                     <h3 class="font-semibold text-text">Request Type</h3>
                     <p class="text-text-secondary">{{ work_order.request_type_relation.name if work_order.request_type_relation else 'N/A' }}</p> {# Added check #}
                 </div>
-                <div>
-                    <h3 class="font-semibold text-text">Preferred Dates</h3>
-                    <ul class="list-disc list-inside text-text-secondary">
-                        <li>{{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}</li>
-                        <li>{{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}</li>
-                        <li>{{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</li>
-                    </ul>
+                {# --- Start of Section for Preferred Dates and Go-back --- #}
+                <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6"> {# Container to keep them together #}
+                    <div>
+                        <h3 class="font-semibold text-text">Preferred Dates</h3>
+                        <ul class="list-disc list-inside text-text-secondary">
+                            <li>{{ work_order.preferred_date_1.strftime('%m/%d/%Y') if work_order.preferred_date_1 else 'N/A' }}</li>
+                            <li>{{ work_order.preferred_date_2.strftime('%m/%d/%Y') if work_order.preferred_date_2 else 'N/A' }}</li>
+                            <li>{{ work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else 'N/A' }}</li>
+                        </ul>
+                    </div>
+                     {# --- MOVED: Go-back Checkbox --- #}
+                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                    <div class="self-end"> {# Align to bottom if needed, or adjust alignment #}
+                        <label class="inline-flex items-center space-x-2 text-sm">
+                            <input id="go_back_checkbox" type="checkbox" class="rounded toggle-checkbox" {% if 'Go-back' in current_tags %} checked {% endif %} />
+                            <span class="text-text">Go-back</span>
+                        </label>
+                        <form id="goback-form" method="POST" action="{{ url_for('main.toggle_go_back', request_id=work_order.id) }}" style="display:none;">
+                            {{ go_back_form.hidden_tag() }}
+                        </form>
+                    </div>
+                    {% endif %}
+                    {# --- END Go-back Checkbox --- #}
                 </div>
+                 {# --- End of Section --- #}
             </div>
         </div>
 
@@ -648,20 +665,7 @@
                      <p class="text-sm text-text-secondary">You do not have permission to add tags via this form.</p>
                 {% endif %}
             </form>
-
-            {# --- ADDED: Go-back Checkbox (moved into request details area) --- #}
-            {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-            <div class="mt-4">
-                <label class="inline-flex items-center space-x-2 text-sm">
-                    <input id="go_back_checkbox" type="checkbox" class="rounded toggle-checkbox" {% if 'Go-back' in current_tags %} checked {% endif %} />
-                    <span class="text-text">Go-back</span>
-                </label>
-                <form id="goback-form" method="POST" action="{{ url_for('main.toggle_go_back', request_id=work_order.id) }}" style="display:none;">
-                    {{ go_back_form.hidden_tag() }}
-                </form>
-            </div>
-            {% endif %}
-            {# --- END Go-back Checkbox --- #}
+            {# --- REMOVED: Go-back Checkbox (moved into request details area above) --- #}
         </div>
         {% endif %}
         {# --- END MODIFICATION --- #}
