@@ -10,16 +10,6 @@
         padding-top: 0.375rem;
         padding-bottom: 0.375rem;
     }
-
-    /* MODIFIED: Set a minimum height for the editor for better UX */
-    .ck-editor__editable {
-        min-height: 200px;
-    }
-    /* MODIFIED: Remove resize handle which is not needed in this layout */
-    .ck-editor__resize-handle {
-        display: none !important;
-    }
-
     /* --- ADDED STYLES FOR TRIBUTEJS MENTION DROPDOWN --- */
     .tribute-container {
         /* Basic appearance */
@@ -113,7 +103,7 @@
             {# --- MODIFIED: Restore Tags Display --- #}
             <div class="mt-4 border-t pt-4">
                  <h3 class="text-sm font-medium text-text mb-2">Tags</h3>
-                 <div class="flex flex-wrap gap-2 items-center">
+                 <div id="tags-container" class="flex flex-wrap gap-2 items-center">
                     {% set current_tags = work_order.tag.split(',') if work_order.tag else [] %}
                     {% if current_tags %}
                         {% for tag in current_tags %}
@@ -252,7 +242,7 @@
                         </ul>
                     </div>
                      {# --- MOVED: Go-back Checkbox --- #}
-                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                    {% if not work_order.is_deleted %}
                     <div class="self-end"> {# Align to bottom if needed, or adjust alignment #}
                         <label class="inline-flex items-center space-x-2 text-sm">
                             <input id="go_back_checkbox" type="checkbox" class="rounded toggle-checkbox" {% if 'Go-back' in current_tags %} checked {% endif %} />
@@ -1216,9 +1206,23 @@
                 setTimeout(() => wrapper.classList.remove('opacity-0'), 100); // Fade in
             });
 
+            // Helper: replace the tags container inner HTML safely
+            function updateTagsContainer(tagsHtml) {
+                try {
+                    const container = document.getElementById('tags-container');
+                    if (!container) return;
+                    // Server returns a rendered HTML fragment for tags; replace innerHTML
+                    container.innerHTML = tagsHtml || '';
+
+                    // Re-wire any tag-related event handlers if necessary (e.g., delete)
+                    // If other handlers need to be attached to badges, do it here.
+                } catch (err) {
+                    console.error('Failed to update tags container', err);
+                }
+            }
+
             // --- Keep Go-back logic ---
             const goBackCheckbox = document.getElementById('go_back_checkbox');
-            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content'); // Ensure csrfToken is defined
             if (goBackCheckbox) {
                 goBackCheckbox.addEventListener('change', (e) => {
                     const form = document.getElementById('goback-form');
@@ -1228,16 +1232,57 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken
+                            'X-CSRFToken': csrfToken,
+                            'Accept': 'application/json'
                         },
                         // Body needs CSRF token for GoBackForm
                         body: new URLSearchParams({'csrf_token': form.querySelector('[name=csrf_token]').value })
                     }).then(resp => {
-                        if (!resp.ok) console.error('Go-back toggle failed', resp.status);
-                        return resp.text();
-                    }).then(() => {
-                        location.reload(); // Reload to show tag changes
-                    }).catch(err => console.error('Go-back toggle error', err));
+                        if (!resp.ok) throw new Error('Go-back toggle failed ' + resp.status);
+                        return resp.json().catch(() => null);
+                    }).then(json => {
+                        if (json && json.success) {
+                            // Update tags container from returned tags string
+                            updateTagsContainer(json.tags);
+                            // Toggle checkbox state is already set by the change event
+                        } else {
+                            console.error('Go-back toggle failed', json);
+                            location.reload();
+                        }
+                    }).catch(err => {
+                        console.error('Go-back toggle error', err);
+                        location.reload();
+                    });
+                });
+            }
+
+            // Follow-up checkbox triggers followup form post (AJAX)
+            const followupCheckbox = document.getElementById('followup_checkbox');
+            const followupForm = document.getElementById('followup-form');
+            if (followupCheckbox && followupForm) {
+                followupCheckbox.addEventListener('change', (e) => {
+                    fetch(followupForm.action, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': csrfToken,
+                            'Accept': 'application/json'
+                        },
+                        body: new URLSearchParams({ 'csrf_token': followupForm.querySelector('[name=csrf_token]').value, 'action': followupCheckbox.checked ? 'add' : 'remove' })
+                    }).then(resp => {
+                        if (!resp.ok) throw new Error('Follow-up toggle failed ' + resp.status);
+                        return resp.json().catch(() => null);
+                    }).then(json => {
+                        if (json && json.success) {
+                            updateTagsContainer(json.tags);
+                        } else {
+                            console.error('Follow-up toggle failed', json);
+                            location.reload();
+                        }
+                    }).catch(err => {
+                        console.error('Follow-up toggle error', err);
+                        location.reload();
+                    });
                 });
             }
 

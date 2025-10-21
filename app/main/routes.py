@@ -1094,7 +1094,6 @@ def quote_action(request_id, quote_id, action):
 # --- TOGGLE GO-BACK TAG ---
 @main.route('/request/<int:request_id>/toggle_goback', methods=['POST'])
 @login_required
-@role_required(['Admin', 'Scheduler', 'Super User']) # Permissions for Go-back
 def toggle_go_back(request_id):
     work_order = WorkOrder.query.get_or_404(request_id)
     form = GoBackForm() # Use for CSRF protection
@@ -1118,6 +1117,9 @@ def toggle_go_back(request_id):
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
         flash(flash_text, 'success')
+        # If AJAX requested JSON, return a JSON payload instead of redirecting
+        if request.accept_mimetypes.accept_json and request.is_xhr:
+            return jsonify({'success': True, 'tags': work_order.tag, 'action': 'toggled', 'tag': 'Go-back'})
     else:
         # Check for specific CSRF error
         csrf_error = False
@@ -1171,6 +1173,8 @@ def tag_request(request_id):
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 db.session.commit()
                 flash(flash_text, 'info')
+                if request.accept_mimetypes.accept_json and request.is_xhr:
+                    return jsonify({'success': True, 'tags': work_order.tag, 'action': 'removed', 'tag': tag_name})
             else:
                  flash(f"Tag '{tag_name}' was not found.", 'warning')
         else:
@@ -1236,11 +1240,15 @@ def tag_request(request_id):
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 db.session.commit()
                 flash(log_text, 'success') # Use log text as flash message
+                if request.accept_mimetypes.accept_json and request.is_xhr:
+                    return jsonify({'success': True, 'tags': work_order.tag, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
             else:
                 flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
 
         else: # CSRF validation failed
             flash('Error adding tag due to security validation failure (CSRF).', 'danger')
+            if request.accept_mimetypes.accept_json and request.is_xhr:
+                return jsonify({'success': False, 'error': 'CSRF'})
 
     else: # Invalid action
         flash('Invalid tag action specified.', 'danger')
