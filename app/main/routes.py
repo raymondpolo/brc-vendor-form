@@ -11,9 +11,8 @@ from flask import current_app # Import current_app for logging
 from markupsafe import Markup
 from functools import wraps
 from collections import Counter
-# *** Import date object for type checking/conversion ***
+# Import date object for type checking/conversion
 from datetime import datetime, time, timedelta, date
-# *** End Import ***
 
 from flask import (render_template, request, redirect, url_for, flash,
                    abort, send_from_directory, jsonify, current_app, Response)
@@ -516,11 +515,6 @@ def view_request(request_id):
     requester_initials = get_requester_initials(work_order.requester_name)
 
 
-    # --- REMOVED Block for setting tag_form.tag.choices ---
-    # Since tag_form no longer has a 'tag' SelectField, this block is removed.
-    # --- END REMOVAL ---
-
-
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
                            attachment_form=attachment_form, assign_vendor_form=assign_vendor_form,
@@ -657,7 +651,8 @@ def mark_as_completed(request_id):
     is_author = work_order.author == current_user
     is_viewer = current_user in work_order.viewers
     is_property_manager = current_user.role == 'Property Manager' and work_order.property_manager == current_user.name
-    if not (is_author or is_viewer or is_property_manager):
+    is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User'] # Added Admin staff check
+    if not (is_author or is_viewer or is_property_manager or is_admin_staff): # Allow Admin staff
          flash('You do not have permission to mark this request as completed.', 'danger')
          return redirect(url_for('main.view_request', request_id=request_id))
 
@@ -1147,7 +1142,7 @@ def toggle_go_back(request_id):
         # Return JSON for AJAX update
         if request.accept_mimetypes.accept_json:
             # Render the updated tags partial to send back
-            # *** Ensure delete_form is passed if needed by the partial ***
+            # Ensure delete_form is passed if needed by the partial
             delete_form_instance = DeleteRestoreRequestForm()
             rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
             return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'toggled', 'tag': tag_name})
@@ -1177,7 +1172,7 @@ def tag_request(request_id):
     current_app.logger.debug(f"Request Form Data: {request.form}")
 
     work_order = WorkOrder.query.get_or_404(request_id)
-    # Instantiate form with request data for validation
+    # *** Instantiate form with request data for validation ***
     form = TagForm(request.form)
 
     # Permissions
@@ -1221,7 +1216,11 @@ def tag_request(request_id):
                 work_order.follow_up_date = None
                 log_text += " Follow-up date cleared."
 
-                work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+                # --- Refine Tag String Update ---
+                valid_tags = sorted(list(filter(None, current_tags)))
+                work_order.tag = ','.join(valid_tags) if valid_tags else None
+                # --- End Refinement ---
+
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 try:
                     db.session.commit()
@@ -1317,7 +1316,11 @@ def tag_request(request_id):
                   commit_needed = True
 
             if commit_needed:
-                work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+                # --- Refine Tag String Update ---
+                valid_tags = sorted(list(filter(None, current_tags)))
+                work_order.tag = ','.join(valid_tags) if valid_tags else None
+                # --- End Refinement ---
+
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 try:
                     db.session.commit()
@@ -1330,9 +1333,11 @@ def tag_request(request_id):
                         return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
                 except Exception as e:
                      db.session.rollback()
-                     current_app.logger.error(f"Error committing tag add/date update: {e}", exc_info=True)
+                     # *** Log the specific database error ***
+                     current_app.logger.error(f"DATABASE ERROR during tag add/date update: {e}", exc_info=True)
                      flash('Error saving changes.', 'danger')
                      if request.accept_mimetypes.accept_json:
+                          # *** Return specific message for AJAX ***
                           return jsonify({'success': False, 'message': 'Database error.'}), 500
             else:
                 flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
