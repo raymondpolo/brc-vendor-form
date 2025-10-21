@@ -1088,6 +1088,9 @@ def quote_action(request_id, quote_id, action):
     db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
     db.session.commit()
     flash(flash_text, 'success')
+    # If AJAX requested JSON, return structured info for client-side updates
+    if request.accept_mimetypes.accept_json:
+        return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': work_order.tag})
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
@@ -1208,8 +1211,10 @@ def tag_request(request_id):
                     validation_error = True
 
             if validation_error:
-                 # Need to re-render the template with errors if we don't redirect
-                 # Redirecting is simpler for now
+                 # If this was an AJAX request expecting JSON, return structured errors
+                 if request.accept_mimetypes.accept_json:
+                     return jsonify({'success': False, 'errors': {'follow_up_date': ['A valid MM/DD/YYYY date is required.']}}), 400
+                 # Non-AJAX fallback: redirect and flash (existing behavior)
                  return redirect(url_for('main.view_request', request_id=request_id))
             # --- End Date Validation ---
 
@@ -1246,9 +1251,9 @@ def tag_request(request_id):
                 flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
 
         else: # CSRF validation failed
-            flash('Error adding tag due to security validation failure (CSRF).', 'danger')
             if request.accept_mimetypes.accept_json:
-                return jsonify({'success': False, 'error': 'CSRF'})
+                return jsonify({'success': False, 'error': 'CSRF'}), 403
+            flash('Error adding tag due to security validation failure (CSRF).', 'danger')
 
     else: # Invalid action
         flash('Invalid tag action specified.', 'danger')

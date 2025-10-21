@@ -267,9 +267,9 @@
         {% if not work_order.is_deleted %}
         <div class="bg-white p-6 rounded-lg shadow-md">
             <h3 class="text-lg font-semibold text-text mb-4">Quotes</h3>
-            <ul class="space-y-3 mb-6">
+            <ul id="quotes-list" class="space-y-3 mb-6">
                 {% for quote in quotes %}
-                <li class="flex items-center justify-between text-sm border-b pb-3 last:border-b-0">
+                <li class="flex items-center justify-between text-sm border-b pb-3 last:border-b-0" data-quote-id="{{ quote.id }}">
                     <div class="flex items-center min-w-0 space-x-2 flex-wrap"> {# Added flex-wrap #}
                          <span class="font-medium text-gray-600">{{ quote.vendor.company_name }}:</span>
                          <a href="#" class="view-attachment-btn text-brand hover:underline truncate inline-block" {# Added inline-block #}
@@ -278,8 +278,8 @@
                             title="{{ quote.attachment.filename }}">
                             {{ quote.attachment.filename }}
                          </a>
-                         <span class="text-xs text-gray-400">({{ quote.date_sent | local_dt('%m/%d/%Y') }})</span>
-                         <span class="ml-2
+                                 <span class="text-xs text-gray-400">({{ quote.date_sent | local_dt('%m/%d/%Y') }})</span>
+                                 <span id="quote-status-{{ quote.id }}" class="ml-2
                             {% if quote.status == 'Approved' %} quote-status-approved
                             {% elif quote.status == 'Declined' %} quote-status-declined
                             {% else %} quote-status-pending {% endif %}">
@@ -290,20 +290,20 @@
                         {# Approve/Decline Buttons (PM & Super User) #}
                         {% if current_user.role == 'Property Manager' and current_user.name == work_order.property_manager or current_user.role == 'Super User' %}
                             {% if quote.status != 'Approved' %}
-                            <form method="POST" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='approve') }}" class="inline">
+                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='approve') }}" class="inline">
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-green-500 hover:text-green-700" title="Approve">✓</button>
                             </form>
                             {% endif %}
                             {% if quote.status != 'Declined' %}
-                            <form method="POST" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='decline') }}" class="inline">
+                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='decline') }}" class="inline">
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-red-500 hover:text-red-700" title="Decline">✗</button>
                             </form>
                             {% endif %}
                             {# Optional: Clear button #}
                              {% if quote.status != 'Pending' %}
-                            <form method="POST" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline">
+                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline">
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-gray-400 hover:text-gray-600" title="Clear Status">↺</button>
                             </form>
@@ -653,7 +653,7 @@
                         <span class="text-text">Follow-up needed</span>
                     </label>
                      {# Save button appears only when checked and maybe date is set? Or always enabled when checked? #}
-                    <button type="submit" x-show="isChecked"
+                    <button id="save-followup-btn" type="submit" x-show="isChecked"
                             class="px-3 py-1 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
                             :disabled="!document.getElementById('follow_up_date_input').value && isChecked"
                             >
@@ -907,6 +907,30 @@
         // --- Initialize flatpickr for the NEW follow_up_date input ---
         flatpickr("#follow_up_date_input", { dateFormat: "m/d/Y" });
 
+        // Ensure Save Date button becomes enabled when flatpickr or manual input sets a value
+        (function enableSaveOnDate() {
+            const dateInput = document.getElementById('follow_up_date_input');
+            const saveBtn = document.getElementById('save-followup-btn');
+            if (!dateInput || !saveBtn) return;
+
+            function updateSaveState() {
+                try {
+                    const hasVal = dateInput.value && dateInput.value.trim().length > 0;
+                    // Alpine bound :disabled expression still exists; also toggle the native disabled attribute
+                    if (hasVal) saveBtn.removeAttribute('disabled'); else saveBtn.setAttribute('disabled', 'disabled');
+                } catch (err) {
+                    console.error('Error updating save button state', err);
+                }
+            }
+
+            // Update on input and change events
+            dateInput.addEventListener('input', updateSaveState);
+            dateInput.addEventListener('change', updateSaveState);
+
+            // Initial state
+            updateSaveState();
+        })();
+
         // --- Keep modal variables and setup ---
         const emailModal = document.getElementById('emailModal');
         const openModalBtn = document.getElementById('sendEmailBtn');
@@ -1067,6 +1091,98 @@
 
 
         // --- Keep Attachment Modal Logic ---
+
+        // Intercept quote action forms for AJAX handling
+        const quotesList = document.getElementById('quotes-list');
+        if (quotesList) {
+            quotesList.addEventListener('submit', (e) => {
+                const form = e.target;
+                if (form && form.getAttribute && form.getAttribute('data-ajax') === 'true') {
+                    e.preventDefault();
+                    const quoteId = form.getAttribute('data-quote-id');
+                    const actionUrl = form.action;
+                    const formData = new FormData(form);
+                    const body = new URLSearchParams(formData).toString();
+
+                    fetch(actionUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': csrfToken,
+                            'Accept': 'application/json'
+                        },
+                        body: body
+                    }).then(resp => resp.json().catch(() => ({ success: false })))
+                    .then(json => {
+                        if (json && json.success) {
+                            // Update quote status label
+                            if (quoteId && json.new_status) {
+                                const statusSpan = document.getElementById(`quote-status-${quoteId}`);
+                                if (statusSpan) {
+                                    statusSpan.textContent = `(${json.new_status})`;
+                                    statusSpan.classList.remove('quote-status-approved','quote-status-declined','quote-status-pending');
+                                    if (json.new_status === 'Approved') statusSpan.classList.add('quote-status-approved');
+                                    else if (json.new_status === 'Declined') statusSpan.classList.add('quote-status-declined');
+                                    else statusSpan.classList.add('quote-status-pending');
+                                }
+                            }
+                            // Update tags area
+                            if (json.tags !== undefined) updateTagsContainer(json.tags);
+                            showNotification(json.flash_text || 'Quote action completed.', true);
+                        } else {
+                            console.error('Quote action failed', json);
+                            showNotification('Failed to perform quote action.', false);
+                            // fallback: reload to show server-side messages
+                            location.reload();
+                        }
+                    }).catch(err => {
+                        console.error('Quote action error', err);
+                        showNotification('An error occurred while processing quote action.', false);
+                        location.reload();
+                    });
+                }
+            });
+        }
+
+        // Intercept remove-tag forms inside tags-container and submit via AJAX
+        const tagsContainer = document.getElementById('tags-container');
+        if (tagsContainer) {
+            tagsContainer.addEventListener('submit', (e) => {
+                const form = e.target;
+                if (form && form.matches && form.matches('form')) {
+                    // Identify remove-tag forms by presence of input name 'action' with value 'remove_tag' or tag_to_remove
+                    const actionInput = form.querySelector('input[name=action]');
+                    if (!actionInput) return; // Not a tag remove form
+                    e.preventDefault();
+                    const formData = new FormData(form);
+                    const body = new URLSearchParams(formData).toString();
+
+                    fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': csrfToken,
+                            'Accept': 'application/json'
+                        },
+                        body: body
+                    }).then(resp => resp.json().catch(() => ({ success: false })))
+                    .then(json => {
+                        if (json && json.success) {
+                            updateTagsContainer(json.tags);
+                            showNotification('Tag removed.', true);
+                        } else {
+                            console.error('Failed to remove tag', json);
+                            showNotification('Failed to remove tag.', false);
+                            location.reload();
+                        }
+                    }).catch(err => {
+                        console.error('Error removing tag', err);
+                        showNotification('An error occurred removing tag.', false);
+                        location.reload();
+                    });
+                }
+            });
+        }
         document.querySelectorAll('.view-attachment-btn').forEach(button => {
              button.addEventListener('click', function(e) {
                  e.preventDefault();
