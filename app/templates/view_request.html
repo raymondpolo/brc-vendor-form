@@ -1432,37 +1432,55 @@
                             'action': 'remove_tag',
                             'tag_to_remove': 'Follow-up needed' // Specify the tag to remove
                          })
-                    }).then(resp => {
-                         console.log("DEBUG JS: Remove tag response status:", resp.status);
+                    }).then(async resp => {
+                        console.log("DEBUG JS: Remove tag response status:", resp.status);
+                        // Try to parse JSON error payload when response is not ok
+                        const text = await resp.text();
+                        let parsed = null;
+                        try { parsed = JSON.parse(text); } catch (err) { /* not JSON */ }
                         if (!resp.ok) {
-                            resp.text().then(text => console.error("DEBUG JS: Remove tag error response:", text));
-                            throw new Error('Follow-up toggle (remove) failed ' + resp.status);
+                            console.error("DEBUG JS: Remove tag error response:", parsed || text);
+                            // Revert checkbox state
+                            e.target.checked = true;
+                            const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
+                            if (alpineComponent) alpineComponent.isChecked = true;
+                            // Show server-provided message when available
+                            const msg = (parsed && parsed.message) ? parsed.message : (parsed && parsed.errors ? JSON.stringify(parsed.errors) : text || `Error ${resp.status}`);
+                            showNotification(msg || 'Failed to remove follow-up tag.', false);
+                            // Prevent further then() handlers
+                            throw new Error('remove_tag failed');
                         }
-                        return resp.json().catch(() => null);
+                        // If ok, attempt to parse JSON and return
+                        try {
+                            return JSON.parse(text || '{}');
+                        } catch (err) {
+                            return null;
+                        }
                     }).then(json => {
-                            if (json && json.success && json.tags !== undefined) {
+                        if (json && json.success && json.tags !== undefined) {
                             console.log("DEBUG JS: Remove tag successful. Updating UI.");
                             updateTagsContainer(json.tags); // Update tags display
                             if(dateInput) dateInput.value = ''; // Clear date input
                         } else {
                             console.error('Follow-up toggle (remove) failed or invalid response', json);
-                            // *** Revert checkbox state on failure ***
-                            e.target.checked = true; // Set it back to checked visually
+                            // Revert checkbox state on unexpected payload
+                            e.target.checked = true;
                             const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
-                            if (alpineComponent) alpineComponent.isChecked = true; // Update Alpine state
-                            // *** End Revert ***
-                            showNotification(json.message || 'Failed to remove follow-up tag.', false);
-                            // location.reload(); // Avoid reload on simple failure
+                            if (alpineComponent) alpineComponent.isChecked = true;
+                            showNotification((json && json.message) || 'Failed to remove follow-up tag.', false);
                         }
                     }).catch(err => {
+                        // Errors here were already handled above in non-ok case, but catch any other issues
                         console.error('Follow-up toggle (remove) error', err);
-                         // *** Revert checkbox state on failure ***
-                        e.target.checked = true; // Set it back to checked visually
+                        // Ensure checkbox is reverted
+                        e.target.checked = true;
                         const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
-                        if (alpineComponent) alpineComponent.isChecked = true; // Update Alpine state
-                        // *** End Revert ***
-                        showNotification('An error occurred while removing the follow-up tag.', false);
-                        // location.reload(); // Avoid reload on simple failure
+                        if (alpineComponent) alpineComponent.isChecked = true;
+                        if (!err || err.message === 'remove_tag failed') {
+                            // already notified above
+                        } else {
+                            showNotification('An error occurred while removing the follow-up tag.', false);
+                        }
                     });
                 });
             }
