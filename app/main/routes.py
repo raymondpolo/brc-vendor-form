@@ -494,9 +494,7 @@ def view_request(request_id):
     # Fetch related data for the template
     notes = Note.query.filter_by(work_order_id=request_id).order_by(Note.date_posted.asc()).all()
     audit_logs = AuditLog.query.filter_by(work_order_id=request_id).order_by(AuditLog.timestamp.desc()).all()
-    # *** FIX: Remove .all() here ***
     quotes = work_order.quotes # Fetch quotes relationship (it's already a list or lazy loadable)
-    # *** END FIX ***
     all_users = User.query.filter_by(is_active=True).all() # For CC options etc.
 
     # Instantiate forms needed on the page
@@ -1052,14 +1050,15 @@ def quote_action(request_id, quote_id, action):
 
     elif action == 'clear':
         # If there's no status set, nothing to clear
-        if not quote.status:
+        if not quote.status: # Checks if status is None or empty string
             if request.accept_mimetypes.accept_json:
                 return jsonify({'success': False, 'error': 'already', 'message': 'Quote status already cleared.'}), 400
             flash(f"Status for quote from {quote.vendor.company_name} is already cleared.", 'info')
             return redirect(url_for('main.view_request', request_id=request_id))
 
-        # Clear the status (remove Approved/Declined)
-        quote.status = None
+        original_status = quote.status # Store original for logging/comparison if needed
+        quote.status = None # Set status to None (will now work with model change)
+
         # If this was the approved quote, clear the link
         if work_order.approved_quote_id == quote.id:
             work_order.approved_quote_id = None
@@ -1074,7 +1073,7 @@ def quote_action(request_id, quote_id, action):
         if not other_quotes_declined:
             current_tags.discard('Declined')
 
-        log_text = f"Status for quote from {quote.vendor.company_name} cleared."
+        log_text = f"Status '{original_status}' for quote from {quote.vendor.company_name} cleared."
         flash_text = f"Status for quote from {quote.vendor.company_name} has been cleared."
 
         # Reset Work Order status if it was Approved/Declined and now no quotes are in those states
@@ -1084,7 +1083,7 @@ def quote_action(request_id, quote_id, action):
             if any_active:
                 work_order.status = 'Quote Sent' # Revert to Quote Sent if others exist
             else:
-                work_order.status = 'Open'
+                work_order.status = 'Open' # Or maybe 'Quote Requested' if appropriate? Defaulting to Open
             log_text += f" Work Order status reset to {work_order.status}."
         elif work_order.status == 'Quote Declined' and other_quotes_approved: # If we clear a declined quote but another is approved
             work_order.status = 'Approved'
@@ -1098,11 +1097,21 @@ def quote_action(request_id, quote_id, action):
     # Update tag string and commit changes
     work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
     db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
-    db.session.commit()
-    flash(flash_text, 'success')
-    # If AJAX requested JSON, return structured info for client-side updates
-    if request.accept_mimetypes.accept_json:
-        return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': work_order.tag, 'message': flash_text})
+
+    try: # Wrap commit in try/except for robustness
+        db.session.commit()
+        flash(flash_text, 'success')
+        if request.accept_mimetypes.accept_json:
+            # Return None for new_status when cleared
+            return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': work_order.tag, 'message': flash_text})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error committing quote action ({action}) for quote {quote_id}: {e}", exc_info=True)
+        flash('An error occurred while updating the quote status.', 'danger')
+        if request.accept_mimetypes.accept_json:
+            return jsonify({'success': False, 'message': 'Database error during commit.'}), 500
+
+    # Fallback redirect for non-AJAX or errors during AJAX commit
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
@@ -1131,50 +1140,79 @@ def toggle_go_back(request_id):
         work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
         db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
         db.session.commit()
-        flash(flash_text, 'success')
-        # If AJAX requested JSON, return a JSON payload instead of redirecting
+        #flash(flash_text, 'success') # Flash message might be redundant if UI updates instantly
+
+        # Return JSON for AJAX update
         if request.accept_mimetypes.accept_json:
-            return jsonify({'success': True, 'tags': work_order.tag, 'action': 'toggled', 'tag': 'Go-back'})
+            # Render the updated tags partial to send back
+            rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm()) # You might need to pass delete_form for remove buttons
+            return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'toggled', 'tag': tag_name})
     else:
-        # Check for specific CSRF error
+        # Handle CSRF failure
         csrf_error = False
         if hasattr(form, 'csrf_token') and form.csrf_token.errors:
              csrf_error = True
-             flash('CSRF validation failed. Please try again.', 'danger')
-        if not csrf_error:
-            flash('Invalid request to toggle Go-back tag.', 'danger')
+             flash_text = 'CSRF validation failed. Please try again.'
+        else:
+             flash_text = 'Invalid request to toggle Go-back tag.'
 
+        flash(flash_text, 'danger')
+        if request.accept_mimetypes.accept_json:
+            return jsonify({'success': False, 'message': flash_text}), 400 # Return error for AJAX
+
+    # Fallback redirect
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
 # --- ADD/REMOVE OTHER TAGS (like Follow-up) ---
+# *** THIS IS THE ROUTE LIKELY CAUSING THE 404 ***
+# Ensure it exists and matches the URL `/tag_request/<int:request_id>`
 @main.route('/tag_request/<int:request_id>', methods=['POST'])
 @login_required
 def tag_request(request_id):
+    # Log entry into the function
+    current_app.logger.info(f"Entered tag_request route for request_id: {request_id}")
+    current_app.logger.debug(f"Request Form Data: {request.form}")
+
     work_order = WorkOrder.query.get_or_404(request_id)
-    # Use TagForm primarily for CSRF and potentially date validation structure
-    # The 'tag' select field is removed, so we don't validate it
-    form = TagForm() # Instantiate form
+    form = TagForm() # Instantiate form for CSRF validation
 
     # Permissions
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
 
     action = request.form.get('action')
-    tag_name = request.form.get('tag_to_add') or request.form.get('tag_to_remove')
+    # Determine tag name based on action
+    tag_name = None
+    if action == 'add_tag':
+        tag_name = request.form.get('tag_to_add')
+    elif action == 'remove_tag':
+        tag_name = request.form.get('tag_to_remove')
 
-    # Ensure the tag being modified is 'Follow-up needed' if using the checkbox form
+    # Log action and tag name
+    current_app.logger.debug(f"Action: {action}, Tag Name: {tag_name}")
+
+    # Ensure the tag being modified is 'Follow-up needed' for this specific logic block
+    # (If adding other tag types later, this check needs adjustment)
     if tag_name != 'Follow-up needed':
+        current_app.logger.warning(f"Invalid tag operation attempted: {tag_name}")
         flash('Invalid tag operation.', 'danger')
+        if request.accept_mimetypes.accept_json:
+             return jsonify({'success': False, 'message': 'Invalid tag operation.'}), 400
         return redirect(url_for('main.view_request', request_id=request_id))
 
     # --- Handle REMOVE action ---
     if action == 'remove_tag':
+        current_app.logger.info(f"Processing remove_tag for '{tag_name}' on WO #{request_id}")
         # Permission check for removal (Admin/Scheduler/SU can remove Follow-up)
         if not is_admin_staff:
+             current_app.logger.warning(f"Permission denied for user {current_user.id} to remove tag '{tag_name}' on WO #{request_id}")
              flash(f"You do not have permission to remove the '{tag_name}' tag.", 'danger')
+             if request.accept_mimetypes.accept_json:
+                 return jsonify({'success': False, 'message': 'Permission denied.'}), 403
              return redirect(url_for('main.view_request', request_id=request_id))
 
-        if form.validate_on_submit(): # Validate CSRF
+        # Validate CSRF using the TagForm instance
+        if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
             if tag_name in current_tags:
                 current_tags.remove(tag_name)
@@ -1186,60 +1224,83 @@ def tag_request(request_id):
 
                 work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
-                db.session.commit()
-                flash(flash_text, 'info')
-                if request.accept_mimetypes.accept_json:
-                    return jsonify({'success': True, 'tags': work_order.tag, 'action': 'removed', 'tag': tag_name})
+                try:
+                    db.session.commit()
+                    flash(flash_text, 'info')
+                    if request.accept_mimetypes.accept_json:
+                        # Render updated tags partial
+                        rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                        return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'removed', 'tag': tag_name})
+                except Exception as e:
+                     db.session.rollback()
+                     current_app.logger.error(f"Error committing tag removal: {e}", exc_info=True)
+                     flash('Error saving changes.', 'danger')
+                     if request.accept_mimetypes.accept_json:
+                         return jsonify({'success': False, 'message': 'Database error.'}), 500
             else:
                  flash(f"Tag '{tag_name}' was not found.", 'warning')
+                 if request.accept_mimetypes.accept_json:
+                     # Render updated tags partial even if tag wasn't found (state might be inconsistent)
+                     rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'not_found', 'tag': tag_name}) # Still success from client perspective
         else:
+            current_app.logger.warning("CSRF validation failed for tag removal.")
             flash('Could not remove tag due to a security error (CSRF).', 'danger')
+            if request.accept_mimetypes.accept_json:
+                 return jsonify({'success': False, 'error': 'CSRF'}), 403
+        # Fallback redirect
         return redirect(url_for('main.view_request', request_id=request_id))
 
     # --- Handle ADD action ---
     elif action == 'add_tag':
+        current_app.logger.info(f"Processing add_tag for '{tag_name}' on WO #{request_id}")
         # Permission check for adding (Admin/Scheduler/SU can add Follow-up)
         if not is_admin_staff:
+            current_app.logger.warning(f"Permission denied for user {current_user.id} to add tag '{tag_name}' on WO #{request_id}")
             flash(f"You do not have permission to add the '{tag_name}' tag.", 'danger')
+            if request.accept_mimetypes.accept_json:
+                 return jsonify({'success': False, 'message': 'Permission denied.'}), 403
             return redirect(url_for('main.view_request', request_id=request_id))
 
-        if form.validate_on_submit(): # Validate CSRF
+        # Validate CSRF using the TagForm instance
+        if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
 
             # --- Get and Validate Date Directly from Request Form ---
             follow_up_date_str = request.form.get('follow_up_date') # Get date from the input field
             follow_up_date_obj = None
-            validation_error = False
+            validation_errors = {}
 
             if not follow_up_date_str:
-                flash('A follow-up date is required when adding the "Follow-up needed" tag.', 'danger')
-                validation_error = True
+                validation_errors['follow_up_date'] = ['A follow-up date is required when adding the tag.']
             else:
                 try:
-                    # Use WTForms validator logic if possible, or manual check
+                    # Validate MM/DD/YYYY format
                     follow_up_date_obj = datetime.strptime(follow_up_date_str, '%m/%d/%Y').date()
                 except ValueError:
-                    flash('Invalid date format for follow-up date (MM/DD/YYYY).', 'danger')
-                    validation_error = True
+                    validation_errors['follow_up_date'] = ['Invalid date format (MM/DD/YYYY).']
 
-            if validation_error:
-                 # If this was an AJAX request expecting JSON, return structured errors
+            if validation_errors:
+                 current_app.logger.warning(f"Validation failed for add_tag: {validation_errors}")
+                 flash('Please correct the errors below.', 'danger') # Generic flash
                  if request.accept_mimetypes.accept_json:
-                     return jsonify({'success': False, 'errors': {'follow_up_date': ['A valid MM/DD/YYYY date is required.']}}), 400
-                 # Non-AJAX fallback: redirect and flash (existing behavior)
+                     # Return structured errors for AJAX
+                     return jsonify({'success': False, 'errors': validation_errors}), 400
+                 # Non-AJAX fallback: redirect and flash (errors should ideally show near field)
                  return redirect(url_for('main.view_request', request_id=request_id))
             # --- End Date Validation ---
-
 
             # Proceed if validation passed
             log_text = ""
             commit_needed = False
+            tag_added = False
 
             # Add the tag if it's new
             if tag_name not in current_tags:
                  current_tags.add(tag_name)
                  log_text = f"Request tagged as '{tag_name}'."
                  commit_needed = True
+                 tag_added = True
 
             # Update follow-up date if it's different or tag is new
             if work_order.follow_up_date != follow_up_date_obj:
@@ -1255,23 +1316,41 @@ def tag_request(request_id):
             if commit_needed:
                 work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
-                db.session.commit()
-                flash(log_text, 'success') # Use log text as flash message
-                if request.accept_mimetypes.accept_json:
-                    return jsonify({'success': True, 'tags': work_order.tag, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
+                try:
+                    db.session.commit()
+                    flash_text = log_text if tag_added else "Follow-up date updated."
+                    flash(flash_text, 'success') # Use specific flash message
+                    if request.accept_mimetypes.accept_json:
+                        # Render updated tags partial
+                        rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                        return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
+                except Exception as e:
+                     db.session.rollback()
+                     current_app.logger.error(f"Error committing tag add/date update: {e}", exc_info=True)
+                     flash('Error saving changes.', 'danger')
+                     if request.accept_mimetypes.accept_json:
+                          return jsonify({'success': False, 'message': 'Database error.'}), 500
             else:
                 flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
+                if request.accept_mimetypes.accept_json:
+                    # Render updated tags partial even if no DB change (state might be inconsistent client-side)
+                    rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                    return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'no_change', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
+
 
         else: # CSRF validation failed
+            current_app.logger.warning("CSRF validation failed for tag addition.")
+            flash('Error adding tag due to security validation failure (CSRF).', 'danger')
             if request.accept_mimetypes.accept_json:
                 return jsonify({'success': False, 'error': 'CSRF'}), 403
-            flash('Error adding tag due to security validation failure (CSRF).', 'danger')
 
     else: # Invalid action
+        current_app.logger.warning(f"Invalid action '{action}' received in tag_request.")
         flash('Invalid tag action specified.', 'danger')
+        if request.accept_mimetypes.accept_json:
+             return jsonify({'success': False, 'message': 'Invalid action specified.'}), 400
 
-
-    # Default redirect after action
+    # Default redirect after action (mainly for non-AJAX or errors)
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
@@ -1301,7 +1380,8 @@ def cancel_request(request_id):
             old_status = work_order.status
             work_order.status = 'Cancelled'
             # Clear related fields on cancellation
-            work_order.tag = None
+            # Keep tags unless specifically required to clear?
+            # work_order.tag = None
             work_order.scheduled_date = None
             work_order.follow_up_date = None
             work_order.approved_quote_id = None # Clear approved quote
@@ -1557,7 +1637,8 @@ def edit_request(request_id):
                 work_order.property_manager = request.form.get('property_manager', '') # Get from hidden field
 
             # --- Update assigned vendor based on preferred name if changed ---
-            if work_order.preferred_vendor != form.vendor_assigned.data or not work_order.vendor_id:
+            # Compare preferred vendor name; if it changed, update vendor_id link
+            if original_values.get('preferred_vendor') != form.vendor_assigned.data:
                  if form.vendor_assigned.data:
                      vendor = Vendor.query.filter(Vendor.company_name.ilike(form.vendor_assigned.data)).first()
                      work_order.vendor_id = vendor.id if vendor else None
@@ -1568,6 +1649,16 @@ def edit_request(request_id):
             # --- Log specific changes ---
             changes = []
             for field_name, old_value in original_values.items():
+                 # Handle request_type_id change logging
+                 if field_name == 'request_type_id':
+                      old_rt = RequestType.query.get(old_value)
+                      new_rt = RequestType.query.get(work_order.request_type_id)
+                      old_name = old_rt.name if old_rt else 'None'
+                      new_name = new_rt.name if new_rt else 'None'
+                      if old_name != new_name:
+                           changes.append(f"Request Type: '{old_name}' -> '{new_name}'")
+                      continue # Skip default comparison for ID
+
                  new_value = getattr(work_order, field_name)
                  # Handle date comparison correctly
                  if isinstance(old_value, datetime.date):
@@ -1621,6 +1712,8 @@ def edit_request(request_id):
         form.date_3.data = work_order.preferred_date_3.strftime('%m/%d/%Y') if work_order.preferred_date_3 else ''
         # Ensure request_type is correctly selected
         form.request_type.data = work_order.request_type_id
+        # Populate preferred vendor field
+        form.vendor_assigned.data = work_order.preferred_vendor
 
 
     return render_template('edit_request.html', title='Edit Request', form=form, work_order=work_order,
