@@ -982,6 +982,8 @@ def quote_action(request_id, quote_id, action):
     can_super_user = current_user.role == 'Super User'
 
     if not (can_pm or can_super_user):
+        if request.accept_mimetypes.accept_json:
+            return jsonify({'success': False, 'error': 'permission', 'message': 'You do not have permission to approve or decline quotes.'}), 403
         flash('You do not have permission to approve or decline quotes.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
@@ -991,12 +993,14 @@ def quote_action(request_id, quote_id, action):
 
     if action == 'approve':
         if quote.status == 'Approved':
-             flash(f"Quote from {quote.vendor.company_name} is already approved.", 'info')
-             return redirect(url_for('main.view_request', request_id=request_id))
+            if request.accept_mimetypes.accept_json:
+                return jsonify({'success': False, 'error': 'already', 'message': 'Quote already approved.'}), 400
+            flash(f"Quote from {quote.vendor.company_name} is already approved.", 'info')
+            return redirect(url_for('main.view_request', request_id=request_id))
 
-        # Mark all other quotes for this WO as 'Not Approved' or similar if needed? No, just track the one approved.
+        # Mark this quote approved
         quote.status = 'Approved'
-        work_order.approved_quote_id = quote.id # Link the approved quote
+        work_order.approved_quote_id = quote.id  # Link the approved quote
         current_tags.add('Approved')
         current_tags.discard('Declined')
         log_text = f"Quote from {quote.vendor.company_name} approved."
@@ -1004,13 +1008,15 @@ def quote_action(request_id, quote_id, action):
 
         # Update Work Order status if appropriate
         if work_order.status == 'Quote Sent':
-             work_order.status = 'Approved' # Status indicating quote is approved
-             log_text += f" Work Order status changed to {work_order.status}."
+            work_order.status = 'Approved'  # Status indicating quote is approved
+            log_text += f" Work Order status changed to {work_order.status}."
 
     elif action == 'decline':
         if quote.status == 'Declined':
-             flash(f"Quote from {quote.vendor.company_name} is already declined.", 'info')
-             return redirect(url_for('main.view_request', request_id=request_id))
+            if request.accept_mimetypes.accept_json:
+                return jsonify({'success': False, 'error': 'already', 'message': 'Quote already declined.'}), 400
+            flash(f"Quote from {quote.vendor.company_name} is already declined.", 'info')
+            return redirect(url_for('main.view_request', request_id=request_id))
 
         quote.status = 'Declined'
         # If this was the currently approved quote, clear the link
@@ -1020,17 +1026,17 @@ def quote_action(request_id, quote_id, action):
         # Check if ANY other quote is still approved
         other_quotes_approved = Quote.query.filter(
             Quote.work_order_id == work_order.id,
-            Quote.id != quote.id, # Exclude the one just declined
+            Quote.id != quote.id,  # Exclude the one just declined
             Quote.status == 'Approved'
         ).count() > 0
 
         if not other_quotes_approved:
-            current_tags.discard('Approved') # Remove 'Approved' if none are left
+            current_tags.discard('Approved')  # Remove 'Approved' if none are left
             # Add 'Declined' only if no others are approved
             current_tags.add('Declined')
         else:
-             # If another is approved, ensure 'Declined' tag is NOT added
-             current_tags.discard('Declined')
+            # If another is approved, ensure 'Declined' tag is NOT added
+            current_tags.discard('Declined')
 
 
         log_text = f"Quote from {quote.vendor.company_name} declined."
@@ -1045,6 +1051,8 @@ def quote_action(request_id, quote_id, action):
     elif action == 'clear':
         # If there's no status set, nothing to clear
         if not quote.status:
+            if request.accept_mimetypes.accept_json:
+                return jsonify({'success': False, 'error': 'already', 'message': 'Quote status already cleared.'}), 400
             flash(f"Status for quote from {quote.vendor.company_name} is already cleared.", 'info')
             return redirect(url_for('main.view_request', request_id=request_id))
 
