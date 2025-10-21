@@ -282,8 +282,9 @@
                                          <span id="quote-status-{{ quote.id }}" class="ml-2
                                              {% if quote.status == 'Approved' %} quote-status-approved
                                              {% elif quote.status == 'Declined' %} quote-status-declined
+                                             {% elif quote.status %} quote-status-pending {# Add pending class if status exists #}
                                              {% else %} "" {% endif %}">
-                                             {% if quote.status in ['Approved', 'Declined'] %}({{ quote.status }}){% endif %}
+                                             {% if quote.status %}({{ quote.status }}){% endif %} {# Display if status exists #}
                                          </span>
                     </div>
                     <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
@@ -299,12 +300,10 @@
                                 <button type="submit" class="text-red-500 hover:text-red-700" title="Decline">✗</button>
                             </form>
                             {# Clear button appears only when quote has a status that can be cleared #}
-                            {% if quote.status %}
-                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline">
+                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline" {% if not quote.status %} style="display: none;" {% endif %} > {# Hide if no status #}
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-gray-400 hover:text-gray-600" title="Clear Status">↺</button>
                             </form>
-                            {% endif %}
                         {% endif %}
 
                         <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-400 hover:text-brand" title="Download">
@@ -1087,59 +1086,94 @@
          }
 
 
-        // --- Keep Attachment Modal Logic ---
+        // --- Attachment Modal Logic --- // *** KEPT AND CORRECTED ***
 
-        // Intercept quote action forms for AJAX handling
+        // *** START MODIFICATION FOR QUOTE ACTIONS ***
         const quotesList = document.getElementById('quotes-list');
         if (quotesList) {
             quotesList.addEventListener('submit', (e) => {
                 const form = e.target;
-                if (form && form.getAttribute && form.getAttribute('data-ajax') === 'true') {
-                    e.preventDefault();
+                // Check if the submitted element is a form and has the data-ajax attribute
+                if (form && form.tagName === 'FORM' && form.getAttribute('data-ajax') === 'true') {
+                    e.preventDefault(); // Prevent default form submission
                     const quoteId = form.getAttribute('data-quote-id');
                     const actionUrl = form.action;
                     const formData = new FormData(form);
+                    // Convert FormData to URLSearchParams for x-www-form-urlencoded
                     const body = new URLSearchParams(formData).toString();
 
                     fetch(actionUrl, {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Content-Type': 'application/x-www-form-urlencoded', // Correct content type
                             'X-CSRFToken': csrfToken,
-                            'Accept': 'application/json'
+                            'Accept': 'application/json' // Expect JSON response
                         },
                         body: body
-                    }).then(resp => resp.json().catch(() => ({ success: false })))
+                    }).then(resp => {
+                        // Improved error handling for non-JSON or error responses
+                        if (!resp.ok) {
+                             return resp.json().catch(() => ({ success: false, message: `Server error: ${resp.status}` })).then(errJson => Promise.reject(errJson));
+                        }
+                        return resp.json().catch(() => Promise.reject({ success: false, message: 'Invalid JSON response from server.' }));
+                    })
                     .then(json => {
+                        // Check json.success explicitly
                         if (json && json.success) {
                             // Update quote status label
-                            if (quoteId && json.new_status) {
+                            if (quoteId) {
                                 const statusSpan = document.getElementById(`quote-status-${quoteId}`);
                                 if (statusSpan) {
-                                    statusSpan.textContent = `(${json.new_status})`;
+                                    // Handle null/None status correctly for display
+                                    const newStatusText = json.new_status ? `(${json.new_status})` : ''; // Display empty if null/None
+                                    statusSpan.textContent = newStatusText;
+
+                                    // Update CSS classes based on new status
                                     statusSpan.classList.remove('quote-status-approved','quote-status-declined','quote-status-pending');
                                     if (json.new_status === 'Approved') statusSpan.classList.add('quote-status-approved');
                                     else if (json.new_status === 'Declined') statusSpan.classList.add('quote-status-declined');
-                                    else statusSpan.classList.add('quote-status-pending');
+                                    else if (json.new_status) statusSpan.classList.add('quote-status-pending'); // Re-add pending if status exists and isn't approved/declined
                                 }
                             }
-                            // Update tags area
+                            // Update tags area if tags are returned
                             if (json.tags !== undefined) updateTagsContainer(json.tags);
-                            showNotification(json.flash_text || 'Quote action completed.', true);
+                            // Show success notification using message from response
+                            showNotification(json.message || 'Quote action completed.', true);
+
+                            // --- Refresh Clear Button Visibility ---
+                            // Find the clear button form within the same list item
+                            const listItem = form.closest('li'); // Find parent li
+                            if (listItem) {
+                                const clearButtonForm = listItem.querySelector(`form[action*="/clear"]`);
+                                if (clearButtonForm) {
+                                    if (!json.new_status) {
+                                        clearButtonForm.style.display = 'none'; // Hide if status cleared
+                                    } else {
+                                        clearButtonForm.style.display = 'inline'; // Show if status exists
+                                    }
+                                }
+                            }
+                            // --- End Refresh Clear Button ---
+
                         } else {
-                            console.error('Quote action failed', json);
-                            showNotification('Failed to perform quote action.', false);
-                            // fallback: reload to show server-side messages
-                            location.reload();
+                            // Handle failure case reported by the server
+                            console.error('Quote action failed reported by server:', json);
+                            showNotification(json.message || 'Failed to perform quote action.', false);
+                            // Optionally reload if error is critical, but avoid for simple failures
+                            // location.reload();
                         }
                     }).catch(err => {
-                        console.error('Quote action error', err);
-                        showNotification('An error occurred while processing quote action.', false);
-                        location.reload();
+                        // Handle fetch errors or errors thrown from .then blocks
+                        console.error('Quote action fetch/processing error:', err);
+                        showNotification(err.message || 'An error occurred while processing quote action.', false);
+                        // Consider reloading on critical errors
+                        // location.reload();
                     });
                 }
             });
         }
+        // *** END MODIFICATION FOR QUOTE ACTIONS ***
+
 
         // Intercept remove-tag forms inside tags-container and submit via AJAX
         const tagsContainer = document.getElementById('tags-container');
@@ -1149,7 +1183,8 @@
                 if (form && form.matches && form.matches('form')) {
                     // Identify remove-tag forms by presence of input name 'action' with value 'remove_tag' or tag_to_remove
                     const actionInput = form.querySelector('input[name=action]');
-                    if (!actionInput) return; // Not a tag remove form
+                    const tagToRemoveInput = form.querySelector('input[name=tag_to_remove]'); // Also check for this input
+                    if (!actionInput || actionInput.value !== 'remove_tag' || !tagToRemoveInput) return; // Not the correct form
                     e.preventDefault();
                     const formData = new FormData(form);
                     const body = new URLSearchParams(formData).toString();
@@ -1165,29 +1200,31 @@
                     }).then(resp => resp.json().catch(() => ({ success: false })))
                     .then(json => {
                         if (json && json.success) {
-                            updateTagsContainer(json.tags);
+                            updateTagsContainer(json.tags); // Use the returned HTML fragment
                             showNotification('Tag removed.', true);
                         } else {
                             console.error('Failed to remove tag', json);
                             showNotification('Failed to remove tag.', false);
-                            location.reload();
+                            location.reload(); // Fallback reload
                         }
                     }).catch(err => {
                         console.error('Error removing tag', err);
                         showNotification('An error occurred removing tag.', false);
-                        location.reload();
+                        location.reload(); // Fallback reload
                     });
                 }
             });
         }
+
+         // --- Attachment Modal Viewing Logic ---
         document.querySelectorAll('.view-attachment-btn').forEach(button => {
              button.addEventListener('click', function(e) {
                  e.preventDefault();
                  const url = this.dataset.url;
                  const filename = this.dataset.filename;
                  attachmentModalTitle.textContent = `View: ${filename}`;
-                 attachmentFrame.src = url;
-                 attachmentModal.classList.remove('hidden', 'opacity-0', 'scale-95');
+                 attachmentFrame.src = url; // Set iframe source
+                 attachmentModal.classList.remove('hidden', 'opacity-0', 'scale-95'); // Show modal
              });
          });
 
@@ -1195,58 +1232,48 @@
              attachmentModal.classList.add('opacity-0', 'scale-95');
              setTimeout(() => {
                  attachmentModal.classList.add('hidden');
-                 attachmentFrame.src = 'about:blank'; // Clear iframe content
-             }, 150);
+                 attachmentFrame.src = 'about:blank'; // Clear iframe content to stop loading/prevent memory leaks
+             }, 150); // Match CSS transition duration
          }
 
         if (closeAttachmentModalBtn) { closeAttachmentModalBtn.addEventListener('click', hideAttachmentModal); }
+        // Close attachment modal on Escape key press
         window.addEventListener('keydown', function(event) {
              if (event.key === 'Escape' && !attachmentModal.classList.contains('hidden')) {
                  hideAttachmentModal();
              }
          });
+        // --- End Attachment Modal Logic ---
 
 
-        // --- CORRECTED TributeJS Initialization ---
+        // --- Keep CORRECTED TributeJS Initialization ---
         const noteTextareaElement = document.getElementById('note-textarea');
         if (noteTextareaElement) {
              var tribute = new Tribute({
-                // The `collection` configuration was missing
                 collection: [{
-                    // function that retrieves the data
                     values: function(text, cb) {
-                        fetch('/api/users/search') // Your existing endpoint
+                        fetch('/api/users/search')
                             .then(response => response.json())
-                            .then(data => cb(data)) // Pass data to the callback
-                            .catch(error => cb([])); // Pass empty array on error
+                            .then(data => cb(data))
+                            .catch(error => cb([]));
                     },
-                    // function that returns what to insert once a match is selected
                     selectTemplate: function(item) {
                         if (typeof item === 'undefined') return null;
-                        // item.original contains the object from the values array
-                        // We defined 'key' and 'value' in the /api/users/search endpoint
                         return `@${item.original.key} `; // Use key (full name with space)
                     },
-                    // attribute to match characters in the `values` array
                     lookup: 'value', // Match against the name without space
-                    // attribute to display in the menu
                     fillAttr: 'key', // Display the full name with space
-                     // Allows names with spaces
                     allowSpaces: true,
-                    // Template for displaying items in the menu (MODIFIED)
                     menuItemTemplate: function(item) {
-                        // item.original contains the object {key: 'Full Name', value: 'FullName'}
-                        // item.string is the value being displayed based on fillAttr ('key' in this case)
-                        // Added Tailwind classes for styling
                         return `<div class="px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100 cursor-pointer">${item.string}</div>`;
                     },
-                    trigger: '@', // Character that triggers the menu
+                    trigger: '@',
                     noMatchTemplate: function () {
                         return '<li class="no-match">No matches found</li>';
                     }
                 }]
             });
-            tribute.attach(noteTextareaElement); // Attach Tribute to the textarea
+            tribute.attach(noteTextareaElement);
             console.log("DEBUG JS: Tribute attached to note textarea.");
         } else {
              console.error("DEBUG JS: Could not find note textarea element for Tribute.");
@@ -1272,19 +1299,14 @@
                 if (noNotesMessage) {
                     noNotesMessage.remove();
                 }
-
-                // Structured payload
-                const note = data.note;
-
-                // Build DOM for note
+                const note = data.note; // Assuming structured payload
                 const wrapper = document.createElement('div');
                 wrapper.className = 'flex space-x-3 opacity-0 transition-opacity duration-500';
-
+                // ... (rest of the DOM creation logic for the note) ...
                 const avatarDiv = document.createElement('div');
                 avatarDiv.className = 'flex-shrink-0';
                 const avatarImg = document.createElement('img');
                 avatarImg.className = 'h-8 w-8 rounded-full';
-                // Placeholder avatar service with initial
                 avatarImg.src = `https://placehold.co/100x100/E2E8F0/4A5568?text=${encodeURIComponent(note.author_initial || '?')}`;
                 avatarImg.alt = 'User Avatar';
                 avatarDiv.appendChild(avatarImg);
@@ -1293,7 +1315,7 @@
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'text-sm';
                 const authorLink = document.createElement('a');
-                authorLink.href = '#'; // Or link to user profile if available
+                authorLink.href = '#';
                 authorLink.className = 'font-medium text-text';
                 authorLink.textContent = note.author_name || 'Unknown User';
                 headerDiv.appendChild(authorLink);
@@ -1301,13 +1323,15 @@
                 const textDiv = document.createElement('div');
                 textDiv.className = 'mt-1 text-sm text-text-secondary';
                 const p = document.createElement('p');
+                // Sanitize potentially unsafe note text before inserting as HTML, or use textContent
+                // Using textContent is safer if HTML is not expected in notes.
                 p.textContent = note.text;
                 textDiv.appendChild(p);
 
                 const footerDiv = document.createElement('div');
                 footerDiv.className = 'mt-2 text-xs text-text-subtle';
                 const span = document.createElement('span');
-                span.textContent = note.date_posted_local || '';
+                span.textContent = note.date_posted_local || ''; // Use pre-formatted local time string
                 footerDiv.appendChild(span);
 
                 contentDiv.appendChild(headerDiv);
@@ -1318,25 +1342,21 @@
                 wrapper.appendChild(contentDiv);
 
                 notesList.appendChild(wrapper);
-                // Scroll to the bottom of the notes list
-                notesList.scrollTop = notesList.scrollHeight;
+                notesList.scrollTop = notesList.scrollHeight; // Scroll to bottom
                 setTimeout(() => wrapper.classList.remove('opacity-0'), 100); // Fade in
             });
 
-            // Helper: replace the tags container inner HTML safely
-            function updateTagsContainer(tagsHtml) {
-                try {
-                    const container = document.getElementById('tags-container');
-                    if (!container) return;
-                    // Server returns a rendered HTML fragment for tags; replace innerHTML
-                    container.innerHTML = tagsHtml || '';
-
-                    // Re-wire any tag-related event handlers if necessary (e.g., delete)
-                    // If other handlers need to be attached to badges, do it here.
-                } catch (err) {
-                    console.error('Failed to update tags container', err);
+            // Helper function to update tags container HTML
+            function updateTagsContainer(tagsHtmlFragment) {
+                const container = document.getElementById('tags-container');
+                if (container) {
+                    // Replace innerHTML with the fragment received from the server
+                    container.innerHTML = tagsHtmlFragment || '<p class="text-xs text-text-secondary">No tags assigned.</p>'; // Provide fallback
+                } else {
+                     console.error("Tags container not found for update.");
                 }
             }
+
 
             // --- Keep Go-back logic ---
             const goBackCheckbox = document.getElementById('go_back_checkbox');
@@ -1344,7 +1364,6 @@
                 goBackCheckbox.addEventListener('change', (e) => {
                     const form = document.getElementById('goback-form');
                     if (!form) return;
-                    // Submit via fetch to keep user on the page
                     fetch(form.action, {
                         method: 'POST',
                         headers: {
@@ -1352,69 +1371,75 @@
                             'X-CSRFToken': csrfToken,
                             'Accept': 'application/json'
                         },
-                        // Body needs CSRF token for GoBackForm
                         body: new URLSearchParams({'csrf_token': form.querySelector('[name=csrf_token]').value })
                     }).then(resp => {
                         if (!resp.ok) throw new Error('Go-back toggle failed ' + resp.status);
                         return resp.json().catch(() => null);
                     }).then(json => {
-                        if (json && json.success) {
-                            // Update tags container from returned tags string
-                            updateTagsContainer(json.tags);
-                            // Toggle checkbox state is already set by the change event
+                        if (json && json.success && json.tags !== undefined) {
+                            updateTagsContainer(json.tags); // Update tags from response
                         } else {
-                            console.error('Go-back toggle failed', json);
-                            location.reload();
+                            console.error('Go-back toggle failed or invalid response', json);
+                            location.reload(); // Fallback reload
                         }
                     }).catch(err => {
                         console.error('Go-back toggle error', err);
-                        location.reload();
+                        location.reload(); // Fallback reload
                     });
                 });
             }
 
-            // Follow-up checkbox triggers followup form post (AJAX)
+            // Follow-up checkbox triggers followup form post (AJAX) for REMOVAL only
             const followupCheckbox = document.getElementById('followup_checkbox');
-            const followupForm = document.getElementById('followup-form');
+            const followupForm = document.getElementById('followup-form'); // The form containing the checkbox and date
             if (followupCheckbox && followupForm) {
                 followupCheckbox.addEventListener('change', (e) => {
                     const dateInput = document.getElementById('follow_up_date_input');
-                    // If checked, don't POST yet. Let the user enter a date and click Save Date.
+                    // If checked, do nothing on change; user needs to save date via button
                     if (followupCheckbox.checked) {
                         if (dateInput) {
-                            // Give focus to the date input to encourage the user to fill it
-                            setTimeout(() => dateInput.focus(), 50);
+                            setTimeout(() => dateInput.focus(), 50); // Focus date input
                         }
-                        return;
+                        return; // Wait for Save Date button click
                     }
 
-                    // If unchecked, remove the tag immediately via AJAX
-                    fetch(followupForm.action, {
+                    // If UNCHECKED, remove the tag immediately via AJAX
+                    // We need to simulate the 'remove_tag' action
+                    fetch(followupForm.action, { // Use the form's action URL
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken,
+                            'X-CSRFToken': csrfToken, // Use the CSRF token from the main form
                             'Accept': 'application/json'
                         },
-                        body: new URLSearchParams({ 'csrf_token': followupForm.querySelector('[name=csrf_token]').value, 'action': 'remove_tag' })
+                        // Manually construct body for remove action
+                        body: new URLSearchParams({
+                            'csrf_token': followupForm.querySelector('[name=csrf_token]').value,
+                            'action': 'remove_tag',
+                            'tag_to_remove': 'Follow-up needed' // Specify the tag to remove
+                         })
                     }).then(resp => {
                         if (!resp.ok) throw new Error('Follow-up toggle (remove) failed ' + resp.status);
                         return resp.json().catch(() => null);
                     }).then(json => {
-                        if (json && json.success) {
-                            updateTagsContainer(json.tags);
+                        if (json && json.success && json.tags !== undefined) {
+                            updateTagsContainer(json.tags); // Update tags display
+                            // Clear the date input field as well
+                            if(dateInput) dateInput.value = '';
+                            // Update the display span for the date
+                            const followUpDisplay = document.getElementById('follow-up-display');
+                            if (followUpDisplay) followUpDisplay.textContent = 'None';
                         } else {
-                            console.error('Follow-up toggle (remove) failed', json);
-                            location.reload();
+                            console.error('Follow-up toggle (remove) failed or invalid response', json);
+                            location.reload(); // Fallback reload
                         }
                     }).catch(err => {
                         console.error('Follow-up toggle (remove) error', err);
-                        location.reload();
+                        location.reload(); // Fallback reload
                     });
                 });
             }
 
-            // --- REMOVED: Old Follow-up checkbox JS ---
 
              window.addEventListener('beforeunload', () => {
                  console.log("DEBUG JS: Leaving room:", `request_${requestId}`);
@@ -1434,36 +1459,33 @@
                 console.log("DEBUG JS: Note form submitted via JS");
                 const noteTextarea = document.getElementById('note-textarea');
                 const formData = new FormData(noteForm);
-                // Convert FormData to URLSearchParams for correct encoding
                 const formBody = new URLSearchParams(formData).toString();
                 console.log("DEBUG JS: Form data being sent:", formBody);
-
-                // CORRECTED: Fetch URL points to the new dedicated route
                 const postUrl = "{{ url_for('main.post_note', request_id=work_order.id) }}";
                 console.log("DEBUG JS: Fetching URL:", postUrl);
 
                 fetch(postUrl, {
                     method: 'POST',
-                    body: formBody, // Send as form-encoded data
+                    body: formBody,
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': csrfToken // Ensure CSRF token is sent
+                        'X-CSRFToken': csrfToken
                     }
                 })
                 .then(response => {
                     console.log("DEBUG JS: Received response status:", response.status);
                     if (!response.ok) {
-                        // Log detailed error if possible
-                         response.json().then(errData => { // Try to parse error as JSON
+                         return response.json().then(errData => { // Try to parse error as JSON
                              console.error("DEBUG JS: Fetch error JSON response body:", errData);
                              showNotification(errData.message || `Error: ${response.status}`, false);
+                             throw new Error(errData.message || `HTTP error! status: ${response.status}`); // Throw after logging/showing
                          }).catch(() => { // Fallback if error isn't JSON
-                             response.text().then(text => {
+                             return response.text().then(text => {
                                  console.error("DEBUG JS: Fetch error text response body:", text);
                                  showNotification(`Error: ${response.status}`, false);
+                                 throw new Error(`HTTP error! status: ${response.status}`); // Throw after logging/showing
                              });
                          });
-                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.json(); // Attempt to parse success response as JSON
                 })
@@ -1474,58 +1496,82 @@
                         console.log("DEBUG JS: Note posted successfully.");
                         // Note will be added via WebSocket 'new_note' event
                     } else {
-                        // Error message handled in the .then(response => ...) block
+                        // Error message handled in the previous .then block if response was not ok
                         console.error("DEBUG JS: Failed to post note (server reported failure):", data.errors || data.message);
+                        // If server reported success:false but response was ok (2xx), show message from data
+                        if (data.message) showNotification(data.message, false);
+                        else if(data.errors) showNotification('Validation errors occurred.', false) // More specific error?
                     }
                 })
                 .catch(error => {
-                    // Network errors or errors thrown from response handling
+                    // Catches errors thrown from response handling or network errors
                     console.error("DEBUG JS: Error during fetch or processing:", error);
-                    // Avoid showing generic network error if a specific one was already shown
-                    if (!error.message.startsWith('HTTP error')) {
-                         showNotification("A network or server error occurred while posting the note.", false);
-                    }
+                    // Avoid double-showing notification if already shown in response handling
+                    // The showNotification calls inside the .then(response => ...) block handle specific errors
                 });
             });
         }
 
-        // --- AJAX submit for Follow-up Save Date (placed after note handler) ---
+        // --- AJAX submit for Follow-up Save Date (using the same form) ---
         const followupFormElement = document.getElementById('followup-form');
         if (followupFormElement) {
             followupFormElement.addEventListener('submit', (e) => {
-                e.preventDefault();
+                // Determine if this submit was triggered by the 'Save Date' button
+                const isSaveDateSubmit = document.activeElement && document.activeElement.id === 'save-followup-btn';
+                // Only handle AJAX if it's the Save Date button OR if unchecking (handled by change event)
+                // If it's the 'Remove Tag' button, let the default form submission (or change event) handle it
+                if (!isSaveDateSubmit) {
+                    // If triggered by 'Remove Tag' button or just hitting Enter, let change handler or default work.
+                    // Prevent AJAX for the 'Remove Tag' button case specifically.
+                    if (document.activeElement && document.activeElement.textContent.includes('Remove Tag')) {
+                       // Let the 'change' event listener handle the removal via AJAX when unchecked
+                       e.preventDefault(); // Prevent default submission for remove button too
+                       return;
+                    }
+                    // For other submit triggers (like Enter key), proceed with AJAX save.
+                }
+
+                e.preventDefault(); // Prevent default form submission for Save Date
                 const form = followupFormElement;
                 const formData = new FormData(form);
+                // Ensure action is 'add_tag' when saving date
+                formData.set('action', 'add_tag');
+                formData.set('tag_to_add', 'Follow-up needed'); // Ensure tag is specified
                 const body = new URLSearchParams(formData).toString();
 
                 fetch(form.action, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': csrfToken,
+                        'X-CSRFToken': csrfToken, // Ensure CSRF is included
                         'Accept': 'application/json'
                     },
                     body: body
                 }).then(response => {
+                    // Handle non-OK responses first
                     if (!response.ok) {
-                        return response.json().then(err => Promise.reject(err)).catch(() => Promise.reject({ message: 'Network error' }));
+                        // Try to parse JSON error, otherwise create generic error
+                        return response.json()
+                            .catch(() => ({ message: `Server error: ${response.status}` })) // Fallback error message
+                            .then(err => Promise.reject(err)); // Reject with the error object
                     }
-                    return response.json();
+                    return response.json(); // Parse successful response
                 }).then(json => {
                     if (json && json.success) {
-                        updateTagsContainer(json.tags);
+                        updateTagsContainer(json.tags); // Update tags UI
                         const followUpDisplay = document.getElementById('follow-up-display');
-                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None';
+                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None'; // Update date display
                         showNotification('Follow-up date saved.', true);
                     } else {
+                        // Handle server-reported failure (e.g., validation)
                         console.error('Failed to save follow-up:', json);
-                        showNotification('Failed to save follow-up. ' + (json && json.error ? json.error : ''), false);
-                        // On validation or CSRF errors, fallback to reload to show server flash messages
-                        if (json && json.error) location.reload();
+                        showNotification('Failed to save follow-up. ' + (json && json.errors && json.errors.follow_up_date ? json.errors.follow_up_date[0] : (json.message || '')), false);
+                        // No reload on simple validation error
                     }
                 }).catch(err => {
+                    // Handle fetch errors or errors from non-OK responses
                     console.error('Follow-up save error', err);
-                    showNotification('An error occurred while saving follow-up.', false);
+                    showNotification('An error occurred while saving follow-up: ' + (err.message || ''), false);
                 });
             });
         }

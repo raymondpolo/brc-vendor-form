@@ -3,7 +3,7 @@ from app.extensions import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-from app.utils import get_denver_now # <-- Import the helper
+from app.utils import get_denver_now, DENVER_TZ # <-- Import DENVER_TZ added here
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -188,7 +188,9 @@ class MessageAttachment(db.Model):
 class Quote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_sent = db.Column(db.DateTime, nullable=False, default=get_denver_now) # <-- Use Denver time default
-    status = db.Column(db.String(50), nullable=False, default='Pending')
+    # *** MODIFICATION: Make status nullable ***
+    status = db.Column(db.String(50), nullable=True, default='Pending')
+    # *** END MODIFICATION ***
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=False)
     attachment_id = db.Column(db.Integer, db.ForeignKey('attachment.id'), nullable=False, unique=True)
