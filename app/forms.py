@@ -21,8 +21,11 @@ def date_format(form, field):
     """Custom validator to ensure date string is in MM/DD/YYYY format."""
     if field.data:
         try:
+            # Check if it's already a date object (might happen if populated from obj)
+            if isinstance(field.data, datetime.date):
+                return # Already valid
             datetime.strptime(field.data, '%m/%d/%Y')
-        except ValueError:
+        except (ValueError, TypeError):
             raise ValidationError('Date must be in MM/DD/YYYY format.')
 
 class MessageForm(FlaskForm):
@@ -106,13 +109,18 @@ class UpdateAccountForm(FlaskForm):
 
     def __init__(self, *args, **kwargs):
         super(UpdateAccountForm, self).__init__(*args, **kwargs)
-        self.original_email = current_user.email
+        # Store original email only if current_user exists (during app context)
+        if current_user and hasattr(current_user, 'email'):
+            self.original_email = current_user.email
+        else:
+            self.original_email = None # Handle cases outside request context if needed
 
     def validate_email(self, email):
         if email.data != self.original_email:
             user = User.query.filter_by(email=email.data).first()
             if user:
                 raise ValidationError('That email is already in use. Please choose a different one.')
+
 
 class ChangePasswordForm(FlaskForm):
     current_password = PasswordField('Current Password', validators=[DataRequired()])
@@ -166,7 +174,18 @@ class ChangeStatusForm(FlaskForm):
         'Cancelled'
     ], validators=[DataRequired()])
     scheduled_date = StringField('Scheduled Date', validators=[Optional(), date_format])
+    # +++ ADD Follow-up fields +++
+    add_follow_up = BooleanField('Add Follow-up Tag')
+    follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
+    # +++ END ADD +++
     submit = SubmitField('Update Status')
+
+    # Custom validation for follow-up date
+    def validate_follow_up_date(self, field):
+        if self.add_follow_up.data and not field.data:
+            raise ValidationError('Follow-up date is required when adding the follow-up tag.')
+        # Date format validation is handled by date_format validator
+
 
 def get_vendors():
     return Vendor.query.order_by(Vendor.company_name)
@@ -176,20 +195,19 @@ class AssignVendorForm(FlaskForm):
     submit = SubmitField('Assign')
 
 class AttachmentForm(FlaskForm):
-    file = MultipleFileField('Upload Attachment', validators=[DataRequired()])
+    file = MultipleFileField('Upload Attachment', validators=[DataRequired(), FileAllowed(['jpg', 'png', 'jpeg', 'gif', 'pdf', 'doc', 'docx'])]) # Added FileAllowed
     submit = SubmitField('Upload')
 
 class NewRequestForm(FlaskForm):
     wo_number = StringField('Work Order #', validators=[Optional()])
-    # MODIFIED: Changed to a SelectField that will be populated dynamically
     request_type = SelectField('Type of Request', coerce=int, validators=[DataRequired()])
     description = TextAreaField('Description / Instructions', validators=[DataRequired()])
     property = StringField('Property', validators=[DataRequired()])
     unit = StringField('Unit #', validators=[Optional()])
-    address = StringField('Address')
-    property_manager = StringField('Property Manager')
-    tenant_name = StringField('Tenant Name')
-    tenant_phone = StringField('Tenant Phone')
+    address = StringField('Address') # Auto-filled, maybe make Optional validator?
+    property_manager = StringField('Property Manager') # Auto-filled
+    tenant_name = StringField('Tenant Name', validators=[Optional()])
+    tenant_phone = StringField('Tenant Phone', validators=[Optional()])
     contact_person = StringField('Contact Person', validators=[Optional()])
     contact_person_phone = StringField('Contact Person Phone', validators=[Optional()])
     vendor_assigned = StringField('Preferred Vendor (Optional)')
@@ -207,9 +225,9 @@ class PropertyForm(FlaskForm):
 
 class VendorForm(FlaskForm):
     company_name = StringField('Vendor', validators=[DataRequired()])
-    contact_name = StringField('Contact')
+    contact_name = StringField('Contact', validators=[Optional()])
     email = StringField('Email Address', validators=[OptionalUnique(), Email()])
-    phone = StringField('Phone Number')
+    phone = StringField('Phone Number', validators=[Optional()])
     specialty = StringField('Specialty (e.g., Plumbing)', validators=[DataRequired()])
     website = StringField('Website', validators=[OptionalUnique(), URL()])
     submit = SubmitField('Save Vendor')
@@ -223,21 +241,22 @@ class DeleteRestoreRequestForm(FlaskForm):
     """An empty form for CSRF protection."""
     pass
 
-# +++ ADD GoBackForm +++
-class GoBackForm(FlaskForm):
-    """Form for toggling the Go-back tag."""
-    pass
-# +++ END ADD +++
+# --- REMOVED GoBackForm ---
+# class GoBackForm(FlaskForm):
+#    """Form for toggling the Go-back tag."""
+#    pass
 
 class TagForm(FlaskForm):
+    # --- REMOVED Follow-up and Go-back ---
     tag = SelectField('Tag', choices=[
-        #('Awaiting Approval', 'Awaiting Approval'), # Removed as per current code
-        ('Follow-up needed', 'Follow-up needed'),
-        #('Completed', 'Completed'), # Added automatically when Closed/Completed
-        ('Go-back', 'Go-back'),
-        # Add other relevant tags if needed, but Approved/Declined are handled via quotes
-    ], validators=[DataRequired()])
-    follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
+        #('Awaiting Approval', 'Awaiting Approval'), # Handled via status/quotes
+        #('Follow-up needed', 'Follow-up needed'), # Moved to ChangeStatusForm
+        #('Completed', 'Completed'), # Added automatically
+        #('Go-back', 'Go-back') # Handled via checkbox
+        # Add any OTHER tags here if needed
+    ], validators=[Optional()]) # Make optional if no choices left
+    # --- REMOVED follow_up_date ---
+    # follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
     submit = SubmitField('Add Tag')
 
 # ADDED: Form for adding/editing request types
@@ -246,7 +265,8 @@ class RequestTypeForm(FlaskForm):
     submit = SubmitField('Save')
 
 def get_requesters():
-    return User.query.filter_by(role='Requester').order_by(User.name)
+    # Fetch active requesters
+    return User.query.filter_by(role='Requester', is_active=True).order_by(User.name)
 
 class ReassignRequestForm(FlaskForm):
     requester = QuerySelectField('New Requester', query_factory=get_requesters, get_label='name', allow_blank=False, validators=[DataRequired()])
@@ -259,7 +279,12 @@ class MarkAsCompletedForm(FlaskForm):
 class SendFollowUpForm(FlaskForm):
     """Form for sending a manual follow-up email."""
     recipient = StringField('To', validators=[DataRequired(), Email()])
-    cc = StringField('CC', validators=[Optional(), Email()])
+    cc = StringField('CC (optional, comma-separated)', validators=[Optional()]) # Removed Email validator for flexibility
     subject = StringField('Subject', validators=[DataRequired()])
     body = TextAreaField('Body', validators=[DataRequired()])
     submit = SubmitField('Send Follow-Up')
+
+# Form specifically for the Go-Back toggle via JS/AJAX
+class ToggleTagForm(FlaskForm):
+    """CSRF protection for simple tag toggles."""
+    pass

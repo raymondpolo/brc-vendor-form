@@ -390,6 +390,17 @@
                 </div>
 
                 <div class="mt-4">
+                    {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
+                    <label class="inline-flex items-center space-x-2 text-sm mb-3">
+                        <input id="followup_checkbox" type="checkbox" class="rounded" {% if 'Follow-up needed' in current_tags %} checked {% endif %} />
+                        <span class="text-text">Follow-up needed</span>
+                    </label>
+                    <form id="followup-form" method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}" style="display:none;">
+                        {{ tag_form.hidden_tag() }}
+                        <input type="hidden" name="tag_to_add" value="Follow-up needed" />
+                        <input type="hidden" name="action" value="add_tag" />
+                    </form>
+                    {% endif %}
                     <button type="submit" name="update_status" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Update Status</button>
                 </div>
             </form>
@@ -638,21 +649,19 @@
                 {% endif %}
             </form>
 
-            {# --- ADDED: Go-back Toggle --- #}
+            {# --- ADDED: Go-back Checkbox (moved into request details area) --- #}
             {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
-            <div class="mt-6 border-t pt-4">
-                <form method="POST" action="{{ url_for('main.toggle_go_back', request_id=work_order.id) }}">
-                    {{ go_back_form.hidden_tag() }} {# CSRF protection #}
-                    <div class="flex items-center justify-between">
-                         <label for="go_back_toggle" class="text-sm font-medium text-text">Mark as Go-back</label>
-                         <button type="submit" class="px-3 py-1 text-sm rounded-md {% if 'Go-back' in current_tags %} bg-blue-600 text-white hover:bg-blue-700 {% else %} bg-gray-200 text-gray-700 hover:bg-gray-300 {% endif %}">
-                             {{ 'Remove Go-back' if 'Go-back' in current_tags else 'Add Go-back' }}
-                         </button>
-                    </div>
+            <div class="mt-4">
+                <label class="inline-flex items-center space-x-2 text-sm">
+                    <input id="go_back_checkbox" type="checkbox" class="rounded toggle-checkbox" {% if 'Go-back' in current_tags %} checked {% endif %} />
+                    <span class="text-text">Go-back</span>
+                </label>
+                <form id="goback-form" method="POST" action="{{ url_for('main.toggle_go_back', request_id=work_order.id) }}" style="display:none;">
+                    {{ go_back_form.hidden_tag() }}
                 </form>
             </div>
             {% endif %}
-             {# --- END Go-back Toggle --- #}
+            {# --- END Go-back Checkbox --- #}
         </div>
         {% endif %}
         {# --- END MODIFICATION --- #}
@@ -1179,6 +1188,59 @@
                 notesList.scrollTop = notesList.scrollHeight;
                 setTimeout(() => wrapper.classList.remove('opacity-0'), 100); // Fade in
             });
+
+            // --- Go-back checkbox handler ---
+            const goBackCheckbox = document.getElementById('go_back_checkbox');
+            if (goBackCheckbox) {
+                goBackCheckbox.addEventListener('change', (e) => {
+                    const form = document.getElementById('goback-form');
+                    if (!form) return;
+                    // Submit via fetch to keep user on the page
+                    fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: new URLSearchParams({})
+                    }).then(resp => {
+                        if (!resp.ok) console.error('Go-back toggle failed', resp.status);
+                        return resp.text();
+                    }).then(() => {
+                        // Optionally show a toast or update UI - reload tags via small refresh
+                        location.reload();
+                    }).catch(err => console.error('Go-back toggle error', err));
+                });
+            }
+
+            // --- Follow-up checkbox handler ---
+            const followupCheckbox = document.getElementById('followup_checkbox');
+            if (followupCheckbox) {
+                followupCheckbox.addEventListener('change', (e) => {
+                    const form = document.getElementById('followup-form');
+                    if (!form) return;
+                    // If checked, POST to add tag; if unchecked, submit with action=remove_tag
+                    const formData = new URLSearchParams();
+                    if (followupCheckbox.checked) {
+                        formData.append('tag_to_add', 'Follow-up needed');
+                        formData.append('action', 'add_tag');
+                    } else {
+                        formData.append('action', 'remove_tag');
+                        formData.append('tag_to_remove', 'Follow-up needed');
+                    }
+                    fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: formData
+                    }).then(resp => {
+                        if (!resp.ok) console.error('Follow-up toggle failed', resp.status);
+                        return resp.text();
+                    }).then(() => location.reload()).catch(err => console.error('Follow-up toggle error', err));
+                });
+            }
 
              window.addEventListener('beforeunload', () => {
                  console.log("DEBUG JS: Leaving room:", `request_${requestId}`);
