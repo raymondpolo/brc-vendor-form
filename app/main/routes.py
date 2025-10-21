@@ -1377,6 +1377,27 @@ def tag_request(request_id):
     return redirect(url_for('main.view_request', request_id=request_id))
 
 
+# --- Backwards-compatible wrapper: accept POST to /tag_request without an id ---
+@main.route('/tag_request', methods=['POST'])
+@login_required
+def tag_request_noid():
+    # Try to find request_id in form data or querystring
+    rid = request.form.get('request_id') or request.args.get('request_id')
+    current_app.logger.warning(f"Received POST to /tag_request without URL id; found request_id={rid} in form/args")
+    if not rid:
+        # Nothing we can do, return 404-like response
+        current_app.logger.error('No request_id supplied to /tag_request endpoint.')
+        return jsonify({'success': False, 'message': 'Missing request_id.'}), 404
+    try:
+        rid_int = int(rid)
+    except (TypeError, ValueError):
+        current_app.logger.error(f'Invalid request_id provided to /tag_request: {rid}')
+        return jsonify({'success': False, 'message': 'Invalid request_id.'}), 400
+
+    # Delegate to the main tag_request handler
+    return tag_request(rid_int)
+
+
 # --- CANCEL REQUEST ---
 @main.route('/cancel_request/<int:request_id>', methods=['POST'])
 @login_required

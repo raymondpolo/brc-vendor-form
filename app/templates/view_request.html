@@ -1418,8 +1418,9 @@
                     }
 
                     // If UNCHECKED, remove the tag immediately via AJAX
-                    console.log("DEBUG JS: Follow-up checkbox UNCHECKED. Sending remove tag request to:", followupForm.action);
-                    fetch(followupForm.action, { // Use the form's action URL
+                    const removeUrl = "{{ url_for('main.tag_request', request_id=work_order.id) }}";
+                    console.log("DEBUG JS: Follow-up checkbox UNCHECKED. Sending remove tag request to:", removeUrl);
+                    fetch(removeUrl, { // Use absolute URL rendered by server
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
