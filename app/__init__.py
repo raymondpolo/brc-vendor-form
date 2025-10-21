@@ -50,7 +50,9 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_blueprint, url_prefix='/auth')
 
     from app.main import main as main_blueprint
+    # *** VERIFY THIS LINE: Ensure no url_prefix is set for the main blueprint ***
     app.register_blueprint(main_blueprint)
+    # *** END VERIFICATION ***
 
     from app.admin import admin as admin_blueprint
     app.register_blueprint(admin_blueprint, url_prefix='/admin')
