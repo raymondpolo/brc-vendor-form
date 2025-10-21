@@ -242,9 +242,13 @@ class DeleteRestoreRequestForm(FlaskForm):
     pass
 
 # --- REMOVED GoBackForm ---
-# class GoBackForm(FlaskForm):
-#    """Form for toggling the Go-back tag."""
-#    pass
+class GoBackForm(FlaskForm):
+    """Backwards-compatible form for toggling the Go-back tag.
+
+    Some parts of the code import `GoBackForm` directly; this minimal form
+    provides CSRF protection when toggling the Go-back tag via POST.
+    """
+    pass
 
 class TagForm(FlaskForm):
     # --- REMOVED Follow-up and Go-back ---
