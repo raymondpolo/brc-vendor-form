@@ -633,55 +633,54 @@
 
         {# --- *** MODIFIED: Follow-up Checkbox & Date Picker Section *** --- #}
          {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
-        <div x-data="{ isChecked: {{ 'true' if 'Follow-up needed' in current_tags else 'false' }} }" class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-lg font-semibold text-text mb-4">Follow-up</h3>
-             {# Use a single form for both adding and removing #}
-            <form id="followup-form" method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}">
-                {{ tag_form.hidden_tag() }} {# Use tag_form for CSRF #}
-                {# Hidden input to control action based on checkbox state #}
-                <input type="hidden" name="action" :value="isChecked ? 'add_tag' : 'remove_tag'">
-                <input type="hidden" name="tag_to_add" value="Follow-up needed" x-show="isChecked">
-                <input type="hidden" name="tag_to_remove" value="Follow-up needed" x-show="!isChecked">
+         <div x-data="{ isChecked: {{ 'true' if 'Follow-up needed' in current_tags else 'false' }} }" class="bg-white p-6 rounded-lg shadow-md">
+             <h3 class="text-lg font-semibold text-text mb-4">Follow-up</h3>
+              {# Use a single form for both adding and removing #}
+             <form id="followup-form" method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}">
+                 {{ tag_form.hidden_tag() }} {# Use tag_form for CSRF #}
+                 {# Hidden input to control action based on checkbox state #}
+                 <input type="hidden" name="action" :value="isChecked ? 'add_tag' : 'remove_tag'">
+                 <input type="hidden" name="tag_to_add" value="Follow-up needed" x-show="isChecked">
+                 <input type="hidden" name="tag_to_remove" value="Follow-up needed" x-show="!isChecked">
 
-                <div class="flex items-center justify-between">
-                    <label class="inline-flex items-center space-x-2 text-sm">
-                        <input id="followup_checkbox" type="checkbox" class="rounded" x-model="isChecked" name="followup_active_flag" value="yes">
-                        <span class="text-text">Follow-up needed</span>
-                    </label>
-                     {# Save button appears only when checked and maybe date is set? Or always enabled when checked? #}
-                    <button id="save-followup-btn" type="submit" x-show="isChecked"
-                            class="px-3 py-1 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
-                            :disabled="!document.getElementById('follow_up_date_input').value && isChecked"
-                            >
-                        Save Date
-                    </button>
-                    <button type="submit" x-show="!isChecked && {{ 'true' if 'Follow-up needed' in current_tags else 'false' }}"
-                            class="px-3 py-1 border rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300">
-                        Remove Tag
-                    </button>
-                </div>
+                 <div class="flex items-center justify-between">
+                     <label class="inline-flex items-center space-x-2 text-sm">
+                         {# *** Add x-ref for easier access *** #}
+                         <input id="followup_checkbox" x-ref="followupCheckbox" type="checkbox" class="rounded" x-model="isChecked" name="followup_active_flag" value="yes">
+                         <span class="text-text">Follow-up needed</span>
+                     </label>
+                      {# Save button appears only when checked and maybe date is set? Or always enabled when checked? #}
+                     <button id="save-followup-btn" type="submit" x-show="isChecked"
+                             class="px-3 py-1 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
+                             :disabled="!document.getElementById('follow_up_date_input').value && isChecked"
+                             >
+                         Save Date
+                     </button>
+                     <button type="submit" x-show="!isChecked && {{ 'true' if 'Follow-up needed' in current_tags else 'false' }}"
+                             class="px-3 py-1 border rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300">
+                         Remove Tag
+                     </button>
+                 </div>
 
-                {# Date Picker Container - uses Alpine x-show based on checkbox state #}
-                <div id="follow-up-date-container" class="follow-up-date-container" :class="{ 'visible': isChecked }">
-                    <label for="follow_up_date_input" class="block text-sm font-medium text-text">Follow-up Date</label>
-                    {# Render the date input directly, using name from the form field #}
-                    <input type="text" id="follow_up_date_input" name="follow_up_date"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                           placeholder="MM/DD/YYYY"
-                           value="{{ work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else '' }}">
-                    {# Display validation errors if needed #}
-                    {% if tag_form.follow_up_date.errors %}
-                        <div class="text-red-500 text-xs mt-1">
-                            {% for error in tag_form.follow_up_date.errors %}<span>{{ error }}</span>{% endfor %}
-                        </div>
-                    {% endif %}
-                </div>
-            </form>
-        </div>
-        {% endif %}
-        {# --- *** END MODIFICATION *** --- #}
-
-        {# --- REMOVED: Old "Add Tag" Section --- #}
+                 {# Date Picker Container - uses Alpine x-show based on checkbox state #}
+                 <div id="follow-up-date-container" class="follow-up-date-container" :class="{ 'visible': isChecked }">
+                     <label for="follow_up_date_input" class="block text-sm font-medium text-text">Follow-up Date</label>
+                     {# Render the date input directly, using name from the form field #}
+                     <input type="text" id="follow_up_date_input" name="follow_up_date"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="MM/DD/YYYY"
+                            value="{{ work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else '' }}">
+                     {# Display validation errors if needed #}
+                     {% if tag_form.follow_up_date.errors %}
+                         <div class="text-red-500 text-xs mt-1">
+                             {% for error in tag_form.follow_up_date.errors %}<span>{{ error }}</span>{% endfor %}
+                         </div>
+                     {% endif %}
+                 </div>
+             </form>
+         </div>
+         {% endif %}
+         {# --- *** END MODIFICATION *** --- #}
 
 
         <div class="bg-white p-6 rounded-lg shadow-md">
@@ -1352,6 +1351,22 @@
                 if (container) {
                     // Replace innerHTML with the fragment received from the server
                     container.innerHTML = tagsHtmlFragment || '<p class="text-xs text-text-secondary">No tags assigned.</p>'; // Provide fallback
+
+                    // *** ADDED: Re-evaluate checkbox state after updating tags ***
+                    // Check if 'Follow-up needed' tag exists in the newly rendered HTML
+                    const followupCheckbox = document.getElementById('followup_checkbox');
+                    if (followupCheckbox) {
+                        const hasFollowupTag = container.textContent.includes('Follow-up needed');
+                        // Update the Alpine.js state AND the checkbox's actual checked property
+                        // Get the Alpine component context (usually the element with x-data)
+                        const alpineComponent = Alpine.$data(followupCheckbox.closest('[x-data]'));
+                        if (alpineComponent) {
+                            alpineComponent.isChecked = hasFollowupTag; // Update Alpine state
+                        }
+                        followupCheckbox.checked = hasFollowupTag; // Update raw checkbox state
+                    }
+                    // *** END ADDED ***
+
                 } else {
                      console.error("Tags container not found for update.");
                 }
@@ -1389,14 +1404,17 @@
                 });
             }
 
-            // Follow-up checkbox triggers followup form post (AJAX) for REMOVAL only
+            // --- *** MODIFIED Follow-up checkbox listener *** ---
             const followupCheckbox = document.getElementById('followup_checkbox');
             const followupForm = document.getElementById('followup-form'); // The form containing the checkbox and date
             if (followupCheckbox && followupForm) {
                 followupCheckbox.addEventListener('change', (e) => {
                     const dateInput = document.getElementById('follow_up_date_input');
+                    const isChecked = e.target.checked; // Get the current state AFTER the change
+
                     // If checked, do nothing on change; user needs to save date via button
-                    if (followupCheckbox.checked) {
+                    if (isChecked) {
+                        console.log("DEBUG JS: Follow-up checkbox CHECKED. Waiting for 'Save Date'.");
                         if (dateInput) {
                             setTimeout(() => dateInput.focus(), 50); // Focus date input
                         }
@@ -1404,8 +1422,7 @@
                     }
 
                     // If UNCHECKED, remove the tag immediately via AJAX
-                    // We need to simulate the 'remove_tag' action
-                    console.log("DEBUG JS: Follow-up checkbox unchecked. Sending remove tag request to:", followupForm.action); // Log URL
+                    console.log("DEBUG JS: Follow-up checkbox UNCHECKED. Sending remove tag request to:", followupForm.action);
                     fetch(followupForm.action, { // Use the form's action URL
                         method: 'POST',
                         headers: {
@@ -1420,32 +1437,42 @@
                             'tag_to_remove': 'Follow-up needed' // Specify the tag to remove
                          })
                     }).then(resp => {
-                         console.log("DEBUG JS: Remove tag response status:", resp.status); // Log status
+                         console.log("DEBUG JS: Remove tag response status:", resp.status);
                         if (!resp.ok) {
-                            // Log error response body
                             resp.text().then(text => console.error("DEBUG JS: Remove tag error response:", text));
                             throw new Error('Follow-up toggle (remove) failed ' + resp.status);
                         }
                         return resp.json().catch(() => null);
                     }).then(json => {
                         if (json && json.success && json.tags !== undefined) {
-                            console.log("DEBUG JS: Remove tag successful. Updating UI."); // Log success
+                            console.log("DEBUG JS: Remove tag successful. Updating UI.");
                             updateTagsContainer(json.tags); // Update tags display
-                            // Clear the date input field as well
-                            if(dateInput) dateInput.value = '';
-                            // Update the display span for the date
+                            if(dateInput) dateInput.value = ''; // Clear date input
                             const followUpDisplay = document.getElementById('follow-up-display');
-                            if (followUpDisplay) followUpDisplay.textContent = 'None';
+                            if (followUpDisplay) followUpDisplay.textContent = 'None'; // Update date display span
                         } else {
                             console.error('Follow-up toggle (remove) failed or invalid response', json);
-                            location.reload(); // Fallback reload
+                            // *** Revert checkbox state on failure ***
+                            e.target.checked = true; // Set it back to checked visually
+                            const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
+                            if (alpineComponent) alpineComponent.isChecked = true; // Update Alpine state
+                            // *** End Revert ***
+                            showNotification(json.message || 'Failed to remove follow-up tag.', false);
+                            // location.reload(); // Avoid reload on simple failure
                         }
                     }).catch(err => {
                         console.error('Follow-up toggle (remove) error', err);
-                        location.reload(); // Fallback reload
+                         // *** Revert checkbox state on failure ***
+                        e.target.checked = true; // Set it back to checked visually
+                        const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
+                        if (alpineComponent) alpineComponent.isChecked = true; // Update Alpine state
+                        // *** End Revert ***
+                        showNotification('An error occurred while removing the follow-up tag.', false);
+                        // location.reload(); // Avoid reload on simple failure
                     });
                 });
             }
+            // --- *** END MODIFICATION *** ---
 
 
              window.addEventListener('beforeunload', () => {
@@ -1521,31 +1548,36 @@
 
         // --- AJAX submit for Follow-up Save Date (using the same form) ---
         const followupFormElement = document.getElementById('followup-form');
-        // *** ADDED: Get request_id directly for URL construction ***
-        const currentRequestId = '{{ work_order.id }}';
+        const currentRequestId = '{{ work_order.id }}'; // Get request ID for URL
 
-        if (followupFormElement && currentRequestId) { // Check for request ID too
+        if (followupFormElement && currentRequestId) {
             followupFormElement.addEventListener('submit', (e) => {
-                // Determine if this submit was triggered by the 'Save Date' button
                 const isSaveDateSubmit = document.activeElement && document.activeElement.id === 'save-followup-btn';
+                const isRemoveTagSubmit = document.activeElement && document.activeElement.textContent.includes('Remove Tag');
 
-                if (!isSaveDateSubmit && document.activeElement && document.activeElement.textContent.includes('Remove Tag')) {
+                // Only proceed if triggered by Save Date button or Enter key (not Remove Tag button)
+                if (isRemoveTagSubmit) {
+                    // Let the 'change' event listener handle removal when unchecked
                     e.preventDefault();
+                    return;
+                }
+
+                // If not triggered by Save Date, it might be Enter key press. Only proceed if checkbox is checked.
+                const followupCheckboxRef = Alpine.$data(followupFormElement.closest('[x-data]')).$refs.followupCheckbox;
+                if (!isSaveDateSubmit && !followupCheckboxRef.checked) {
+                    e.preventDefault(); // Don't submit via Enter if checkbox is not checked
                     return;
                 }
 
                 e.preventDefault();
                 const form = followupFormElement;
                 const formData = new FormData(form);
-                formData.set('action', 'add_tag');
+                formData.set('action', 'add_tag'); // Ensure action is add_tag
                 formData.set('tag_to_add', 'Follow-up needed');
                 const body = new URLSearchParams(formData).toString();
+                const saveFollowUpUrl = `/tag_request/${currentRequestId}`; // Construct URL manually
 
-                // *** MODIFICATION: Construct URL manually ***
-                const saveFollowUpUrl = `/tag_request/${currentRequestId}`;
-                // *** END MODIFICATION ***
-
-                console.log("DEBUG JS: Saving follow-up. Sending POST to:", saveFollowUpUrl); // Use manually constructed URL
+                console.log("DEBUG JS: Saving follow-up. Sending POST to:", saveFollowUpUrl);
                 console.log("DEBUG JS: Request body:", body);
 
                 fetch(saveFollowUpUrl, { // Use manually constructed URL
@@ -1570,9 +1602,9 @@
                 }).then(json => {
                     if (json && json.success) {
                         console.log("DEBUG JS: Save follow-up successful. Updating UI.");
-                        updateTagsContainer(json.tags);
+                        updateTagsContainer(json.tags); // Update tags UI
                         const followUpDisplay = document.getElementById('follow-up-display');
-                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None';
+                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None'; // Update date display
                         showNotification('Follow-up date saved.', true);
                     } else {
                         console.error('Failed to save follow-up:', json);
