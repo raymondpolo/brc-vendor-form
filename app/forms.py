@@ -1,6 +1,8 @@
 # app/forms.py
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, SelectField, TextAreaField, MultipleFileField, HiddenField, FloatField
+# *** Import date object for type checking ***
+from datetime import datetime, date
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional, URL
 from flask_wtf.file import FileAllowed, FileField
 from flask_login import current_user
@@ -8,7 +10,7 @@ from flask_login import current_user
 from app.models import User, Vendor, RequestType
 from wtforms.widgets import HiddenInput
 from wtforms_sqlalchemy.fields import QuerySelectField
-from datetime import datetime
+# from datetime import datetime # Already imported above
 
 # Custom validator to handle empty strings for optional unique fields
 class OptionalUnique(Optional):
@@ -17,16 +19,23 @@ class OptionalUnique(Optional):
             field.data = None
         super().__call__(form, field)
 
+# *** Refined date_format validator ***
 def date_format(form, field):
-    """Custom validator to ensure date string is in MM/DD/YYYY format."""
+    """Custom validator to ensure data is a date or a string in MM/DD/YYYY format."""
     if field.data:
-        try:
-            # Check if it's already a date object (might happen if populated from obj)
-            if isinstance(field.data, datetime.date):
-                return # Already valid
-            datetime.strptime(field.data, '%m/%d/%Y')
-        except (ValueError, TypeError):
-            raise ValidationError('Date must be in MM/DD/YYYY format.')
+        # If it's already a date object, it's valid in terms of type.
+        if isinstance(field.data, date):
+            return
+        # If it's a string, try parsing it.
+        if isinstance(field.data, str):
+            try:
+                datetime.strptime(field.data, '%m/%d/%Y')
+                return # Successfully parsed
+            except ValueError:
+                raise ValidationError('Date must be in MM/DD/YYYY format.')
+        # If it's neither a date object nor a string, it's invalid type
+        raise ValidationError('Invalid data type for date.')
+# *** End Refined date_format validator ***
 
 class MessageForm(FlaskForm):
     recipient = StringField('To', validators=[DataRequired(), Email()])
@@ -174,17 +183,9 @@ class ChangeStatusForm(FlaskForm):
         'Cancelled'
     ], validators=[DataRequired()])
     scheduled_date = StringField('Scheduled Date', validators=[Optional(), date_format])
-    # +++ ADD Follow-up fields +++
-    add_follow_up = BooleanField('Add Follow-up Tag')
+    add_follow_up = BooleanField('Add Follow-up Tag') # Keep for potential future use?
     follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
-    # +++ END ADD +++
     submit = SubmitField('Update Status')
-
-    # Custom validation for follow-up date (REMOVED - now handled in route/JS)
-    # def validate_follow_up_date(self, field):
-    #     if self.add_follow_up.data and not field.data:
-    #         raise ValidationError('Follow-up date is required when adding the follow-up tag.')
-        # Date format validation is handled by date_format validator
 
 
 def get_vendors():
@@ -241,22 +242,14 @@ class DeleteRestoreRequestForm(FlaskForm):
     """An empty form for CSRF protection."""
     pass
 
-# --- REMOVED GoBackForm ---
 class GoBackForm(FlaskForm):
-    """Backwards-compatible form for toggling the Go-back tag.
-
-    Some parts of the code import `GoBackForm` directly; this minimal form
-    provides CSRF protection when toggling the Go-back tag via POST.
-    """
+    """Backwards-compatible form for toggling the Go-back tag."""
     pass
 
 class TagForm(FlaskForm):
-    # --- REMOVED 'tag' SelectField ---
-    # tag = SelectField('Tag', choices=[], validators=[Optional()])
-
-    # --- KEEP 'follow_up_date' ---
+    # *** Ensure date_format validator is used ***
     follow_up_date = StringField('Follow-up Date', validators=[Optional(), date_format])
-    submit = SubmitField('Add Tag') # Button might not be used directly now
+    # *** Removed submit button as it's handled by JS ***
 
 # ADDED: Form for adding/editing request types
 class RequestTypeForm(FlaskForm):

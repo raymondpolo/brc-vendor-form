@@ -11,7 +11,9 @@ from flask import current_app # Import current_app for logging
 from markupsafe import Markup
 from functools import wraps
 from collections import Counter
-from datetime import datetime, time, timedelta
+# *** Import date object for type checking/conversion ***
+from datetime import datetime, time, timedelta, date
+# *** End Import ***
 
 from flask import (render_template, request, redirect, url_for, flash,
                    abort, send_from_directory, jsonify, current_app, Response)
@@ -1145,7 +1147,9 @@ def toggle_go_back(request_id):
         # Return JSON for AJAX update
         if request.accept_mimetypes.accept_json:
             # Render the updated tags partial to send back
-            rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm()) # You might need to pass delete_form for remove buttons
+            # *** Ensure delete_form is passed if needed by the partial ***
+            delete_form_instance = DeleteRestoreRequestForm()
+            rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
             return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'toggled', 'tag': tag_name})
     else:
         # Handle CSRF failure
@@ -1173,9 +1177,8 @@ def tag_request(request_id):
     current_app.logger.debug(f"Request Form Data: {request.form}")
 
     work_order = WorkOrder.query.get_or_404(request_id)
-    # *** FIX: Instantiate form with request data for validation ***
+    # Instantiate form with request data for validation
     form = TagForm(request.form)
-    # *** END FIX ***
 
     # Permissions
     is_admin_staff = current_user.role in ['Admin', 'Scheduler', 'Super User']
@@ -1208,7 +1211,7 @@ def tag_request(request_id):
                  return jsonify({'success': False, 'message': 'Permission denied.'}), 403
              return redirect(url_for('main.view_request', request_id=request_id))
 
-        # *** Use the form instance populated with request.form for validation ***
+        # Use the form instance populated with request.form for validation
         if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
             if tag_name in current_tags:
@@ -1224,7 +1227,9 @@ def tag_request(request_id):
                     db.session.commit()
                     flash(flash_text, 'info')
                     if request.accept_mimetypes.accept_json:
-                        rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                        # *** Ensure delete_form is passed if needed by the partial ***
+                        delete_form_instance = DeleteRestoreRequestForm()
+                        rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
                         return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'removed', 'tag': tag_name})
                 except Exception as e:
                      db.session.rollback()
@@ -1235,10 +1240,11 @@ def tag_request(request_id):
             else:
                  flash(f"Tag '{tag_name}' was not found.", 'warning')
                  if request.accept_mimetypes.accept_json:
-                     rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
-                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'not_found', 'tag': tag_name})
+                     # *** Ensure delete_form is passed if needed by the partial ***
+                     delete_form_instance = DeleteRestoreRequestForm()
+                     rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
+                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'not_found', 'tag': tag_name}) # Still success from client perspective
         else:
-            # *** Log CSRF specific error if possible ***
             csrf_error_msg = 'CSRF validation failed.' if 'csrf_token' in form.errors else 'Form validation failed.'
             current_app.logger.warning(f"{csrf_error_msg} for tag removal. Errors: {form.errors}")
             flash(f'Could not remove tag. {csrf_error_msg}', 'danger')
@@ -1257,12 +1263,29 @@ def tag_request(request_id):
                  return jsonify({'success': False, 'message': 'Permission denied.'}), 403
             return redirect(url_for('main.view_request', request_id=request_id))
 
-        # *** Use the form instance populated with request.form for validation ***
+        # Use the form instance populated with request.form for validation
         if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
 
-            # --- Date Validation is now handled by WTForms validator via form.validate_on_submit() ---
-            follow_up_date_obj = form.follow_up_date.data # Get validated date data
+            # --- Get validated data (string or date object based on validator) ---
+            validated_date_data = form.follow_up_date.data
+            follow_up_date_obj = None # Initialize
+
+            # Convert validated string to date object if needed
+            if validated_date_data:
+                if isinstance(validated_date_data, date):
+                    follow_up_date_obj = validated_date_data # Already a date object
+                elif isinstance(validated_date_data, str):
+                    try:
+                        # Convert the validated string back to a date object
+                        follow_up_date_obj = datetime.strptime(validated_date_data, '%m/%d/%Y').date()
+                    except ValueError:
+                        current_app.logger.error(f"Date conversion failed after validation for: {validated_date_data}")
+                        flash('Internal error processing date.', 'danger')
+                        if request.accept_mimetypes.accept_json:
+                            return jsonify({'success': False, 'message': 'Internal error processing date.'}), 500
+                        return redirect(url_for('main.view_request', request_id=request_id))
+            # --- End Date Conversion ---
 
             # Check if date is provided (it's Optional in form, but required if adding this tag)
             if not follow_up_date_obj:
@@ -1270,7 +1293,7 @@ def tag_request(request_id):
                  if request.accept_mimetypes.accept_json:
                      return jsonify({'success': False, 'errors': {'follow_up_date': ['A valid MM/DD/YYYY date is required.']}}), 400
                  return redirect(url_for('main.view_request', request_id=request_id))
-            # --- End Date Validation ---
+            # --- End Date Check ---
 
             # Proceed if validation passed
             log_text = ""
@@ -1283,9 +1306,9 @@ def tag_request(request_id):
                  commit_needed = True
                  tag_added = True
 
-            # Use date object directly
+            # Use the date object for comparison and assignment
             if work_order.follow_up_date != follow_up_date_obj:
-                  work_order.follow_up_date = follow_up_date_obj
+                  work_order.follow_up_date = follow_up_date_obj # Assign the date object
                   date_log = f" Date set to {follow_up_date_obj.strftime('%m/%d/%Y')}."
                   if commit_needed:
                        log_text += date_log
@@ -1301,7 +1324,9 @@ def tag_request(request_id):
                     flash_text = log_text if tag_added else "Follow-up date updated."
                     flash(flash_text, 'success')
                     if request.accept_mimetypes.accept_json:
-                        rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                        # *** Ensure delete_form is passed if needed by the partial ***
+                        delete_form_instance = DeleteRestoreRequestForm()
+                        rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
                         return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
                 except Exception as e:
                      db.session.rollback()
@@ -1312,13 +1337,15 @@ def tag_request(request_id):
             else:
                 flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
                 if request.accept_mimetypes.accept_json:
-                    rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=DeleteRestoreRequestForm())
+                    # *** Ensure delete_form is passed if needed by the partial ***
+                    delete_form_instance = DeleteRestoreRequestForm()
+                    rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'no_change', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
 
 
         else: # Form validation failed (could be CSRF or date format)
-            # *** Log specific errors ***
             csrf_error_msg = 'CSRF validation failed.' if 'csrf_token' in form.errors else ''
+            # Get specific error message from date validator
             date_error_msg = form.errors.get('follow_up_date', [''])[0] if 'follow_up_date' in form.errors else ''
             error_msg = f"Error adding tag. {csrf_error_msg} {date_error_msg}".strip()
             current_app.logger.warning(f"{error_msg} Errors: {form.errors}")
@@ -1643,7 +1670,7 @@ def edit_request(request_id):
 
                  new_value = getattr(work_order, field_name)
                  # Handle date comparison correctly
-                 if isinstance(old_value, datetime.date):
+                 if isinstance(old_value, date): # Check against date type
                       old_value_str = old_value.strftime('%m/%d/%Y') if old_value else 'None'
                       new_value_str = new_value.strftime('%m/%d/%Y') if new_value else 'None'
                       if old_value_str != new_value_str:
