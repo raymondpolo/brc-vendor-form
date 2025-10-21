@@ -1042,15 +1042,17 @@ def quote_action(request_id, quote_id, action):
              log_text += f" Work Order status changed to {work_order.status}."
 
 
-    elif action == 'clear': # Reset quote status to Pending
-        if quote.status == 'Pending':
-             flash(f"Status for quote from {quote.vendor.company_name} is already pending.", 'info')
-             return redirect(url_for('main.view_request', request_id=request_id))
+    elif action == 'clear':
+        # If there's no status set, nothing to clear
+        if not quote.status:
+            flash(f"Status for quote from {quote.vendor.company_name} is already cleared.", 'info')
+            return redirect(url_for('main.view_request', request_id=request_id))
 
-        quote.status = 'Pending'
+        # Clear the status (remove Approved/Declined)
+        quote.status = None
         # If this was the approved quote, clear the link
         if work_order.approved_quote_id == quote.id:
-             work_order.approved_quote_id = None
+            work_order.approved_quote_id = None
 
         # Re-evaluate tags based on remaining quotes' statuses
         other_quotes_approved = Quote.query.filter(Quote.work_order_id == work_order.id, Quote.id != quote.id, Quote.status == 'Approved').count() > 0
@@ -1058,25 +1060,25 @@ def quote_action(request_id, quote_id, action):
 
         if not other_quotes_approved:
             current_tags.discard('Approved')
-        # Remove 'Declined' tag only if NO quotes (including this one, now pending) are declined
+        # Remove 'Declined' tag only if NO other quotes are declined
         if not other_quotes_declined:
             current_tags.discard('Declined')
 
-        log_text = f"Status for quote from {quote.vendor.company_name} cleared to Pending."
+        log_text = f"Status for quote from {quote.vendor.company_name} cleared."
         flash_text = f"Status for quote from {quote.vendor.company_name} has been cleared."
 
         # Reset Work Order status if it was Approved/Declined and now no quotes are in those states
         if work_order.status in ['Approved', 'Quote Declined'] and not other_quotes_approved and not other_quotes_declined:
-             # Check if any quotes are still 'Pending' or 'Sent'
-             any_pending_or_sent = Quote.query.filter(Quote.work_order_id == work_order.id, Quote.status.in_(['Pending', 'Quote Sent'])).count() > 0
-             if any_pending_or_sent:
-                  work_order.status = 'Quote Sent' # Revert to Quote Sent if others exist
-             else:
-                  work_order.status = 'Open' # Or back to Open if no quotes left? Let's use Quote Sent for now.
-             log_text += f" Work Order status reset to {work_order.status}."
+            # Check if any quotes are still in non-cleared states (e.g., 'Quote Sent')
+            any_active = Quote.query.filter(Quote.work_order_id == work_order.id, Quote.status.isnot(None)).count() > 0
+            if any_active:
+                work_order.status = 'Quote Sent' # Revert to Quote Sent if others exist
+            else:
+                work_order.status = 'Open'
+            log_text += f" Work Order status reset to {work_order.status}."
         elif work_order.status == 'Quote Declined' and other_quotes_approved: # If we clear a declined quote but another is approved
-             work_order.status = 'Approved'
-             log_text += f" Work Order status reset to {work_order.status}."
+            work_order.status = 'Approved'
+            log_text += f" Work Order status reset to {work_order.status}."
 
 
     else: # Invalid action

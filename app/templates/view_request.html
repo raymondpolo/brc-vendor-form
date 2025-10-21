@@ -279,30 +279,27 @@
                             {{ quote.attachment.filename }}
                          </a>
                                  <span class="text-xs text-gray-400">({{ quote.date_sent | local_dt('%m/%d/%Y') }})</span>
-                                 <span id="quote-status-{{ quote.id }}" class="ml-2
-                            {% if quote.status == 'Approved' %} quote-status-approved
-                            {% elif quote.status == 'Declined' %} quote-status-declined
-                            {% else %} quote-status-pending {% endif %}">
-                            ({{ quote.status }})
-                         </span>
+                                         <span id="quote-status-{{ quote.id }}" class="ml-2
+                                             {% if quote.status == 'Approved' %} quote-status-approved
+                                             {% elif quote.status == 'Declined' %} quote-status-declined
+                                             {% else %} "" {% endif %}">
+                                             {% if quote.status in ['Approved', 'Declined'] %}({{ quote.status }}){% endif %}
+                                         </span>
                     </div>
                     <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
                         {# Approve/Decline Buttons (PM & Super User) #}
                         {% if current_user.role == 'Property Manager' and current_user.name == work_order.property_manager or current_user.role == 'Super User' %}
-                            {% if quote.status != 'Approved' %}
+                            {# Always show approve/decline options (two choices only). Clear button only when a status exists. #}
                             <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='approve') }}" class="inline">
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-green-500 hover:text-green-700" title="Approve">✓</button>
                             </form>
-                            {% endif %}
-                            {% if quote.status != 'Declined' %}
                             <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='decline') }}" class="inline">
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-red-500 hover:text-red-700" title="Decline">✗</button>
                             </form>
-                            {% endif %}
-                            {# Optional: Clear button #}
-                             {% if quote.status != 'Pending' %}
+                            {# Clear button appears only when quote has a status that can be cleared #}
+                            {% if quote.status %}
                             <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline">
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
                                 <button type="submit" class="text-gray-400 hover:text-gray-600" title="Clear Status">↺</button>
