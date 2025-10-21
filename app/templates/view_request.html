@@ -1405,6 +1405,7 @@
 
                     // If UNCHECKED, remove the tag immediately via AJAX
                     // We need to simulate the 'remove_tag' action
+                    console.log("DEBUG JS: Follow-up checkbox unchecked. Sending remove tag request to:", followupForm.action); // Log URL
                     fetch(followupForm.action, { // Use the form's action URL
                         method: 'POST',
                         headers: {
@@ -1419,10 +1420,16 @@
                             'tag_to_remove': 'Follow-up needed' // Specify the tag to remove
                          })
                     }).then(resp => {
-                        if (!resp.ok) throw new Error('Follow-up toggle (remove) failed ' + resp.status);
+                         console.log("DEBUG JS: Remove tag response status:", resp.status); // Log status
+                        if (!resp.ok) {
+                            // Log error response body
+                            resp.text().then(text => console.error("DEBUG JS: Remove tag error response:", text));
+                            throw new Error('Follow-up toggle (remove) failed ' + resp.status);
+                        }
                         return resp.json().catch(() => null);
                     }).then(json => {
                         if (json && json.success && json.tags !== undefined) {
+                            console.log("DEBUG JS: Remove tag successful. Updating UI."); // Log success
                             updateTagsContainer(json.tags); // Update tags display
                             // Clear the date input field as well
                             if(dateInput) dateInput.value = '';
@@ -1518,20 +1525,18 @@
             followupFormElement.addEventListener('submit', (e) => {
                 // Determine if this submit was triggered by the 'Save Date' button
                 const isSaveDateSubmit = document.activeElement && document.activeElement.id === 'save-followup-btn';
-                // Only handle AJAX if it's the Save Date button OR if unchecking (handled by change event)
-                // If it's the 'Remove Tag' button, let the default form submission (or change event) handle it
-                if (!isSaveDateSubmit) {
-                    // If triggered by 'Remove Tag' button or just hitting Enter, let change handler or default work.
-                    // Prevent AJAX for the 'Remove Tag' button case specifically.
-                    if (document.activeElement && document.activeElement.textContent.includes('Remove Tag')) {
-                       // Let the 'change' event listener handle the removal via AJAX when unchecked
-                       e.preventDefault(); // Prevent default submission for remove button too
-                       return;
-                    }
-                    // For other submit triggers (like Enter key), proceed with AJAX save.
-                }
 
-                e.preventDefault(); // Prevent default form submission for Save Date
+                // Only handle AJAX if it's the Save Date button.
+                // The 'Remove Tag' button click should trigger the 'change' event listener above.
+                // Hitting Enter might also trigger submit; we'll treat that like 'Save Date'.
+                if (!isSaveDateSubmit && document.activeElement && document.activeElement.textContent.includes('Remove Tag')) {
+                    // If triggered by 'Remove Tag' button, let the change handler deal with it.
+                    e.preventDefault(); // Prevent default submission for remove button
+                    return;
+                }
+                // If triggered by anything else (Save Date btn, Enter key), proceed with save logic.
+
+                e.preventDefault(); // Prevent default form submission
                 const form = followupFormElement;
                 const formData = new FormData(form);
                 // Ensure action is 'add_tag' when saving date
@@ -1539,7 +1544,12 @@
                 formData.set('tag_to_add', 'Follow-up needed'); // Ensure tag is specified
                 const body = new URLSearchParams(formData).toString();
 
-                fetch(form.action, {
+                // *** ADDED CONSOLE LOG ***
+                console.log("DEBUG JS: Saving follow-up. Sending POST to:", form.action);
+                console.log("DEBUG JS: Request body:", body);
+                // *** END ADDED CONSOLE LOG ***
+
+                fetch(form.action, { // Uses the form's action attribute
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -1548,16 +1558,22 @@
                     },
                     body: body
                 }).then(response => {
+                    // Log response status regardless of OK status
+                    console.log("DEBUG JS: Save follow-up response status:", response.status);
                     // Handle non-OK responses first
                     if (!response.ok) {
                         // Try to parse JSON error, otherwise create generic error
                         return response.json()
                             .catch(() => ({ message: `Server error: ${response.status}` })) // Fallback error message
-                            .then(err => Promise.reject(err)); // Reject with the error object
+                            .then(err => {
+                                console.error("DEBUG JS: Save follow-up error response body:", err); // Log error body
+                                return Promise.reject(err); // Reject with the error object
+                            });
                     }
                     return response.json(); // Parse successful response
                 }).then(json => {
                     if (json && json.success) {
+                        console.log("DEBUG JS: Save follow-up successful. Updating UI."); // Log success
                         updateTagsContainer(json.tags); // Update tags UI
                         const followUpDisplay = document.getElementById('follow-up-display');
                         if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None'; // Update date display
