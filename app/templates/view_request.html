@@ -136,6 +136,10 @@
                         <p class="text-xs text-text-secondary">No tags assigned.</p>
                     {% endif %}
                  </div>
+                          <div class="mt-2 text-sm text-text-secondary">
+                              <span>Follow-up date: </span>
+                              <span id="follow-up-display">{{ work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else 'None' }}</span>
+                          </div>
             </div>
             {# --- END MODIFICATION --- #}
 
@@ -1261,6 +1265,17 @@
             const followupForm = document.getElementById('followup-form');
             if (followupCheckbox && followupForm) {
                 followupCheckbox.addEventListener('change', (e) => {
+                    const dateInput = document.getElementById('follow_up_date_input');
+                    // If checked, don't POST yet. Let the user enter a date and click Save Date.
+                    if (followupCheckbox.checked) {
+                        if (dateInput) {
+                            // Give focus to the date input to encourage the user to fill it
+                            setTimeout(() => dateInput.focus(), 50);
+                        }
+                        return;
+                    }
+
+                    // If unchecked, remove the tag immediately via AJAX
                     fetch(followupForm.action, {
                         method: 'POST',
                         headers: {
@@ -1268,19 +1283,19 @@
                             'X-CSRFToken': csrfToken,
                             'Accept': 'application/json'
                         },
-                        body: new URLSearchParams({ 'csrf_token': followupForm.querySelector('[name=csrf_token]').value, 'action': followupCheckbox.checked ? 'add' : 'remove' })
+                        body: new URLSearchParams({ 'csrf_token': followupForm.querySelector('[name=csrf_token]').value, 'action': 'remove_tag' })
                     }).then(resp => {
-                        if (!resp.ok) throw new Error('Follow-up toggle failed ' + resp.status);
+                        if (!resp.ok) throw new Error('Follow-up toggle (remove) failed ' + resp.status);
                         return resp.json().catch(() => null);
                     }).then(json => {
                         if (json && json.success) {
                             updateTagsContainer(json.tags);
                         } else {
-                            console.error('Follow-up toggle failed', json);
+                            console.error('Follow-up toggle (remove) failed', json);
                             location.reload();
                         }
                     }).catch(err => {
-                        console.error('Follow-up toggle error', err);
+                        console.error('Follow-up toggle (remove) error', err);
                         location.reload();
                     });
                 });
@@ -1361,6 +1376,46 @@
             });
         }
 
+        // --- AJAX submit for Follow-up Save Date (placed after note handler) ---
+        const followupFormElement = document.getElementById('followup-form');
+        if (followupFormElement) {
+            followupFormElement.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const form = followupFormElement;
+                const formData = new FormData(form);
+                const body = new URLSearchParams(formData).toString();
+
+                fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': csrfToken,
+                        'Accept': 'application/json'
+                    },
+                    body: body
+                }).then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => Promise.reject(err)).catch(() => Promise.reject({ message: 'Network error' }));
+                    }
+                    return response.json();
+                }).then(json => {
+                    if (json && json.success) {
+                        updateTagsContainer(json.tags);
+                        const followUpDisplay = document.getElementById('follow-up-display');
+                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None';
+                        showNotification('Follow-up date saved.', true);
+                    } else {
+                        console.error('Failed to save follow-up:', json);
+                        showNotification('Failed to save follow-up. ' + (json && json.error ? json.error : ''), false);
+                        // On validation or CSRF errors, fallback to reload to show server flash messages
+                        if (json && json.error) location.reload();
+                    }
+                }).catch(err => {
+                    console.error('Follow-up save error', err);
+                    showNotification('An error occurred while saving follow-up.', false);
+                });
+            });
+        }
 
     });
 </script>
