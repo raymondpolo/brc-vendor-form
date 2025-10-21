@@ -1521,71 +1521,64 @@
 
         // --- AJAX submit for Follow-up Save Date (using the same form) ---
         const followupFormElement = document.getElementById('followup-form');
-        if (followupFormElement) {
+        // *** ADDED: Get request_id directly for URL construction ***
+        const currentRequestId = '{{ work_order.id }}';
+
+        if (followupFormElement && currentRequestId) { // Check for request ID too
             followupFormElement.addEventListener('submit', (e) => {
                 // Determine if this submit was triggered by the 'Save Date' button
                 const isSaveDateSubmit = document.activeElement && document.activeElement.id === 'save-followup-btn';
 
-                // Only handle AJAX if it's the Save Date button.
-                // The 'Remove Tag' button click should trigger the 'change' event listener above.
-                // Hitting Enter might also trigger submit; we'll treat that like 'Save Date'.
                 if (!isSaveDateSubmit && document.activeElement && document.activeElement.textContent.includes('Remove Tag')) {
-                    // If triggered by 'Remove Tag' button, let the change handler deal with it.
-                    e.preventDefault(); // Prevent default submission for remove button
+                    e.preventDefault();
                     return;
                 }
-                // If triggered by anything else (Save Date btn, Enter key), proceed with save logic.
 
-                e.preventDefault(); // Prevent default form submission
+                e.preventDefault();
                 const form = followupFormElement;
                 const formData = new FormData(form);
-                // Ensure action is 'add_tag' when saving date
                 formData.set('action', 'add_tag');
-                formData.set('tag_to_add', 'Follow-up needed'); // Ensure tag is specified
+                formData.set('tag_to_add', 'Follow-up needed');
                 const body = new URLSearchParams(formData).toString();
 
-                // *** ADDED CONSOLE LOG ***
-                console.log("DEBUG JS: Saving follow-up. Sending POST to:", form.action);
-                console.log("DEBUG JS: Request body:", body);
-                // *** END ADDED CONSOLE LOG ***
+                // *** MODIFICATION: Construct URL manually ***
+                const saveFollowUpUrl = `/tag_request/${currentRequestId}`;
+                // *** END MODIFICATION ***
 
-                fetch(form.action, { // Uses the form's action attribute
+                console.log("DEBUG JS: Saving follow-up. Sending POST to:", saveFollowUpUrl); // Use manually constructed URL
+                console.log("DEBUG JS: Request body:", body);
+
+                fetch(saveFollowUpUrl, { // Use manually constructed URL
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': csrfToken, // Ensure CSRF is included
+                        'X-CSRFToken': csrfToken,
                         'Accept': 'application/json'
                     },
                     body: body
                 }).then(response => {
-                    // Log response status regardless of OK status
                     console.log("DEBUG JS: Save follow-up response status:", response.status);
-                    // Handle non-OK responses first
                     if (!response.ok) {
-                        // Try to parse JSON error, otherwise create generic error
                         return response.json()
-                            .catch(() => ({ message: `Server error: ${response.status}` })) // Fallback error message
+                            .catch(() => ({ message: `Server error: ${response.status}` }))
                             .then(err => {
-                                console.error("DEBUG JS: Save follow-up error response body:", err); // Log error body
-                                return Promise.reject(err); // Reject with the error object
+                                console.error("DEBUG JS: Save follow-up error response body:", err);
+                                return Promise.reject(err);
                             });
                     }
-                    return response.json(); // Parse successful response
+                    return response.json();
                 }).then(json => {
                     if (json && json.success) {
-                        console.log("DEBUG JS: Save follow-up successful. Updating UI."); // Log success
-                        updateTagsContainer(json.tags); // Update tags UI
+                        console.log("DEBUG JS: Save follow-up successful. Updating UI.");
+                        updateTagsContainer(json.tags);
                         const followUpDisplay = document.getElementById('follow-up-display');
-                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None'; // Update date display
+                        if (followUpDisplay) followUpDisplay.textContent = json.follow_up_date || 'None';
                         showNotification('Follow-up date saved.', true);
                     } else {
-                        // Handle server-reported failure (e.g., validation)
                         console.error('Failed to save follow-up:', json);
                         showNotification('Failed to save follow-up. ' + (json && json.errors && json.errors.follow_up_date ? json.errors.follow_up_date[0] : (json.message || '')), false);
-                        // No reload on simple validation error
                     }
                 }).catch(err => {
-                    // Handle fetch errors or errors from non-OK responses
                     console.error('Follow-up save error', err);
                     showNotification('An error occurred while saving follow-up: ' + (err.message || ''), false);
                 });
