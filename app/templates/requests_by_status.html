@@ -75,8 +75,8 @@
                           :class="{
                               'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
                               'bg-green-100 text-green-800': ['Completed', 'Approved'].includes(req.status),
-                              'bg-red-100 text-red-800': ['Cancelled', 'Quote Declined'].includes(req.status),
-                              'bg-yellow-100 text-yellow-800': !['New', 'Open', 'Completed', 'Approved', 'Cancelled', 'Quote Declined'].includes(req.status)
+                              'bg-red-100 text-red-800': ['Cancelled'].includes(req.status),
+                              'bg-yellow-100 text-yellow-800': !['New', 'Open', 'Completed', 'Cancelled'].includes(req.status)
                           }"
                           x-text="req.status">
                     </span>
