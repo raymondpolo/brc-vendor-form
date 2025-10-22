@@ -84,6 +84,13 @@
             {% endif %}
 
             <main id="main-content" class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+                <!-- Back button (global) - prefers lastListUrl from sessionStorage, falls back to history.back() or dashboard -->
+                <div class="mb-4">
+                    <button id="back-button" type="button" onclick="goBack()" class="inline-flex items-center px-3 py-1.5 border rounded-md text-sm text-text-secondary bg-white hover:bg-gray-50">
+                        <svg class="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0L3.586 10l4.707-4.707a1 1 0 011.414 1.414L6.414 10l3.293 3.293a1 1 0 010 1.414z" clip-rule="evenodd"/></svg>
+                        Back
+                    </button>
+                </div>
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
@@ -444,6 +451,30 @@
                 }
             });
         });
+
+        // goBack helper: prefer the last list URL stored in sessionStorage, then history.back(), then fall back to dashboard
+        function goBack() {
+            try {
+                const last = sessionStorage.getItem('lastListUrl');
+                if (last && last !== window.location.href) {
+                    window.location.href = last;
+                    return;
+                }
+            } catch (e) {
+                console.warn('Could not access sessionStorage for lastListUrl', e);
+            }
+            // fallback to history.back if available and same-origin referrer
+            try {
+                if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
+                    window.history.back();
+                    return;
+                }
+            } catch (e) {
+                // ignore
+            }
+            // Final fallback: go to All Requests or dashboard
+            window.location.href = '{{ url_for("main.all_requests") if ("main.all_requests" in globals()) else url_for("main.dashboard") }}';
+        }
     </script>
 </body>
 </html>                     

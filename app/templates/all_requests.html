@@ -108,6 +108,36 @@
             sortColumn: 'id',
             sortDirection: 'desc',
 
+            init() {
+                // Restore saved state if present
+                try {
+                    const key = 'listState:' + window.location.pathname;
+                    const raw = sessionStorage.getItem(key);
+                    if (raw) {
+                        const s = JSON.parse(raw);
+                        if (s.search) this.search = s.search;
+                        if (s.sortColumn) this.sortColumn = s.sortColumn;
+                        if (s.sortDirection) this.sortDirection = s.sortDirection;
+                        // restore scroll after short delay to allow rendering
+                        setTimeout(() => { if (s.scrollY) window.scrollTo(0, s.scrollY); }, 50);
+                    }
+                } catch (e) { /* ignore */ }
+
+                // Watchers to persist state
+                this.$watch('search', () => this.saveState());
+                this.$watch('sortColumn', () => this.saveState());
+                this.$watch('sortDirection', () => this.saveState());
+                window.addEventListener('beforeunload', () => this.saveState());
+            },
+
+            saveState() {
+                try {
+                    const key = 'listState:' + window.location.pathname;
+                    const state = { search: this.search, sortColumn: this.sortColumn, sortDirection: this.sortDirection, scrollY: window.scrollY };
+                    sessionStorage.setItem(key, JSON.stringify(state));
+                } catch (e) { /* ignore */ }
+            },
+
             sortBy(column) {
                 if (this.sortColumn === column) {
                     this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -151,5 +181,9 @@
             }
         }
     }
+    // Store this list page URL as lastListUrl so detail pages can return here
+    document.addEventListener('DOMContentLoaded', () => {
+        try { sessionStorage.setItem('lastListUrl', window.location.href); } catch (e) { /* ignore */ }
+    });
 </script>
 {% endblock content %}

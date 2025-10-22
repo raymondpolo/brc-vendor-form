@@ -156,4 +156,7 @@
         }
     }
 </script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => { try { sessionStorage.setItem('lastListUrl', window.location.href); } catch (e) {} });
+</script>
 {% endblock content %}
