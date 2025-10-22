@@ -1003,10 +1003,7 @@ def quote_action(request_id, quote_id, action):
         log_text = f"Quote from {quote.vendor.company_name} approved."
         flash_text = f"Quote from {quote.vendor.company_name} has been approved."
 
-        # Update Work Order status if appropriate
-        if work_order.status == 'Quote Sent':
-            work_order.status = 'Approved'  # Status indicating quote is approved
-            log_text += f" Work Order status changed to {work_order.status}."
+        # Do not set work_order.status to 'Approved' (redundant with tags). Keep approved_quote_id linking.
 
     elif action == 'decline':
         if quote.status == 'Declined':
@@ -1039,10 +1036,7 @@ def quote_action(request_id, quote_id, action):
         log_text = f"Quote from {quote.vendor.company_name} declined."
         flash_text = f"Quote from {quote.vendor.company_name} has been declined."
 
-        # Update Work Order status if needed (e.g., if no quotes are approved anymore)
-        if work_order.status in ['Quote Sent', 'Approved'] and not other_quotes_approved:
-             work_order.status = 'Quote Declined'
-             log_text += f" Work Order status changed to {work_order.status}."
+    # Do not set work_order.status to 'Quote Declined' here; tags represent declined/approved state.
 
 
     elif action == 'clear':
@@ -1073,17 +1067,10 @@ def quote_action(request_id, quote_id, action):
         log_text = f"Status '{original_status}' for quote from {quote.vendor.company_name} cleared."
         flash_text = f"Status for quote from {quote.vendor.company_name} has been cleared."
 
-        # Reset Work Order status if it was Approved/Declined and now no quotes are in those states
-        if work_order.status in ['Approved', 'Quote Declined'] and not other_quotes_approved and not other_quotes_declined:
-            # Check if any quotes are still in non-cleared states (e.g., 'Quote Sent')
+        # Reset Work Order status if it was a quote-related terminal status (avoid 'Approved'/'Quote Declined')
+        if work_order.status in ['Approved', 'Quote Declined']:
             any_active = Quote.query.filter(Quote.work_order_id == work_order.id, Quote.status.isnot(None)).count() > 0
-            if any_active:
-                work_order.status = 'Quote Sent' # Revert to Quote Sent if others exist
-            else:
-                work_order.status = 'Open' # Or maybe 'Quote Requested' if appropriate? Defaulting to Open
-            log_text += f" Work Order status reset to {work_order.status}."
-        elif work_order.status == 'Quote Declined' and other_quotes_approved: # If we clear a declined quote but another is approved
-            work_order.status = 'Approved'
+            work_order.status = 'Quote Sent' if any_active else 'Open'
             log_text += f" Work Order status reset to {work_order.status}."
 
 
@@ -1091,8 +1078,24 @@ def quote_action(request_id, quote_id, action):
         flash('Invalid action specified.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
-    # Update tag string and commit changes
-    work_order.tag = ','.join(sorted(list(filter(None, current_tags)))) if current_tags else None
+    # Recompute tag string: preserve non-quote tags, then set quote-derived tags (Approved takes precedence over Declined)
+    # Get current non-quote tags (preserve things like 'Follow-up needed', 'Go-back', 'Completed', etc.)
+    existing_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
+    # Remove quote-derived tags from existing set
+    existing_tags.difference_update({'Approved', 'Declined'})
+
+    # Inspect current quotes in DB for this work order
+    quote_statuses = [s[0] for s in Quote.query.with_entities(Quote.status).filter(Quote.work_order_id == work_order.id).all()]
+    has_approved = any(s == 'Approved' for s in quote_statuses if s)
+    has_declined = any(s == 'Declined' for s in quote_statuses if s)
+
+    # Prefer Approved over Declined
+    if has_approved:
+        existing_tags.add('Approved')
+    elif has_declined:
+        existing_tags.add('Declined')
+
+    work_order.tag = ','.join(sorted(list(filter(None, existing_tags)))) if existing_tags else None
     db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
 
     try: # Wrap commit in try/except for robustness
