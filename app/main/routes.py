@@ -1097,10 +1097,14 @@ def quote_action(request_id, quote_id, action):
 
     try: # Wrap commit in try/except for robustness
         db.session.commit()
-        flash(flash_text, 'success')
+        # Only flash for non-AJAX requests; AJAX clients will use toasts/messages
+        if not request.accept_mimetypes.accept_json:
+            flash(flash_text, 'success')
         if request.accept_mimetypes.accept_json:
-            # Return None for new_status when cleared
-            return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': work_order.tag, 'message': flash_text})
+            # Render tags partial to keep client UI consistent
+            delete_form_instance = DeleteRestoreRequestForm()
+            rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
+            return jsonify({'success': True, 'quote_id': quote.id, 'new_status': quote.status, 'tags': rendered_tags_html, 'message': flash_text})
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error committing quote action ({action}) for quote {quote_id}: {e}", exc_info=True)
@@ -1155,7 +1159,9 @@ def toggle_go_back(request_id):
         else:
              flash_text = 'Invalid request to toggle Go-back tag.'
 
-        flash(flash_text, 'danger')
+        # Only flash for non-AJAX; return JSON error for AJAX clients
+        if not request.accept_mimetypes.accept_json:
+            flash(flash_text, 'danger')
         if request.accept_mimetypes.accept_json:
             return jsonify({'success': False, 'message': flash_text}), 400 # Return error for AJAX
 
@@ -1194,9 +1200,10 @@ def tag_request(request_id):
 
     if tag_name != 'Follow-up needed':
         current_app.logger.warning(f"Invalid tag operation attempted: {tag_name}")
-        flash('Invalid tag operation.', 'danger')
+        # For AJAX clients, return error JSON instead of flashing
         if request.accept_mimetypes.accept_json:
-             return jsonify({'success': False, 'message': 'Invalid tag operation.'}), 400
+            return jsonify({'success': False, 'message': 'Invalid tag operation.'}), 400
+        flash('Invalid tag operation.', 'danger')
         return redirect(url_for('main.view_request', request_id=request_id))
 
     # --- Handle REMOVE action ---
@@ -1233,7 +1240,9 @@ def tag_request(request_id):
                 db.session.add(AuditLog(text=log_text, user_id=current_user.id, work_order_id=work_order.id))
                 try:
                     db.session.commit()
-                    flash(flash_text, 'info')
+                    # Only flash for non-AJAX requests
+                    if not request.accept_mimetypes.accept_json:
+                        flash(flash_text, 'info')
                     if request.accept_mimetypes.accept_json:
                         # *** Ensure delete_form is passed if needed by the partial ***
                         delete_form_instance = DeleteRestoreRequestForm()
@@ -1322,7 +1331,9 @@ def tag_request(request_id):
                 try:
                     db.session.commit()
                     flash_text = log_text if tag_added else "Follow-up date updated."
-                    flash(flash_text, 'success')
+                    # Only flash for non-AJAX requests
+                    if not request.accept_mimetypes.accept_json:
+                        flash(flash_text, 'success')
                     if request.accept_mimetypes.accept_json:
                         # *** Ensure delete_form is passed if needed by the partial ***
                         delete_form_instance = DeleteRestoreRequestForm()
@@ -1335,7 +1346,9 @@ def tag_request(request_id):
                     if request.accept_mimetypes.accept_json:
                         return jsonify({'success': False, 'message': 'Database error.'}), 500
             else:
-                flash(f"Request is already tagged as '{tag_name}'.", 'info')
+                # Only flash for non-AJAX requests
+                if not request.accept_mimetypes.accept_json:
+                    flash(f"Request is already tagged as '{tag_name}'.", 'info')
                 if request.accept_mimetypes.accept_json:
                     delete_form_instance = DeleteRestoreRequestForm()
                     rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)

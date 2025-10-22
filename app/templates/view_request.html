@@ -236,22 +236,16 @@
             <ul id="quotes-list" class="space-y-3 mb-6">
                 {% for quote in quotes %}
                 <li class="flex items-center justify-between text-sm border-b pb-3 last:border-b-0" data-quote-id="{{ quote.id }}">
-                    <div class="flex items-center min-w-0 space-x-2 flex-wrap"> {# Added flex-wrap #}
-                         <span class="font-medium text-gray-600">{{ quote.vendor.company_name }}:</span>
-                         <a href="#" class="view-attachment-btn text-brand hover:underline truncate inline-block" {# Added inline-block #}
-                            data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}"
-                            data-filename="{{ quote.attachment.filename }}"
-                            title="{{ quote.attachment.filename }}">
-                            {{ quote.attachment.filename }}
-                         </a>
-                                 <span class="text-xs text-gray-400">({{ quote.date_sent | local_dt('%m/%d/%Y') }})</span>
-                                         <span id="quote-status-{{ quote.id }}" class="ml-2
-                                             {% if quote.status == 'Approved' %} quote-status-approved
-                                             {% elif quote.status == 'Declined' %} quote-status-declined
-                                             {% elif quote.status %} quote-status-pending {# Add pending class if status exists #}
-                                             {% else %} "" {% endif %}">
-                                             {% if quote.status %}({{ quote.status }}){% endif %} {# Display if status exists #}
-                                         </span>
+                    <div class="min-w-0">
+                        <div class="font-medium text-gray-600 truncate">{{ quote.vendor.company_name }}</div>
+                        <div class="text-sm text-text-secondary truncate">
+                            <a href="#" class="view-attachment-btn text-brand hover:underline inline-block break-words"
+                               data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}"
+                               data-filename="{{ quote.attachment.filename }}"
+                               title="{{ quote.attachment.filename }}">{{ quote.attachment.filename }}</a>
+                            <span class="text-xs text-gray-400 ml-2">({{ quote.date_sent | local_dt('%m/%d/%Y') }})</span>
+                            <span id="quote-status-{{ quote.id }}" class="ml-2 {% if quote.status == 'Approved' %} quote-status-approved {% elif quote.status == 'Declined' %} quote-status-declined {% elif quote.status %} quote-status-pending {% endif %}">{% if quote.status %}({{ quote.status }}){% endif %}</span>
+                        </div>
                     </div>
                     <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
                         {# Approve/Decline Buttons (PM & Super User) #}
@@ -377,9 +371,15 @@
                     </div>
                 </div>
 
-                {# REMOVED FOLLOW UP CHECKBOX FROM HERE #}
+                {# Follow-up checkbox moved into Update Status for cleaner layout #}
 
                 <div class="mt-4">
+                    <div class="mb-3">
+                        <label class="inline-flex items-center space-x-2 text-sm">
+                            <input id="followup_checkbox" type="checkbox" class="rounded" name="followup_active_flag" value="yes" {% if 'Follow-up needed' in current_tags %} checked {% endif %}>
+                            <span class="text-text">Follow-up needed</span>
+                        </label>
+                    </div>
                     <button type="submit" name="update_status" class="w-full px-4 py-2 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark">Update Status</button>
                 </div>
             </form>
@@ -597,34 +597,7 @@
         </div>
         {% endif %}
 
-        {# --- *** MODIFIED: Follow-up Checkbox & Date Picker Section *** --- #}
-         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] and not work_order.is_deleted %}
-         <div x-data="{ isChecked: {{ 'true' if 'Follow-up needed' in current_tags else 'false' }} }" class="bg-white p-6 rounded-lg shadow-md">
-             <h3 class="text-lg font-semibold text-text mb-4">Follow-up</h3>
-              {# Use a single form for both adding and removing #}
-             <form id="followup-form" method="POST" action="{{ url_for('main.tag_request', request_id=work_order.id) }}">
-                 {{ tag_form.hidden_tag() }} {# Use tag_form for CSRF #}
-                 {# Hidden input to control action based on checkbox state #}
-                 <input type="hidden" name="action" :value="isChecked ? 'add_tag' : 'remove_tag'">
-                 <input type="hidden" name="tag_to_add" value="Follow-up needed" x-show="isChecked">
-                 <input type="hidden" name="tag_to_remove" value="Follow-up needed" x-show="!isChecked">
-
-                 <div class="flex items-center justify-between">
-                     <label class="inline-flex items-center space-x-2 text-sm">
-                         {# *** Add x-ref for easier access *** #}
-                         <input id="followup_checkbox" x-ref="followupCheckbox" type="checkbox" class="rounded" x-model="isChecked" name="followup_active_flag" value="yes">
-                         <span class="text-text">Follow-up needed</span>
-                     </label>
-                     {# Simple checkbox toggle - no Save Date required #}
-                     <button type="button" class="px-3 py-1 border rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300" x-show="false" aria-hidden="true">&nbsp;</button>
-                 </div>
-
-                 {# Date Picker Container - uses Alpine x-show based on checkbox state #}
-                 {# No follow-up date UI: Follow-up is a simple checkbox toggle #}
-             </form>
-         </div>
-         {% endif %}
-         {# --- *** END MODIFICATION *** --- #}
+                {# Follow-up checkbox removed from separate panel and will appear inside Update Status below #}
 
 
         <div class="bg-white p-6 rounded-lg shadow-md">
@@ -1324,14 +1297,26 @@
             }
 
             // --- Simplified Follow-up checkbox toggle ---
+            // Follow-up checkbox now lives inside Update Status form; find CSRF token from any form
             const followupCheckbox = document.getElementById('followup_checkbox');
-            const followupForm = document.getElementById('followup-form');
-            if (followupCheckbox && followupForm) {
+            let followupCsrf = null;
+            // Try to find hidden csrf_token in the status form first
+            const statusForm = document.querySelector('form[action*="change_status"]');
+            if (statusForm) {
+                const tokenEl = statusForm.querySelector('[name=csrf_token]');
+                if (tokenEl) followupCsrf = tokenEl.value;
+            }
+            // Fallback: look for tag_form or any form with csrf_token
+            if (!followupCsrf) {
+                const anyCsrf = document.querySelector('form [name=csrf_token]');
+                if (anyCsrf) followupCsrf = anyCsrf.value;
+            }
+            if (followupCheckbox && followupCsrf) {
                 followupCheckbox.addEventListener('change', (e) => {
                     const isChecked = e.target.checked;
                     const targetUrl = "{{ url_for('main.tag_request', request_id=work_order.id) }}";
                     const bodyParams = new URLSearchParams();
-                    bodyParams.set('csrf_token', followupForm.querySelector('[name=csrf_token]').value);
+                    bodyParams.set('csrf_token', followupCsrf);
                     bodyParams.set('action', isChecked ? 'add_tag' : 'remove_tag');
                     if (isChecked) bodyParams.set('tag_to_add', 'Follow-up needed');
                     else bodyParams.set('tag_to_remove', 'Follow-up needed');
