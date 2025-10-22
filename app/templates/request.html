@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
+    {% include 'partials/_back_button.html' %}
     <div class="bg-white p-4 rounded-lg shadow-md mb-6">
         <form method="GET" action="{{ url_for('main.requests_list') }}">
             <input type="hidden" name="filter_by" value="{{ filter_by }}">
