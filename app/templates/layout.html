@@ -472,8 +472,8 @@
             } catch (e) {
                 // ignore
             }
-            // Final fallback: go to All Requests or dashboard
-            window.location.href = '{{ url_for("main.all_requests") if ("main.all_requests" in globals()) else url_for("main.dashboard") }}';
+            // Final fallback: go to All Requests
+            window.location.href = '{{ url_for("main.all_requests") }}';
         }
     </script>
 </body>
