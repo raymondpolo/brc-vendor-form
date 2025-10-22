@@ -1275,17 +1275,14 @@ def tag_request(request_id):
         if form.validate_on_submit():
             current_tags = set(work_order.tag.split(',') if work_order.tag and work_order.tag.strip() else [])
 
-            # --- Get validated data (string or date object based on validator) ---
+            # Optional: if a follow_up_date is provided, validate/parse it; otherwise leave it alone
             validated_date_data = form.follow_up_date.data
-            follow_up_date_obj = None # Initialize
-
-            # Convert validated string to date object if needed
+            follow_up_date_obj = None
             if validated_date_data:
                 if isinstance(validated_date_data, date):
-                    follow_up_date_obj = validated_date_data # Already a date object
+                    follow_up_date_obj = validated_date_data
                 elif isinstance(validated_date_data, str):
                     try:
-                        # Convert the validated string back to a date object
                         follow_up_date_obj = datetime.strptime(validated_date_data, '%m/%d/%Y').date()
                     except ValueError:
                         current_app.logger.error(f"Date conversion failed after validation for: {validated_date_data}")
@@ -1293,36 +1290,27 @@ def tag_request(request_id):
                         if request.accept_mimetypes.accept_json:
                             return jsonify({'success': False, 'message': 'Internal error processing date.'}), 500
                         return redirect(url_for('main.view_request', request_id=request_id))
-            # --- End Date Conversion ---
 
-            # Check if date is provided (it's Optional in form, but required if adding this tag)
-            if not follow_up_date_obj:
-                 flash('A follow-up date is required when adding the "Follow-up needed" tag.', 'danger')
-                 if request.accept_mimetypes.accept_json:
-                     return jsonify({'success': False, 'errors': {'follow_up_date': ['A valid MM/DD/YYYY date is required.']}}), 400
-                 return redirect(url_for('main.view_request', request_id=request_id))
-            # --- End Date Check ---
-
-            # Proceed if validation passed
+            # Proceed to add tag even if no date is provided (Follow-up is now a simple toggle)
             log_text = ""
             commit_needed = False
             tag_added = False
 
             if tag_name not in current_tags:
-                 current_tags.add(tag_name)
-                 log_text = f"Request tagged as '{tag_name}'."
-                 commit_needed = True
-                 tag_added = True
+                current_tags.add(tag_name)
+                log_text = f"Request tagged as '{tag_name}'."
+                commit_needed = True
+                tag_added = True
 
-            # Use the date object for comparison and assignment
-            if work_order.follow_up_date != follow_up_date_obj:
-                  work_order.follow_up_date = follow_up_date_obj # Assign the date object
-                  date_log = f" Date set to {follow_up_date_obj.strftime('%m/%d/%Y')}."
-                  if commit_needed:
-                       log_text += date_log
-                  else:
-                       log_text = f"Follow-up date updated to {follow_up_date_obj.strftime('%m/%d/%Y')}."
-                  commit_needed = True
+            # If a date was provided, set it; otherwise don't require one
+            if follow_up_date_obj and work_order.follow_up_date != follow_up_date_obj:
+                work_order.follow_up_date = follow_up_date_obj
+                date_log = f" Date set to {follow_up_date_obj.strftime('%m/%d/%Y')}."
+                if commit_needed:
+                    log_text += date_log
+                else:
+                    log_text = f"Follow-up date updated to {follow_up_date_obj.strftime('%m/%d/%Y')}."
+                commit_needed = True
 
             if commit_needed:
                 # --- Refine Tag String Update ---
@@ -1341,17 +1329,14 @@ def tag_request(request_id):
                         rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
                         return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'added', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})
                 except Exception as e:
-                     db.session.rollback()
-                     # *** Log the specific database error ***
-                     current_app.logger.error(f"DATABASE ERROR during tag add/date update: {e}", exc_info=True)
-                     flash('Error saving changes.', 'danger')
-                     if request.accept_mimetypes.accept_json:
-                          # *** Return specific message for AJAX ***
-                          return jsonify({'success': False, 'message': 'Database error.'}), 500
+                    db.session.rollback()
+                    current_app.logger.error(f"DATABASE ERROR during tag add/date update: {e}", exc_info=True)
+                    flash('Error saving changes.', 'danger')
+                    if request.accept_mimetypes.accept_json:
+                        return jsonify({'success': False, 'message': 'Database error.'}), 500
             else:
-                flash(f"Request is already tagged as '{tag_name}' with the specified date.", 'info')
+                flash(f"Request is already tagged as '{tag_name}'.", 'info')
                 if request.accept_mimetypes.accept_json:
-                    # *** Ensure delete_form is passed if needed by the partial ***
                     delete_form_instance = DeleteRestoreRequestForm()
                     rendered_tags_html = render_template('partials/_tags_display.html', work_order=work_order, delete_form=delete_form_instance)
                     return jsonify({'success': True, 'tags': rendered_tags_html, 'action': 'no_change', 'tag': tag_name, 'follow_up_date': work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else None})

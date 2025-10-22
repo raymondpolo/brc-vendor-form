@@ -615,34 +615,12 @@
                          <input id="followup_checkbox" x-ref="followupCheckbox" type="checkbox" class="rounded" x-model="isChecked" name="followup_active_flag" value="yes">
                          <span class="text-text">Follow-up needed</span>
                      </label>
-                      {# Save button appears only when checked and maybe date is set? Or always enabled when checked? #}
-                     <button id="save-followup-btn" type="submit" x-show="isChecked"
-                             class="px-3 py-1 border rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
-                             :disabled="!document.getElementById('follow_up_date_input').value && isChecked"
-                             >
-                         Save Date
-                     </button>
-                     <button type="submit" x-show="!isChecked && {{ 'true' if 'Follow-up needed' in current_tags else 'false' }}"
-                             class="px-3 py-1 border rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300">
-                         Remove Tag
-                     </button>
+                     {# Simple checkbox toggle - no Save Date required #}
+                     <button type="button" class="px-3 py-1 border rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300" x-show="false" aria-hidden="true">&nbsp;</button>
                  </div>
 
                  {# Date Picker Container - uses Alpine x-show based on checkbox state #}
-                 <div id="follow-up-date-container" class="follow-up-date-container" :class="{ 'visible': isChecked }">
-                     <label for="follow_up_date_input" class="block text-sm font-medium text-text">Follow-up Date</label>
-                     {# Render the date input directly, using name from the form field #}
-                     <input type="text" id="follow_up_date_input" name="follow_up_date"
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            placeholder="MM/DD/YYYY"
-                            value="{{ work_order.follow_up_date.strftime('%m/%d/%Y') if work_order.follow_up_date else '' }}">
-                     {# Display validation errors if needed #}
-                     {% if tag_form.follow_up_date.errors %}
-                         <div class="text-red-500 text-xs mt-1">
-                             {% for error in tag_form.follow_up_date.errors %}<span>{{ error }}</span>{% endfor %}
-                         </div>
-                     {% endif %}
-                 </div>
+                 {# No follow-up date UI: Follow-up is a simple checkbox toggle #}
              </form>
          </div>
          {% endif %}
@@ -865,32 +843,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         // --- Keep flatpickr setup for scheduled_date ---
         flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
-        // --- Initialize flatpickr for the NEW follow_up_date input ---
-        flatpickr("#follow_up_date_input", { dateFormat: "m/d/Y" });
-
-        // Ensure Save Date button becomes enabled when flatpickr or manual input sets a value
-        (function enableSaveOnDate() {
-            const dateInput = document.getElementById('follow_up_date_input');
-            const saveBtn = document.getElementById('save-followup-btn');
-            if (!dateInput || !saveBtn) return;
-
-            function updateSaveState() {
-                try {
-                    const hasVal = dateInput.value && dateInput.value.trim().length > 0;
-                    // Alpine bound :disabled expression still exists; also toggle the native disabled attribute
-                    if (hasVal) saveBtn.removeAttribute('disabled'); else saveBtn.setAttribute('disabled', 'disabled');
-                } catch (err) {
-                    console.error('Error updating save button state', err);
-                }
-            }
-
-            // Update on input and change events
-            dateInput.addEventListener('input', updateSaveState);
-            dateInput.addEventListener('change', updateSaveState);
-
-            // Initial state
-            updateSaveState();
-        })();
+        // Follow-up no longer uses a date; date-related initialization removed
 
         // --- Keep modal variables and setup ---
         const emailModal = document.getElementById('emailModal');
@@ -1370,92 +1323,58 @@
                 });
             }
 
-            // --- *** MODIFIED Follow-up checkbox listener *** ---
+            // --- Simplified Follow-up checkbox toggle ---
             const followupCheckbox = document.getElementById('followup_checkbox');
-            const followupForm = document.getElementById('followup-form'); // The form containing the checkbox and date
+            const followupForm = document.getElementById('followup-form');
             if (followupCheckbox && followupForm) {
                 followupCheckbox.addEventListener('change', (e) => {
-                    const dateInput = document.getElementById('follow_up_date_input');
-                    const isChecked = e.target.checked; // Get the current state AFTER the change
+                    const isChecked = e.target.checked;
+                    const targetUrl = "{{ url_for('main.tag_request', request_id=work_order.id) }}";
+                    const bodyParams = new URLSearchParams();
+                    bodyParams.set('csrf_token', followupForm.querySelector('[name=csrf_token]').value);
+                    bodyParams.set('action', isChecked ? 'add_tag' : 'remove_tag');
+                    if (isChecked) bodyParams.set('tag_to_add', 'Follow-up needed');
+                    else bodyParams.set('tag_to_remove', 'Follow-up needed');
 
-                    // If checked, do nothing on change; user needs to save date via button
-                    if (isChecked) {
-                        console.log("DEBUG JS: Follow-up checkbox CHECKED. Waiting for 'Save Date'.");
-                        if (dateInput) {
-                            setTimeout(() => dateInput.focus(), 50); // Focus date input
-                        }
-                        return; // Wait for Save Date button click
-                    }
-
-                    // If UNCHECKED, remove the tag immediately via AJAX
-                    const removeUrl = "{{ url_for('main.tag_request', request_id=work_order.id) }}";
-                    console.log("DEBUG JS: Follow-up checkbox UNCHECKED. Sending remove tag request to:", removeUrl);
-                    fetch(removeUrl, { // Use absolute URL rendered by server
+                    fetch(targetUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken, // Use the CSRF token from the main form
+                            'X-CSRFToken': csrfToken,
                             'Accept': 'application/json'
                         },
-                        // Manually construct body for remove action
-                        body: new URLSearchParams({
-                            'csrf_token': followupForm.querySelector('[name=csrf_token]').value,
-                            'action': 'remove_tag',
-                            'tag_to_remove': 'Follow-up needed' // Specify the tag to remove
-                         })
+                        body: bodyParams.toString()
                     }).then(async resp => {
-                        console.log("DEBUG JS: Remove tag response status:", resp.status);
-                        // Try to parse JSON error payload when response is not ok
                         const text = await resp.text();
                         let parsed = null;
                         try { parsed = JSON.parse(text); } catch (err) { /* not JSON */ }
                         if (!resp.ok) {
-                            console.error("DEBUG JS: Remove tag error response:", parsed || text);
-                            // Revert checkbox state
-                            e.target.checked = true;
+                            console.error('Follow-up toggle error:', parsed || text);
+                            // revert checkbox
+                            e.target.checked = !isChecked;
                             const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
-                            if (alpineComponent) alpineComponent.isChecked = true;
-                            // Show server-provided message when available
+                            if (alpineComponent) alpineComponent.isChecked = !isChecked;
                             const msg = (parsed && parsed.message) ? parsed.message : (parsed && parsed.errors ? JSON.stringify(parsed.errors) : text || `Error ${resp.status}`);
-                            showNotification(msg || 'Failed to remove follow-up tag.', false);
-                            // Prevent further then() handlers
-                            throw new Error('remove_tag failed');
+                            showNotification(msg || 'Failed to toggle follow-up.', false);
+                            throw new Error('toggle failed');
                         }
-                        // If ok, attempt to parse JSON and return
-                        try {
-                            return JSON.parse(text || '{}');
-                        } catch (err) {
-                            return null;
-                        }
+                        return parsed;
                     }).then(json => {
-                        if (json && json.success && json.tags !== undefined) {
-                            console.log("DEBUG JS: Remove tag successful. Updating UI.");
-                            updateTagsContainer(json.tags); // Update tags display
-                            if(dateInput) dateInput.value = ''; // Clear date input
+                        if (json && json.success) {
+                            updateTagsContainer(json.tags);
+                            showNotification(isChecked ? 'Follow-up added.' : 'Follow-up removed.', true);
                         } else {
-                            console.error('Follow-up toggle (remove) failed or invalid response', json);
-                            // Revert checkbox state on unexpected payload
-                            e.target.checked = true;
+                            console.error('Unexpected response toggling follow-up', json);
+                            e.target.checked = !isChecked;
                             const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
-                            if (alpineComponent) alpineComponent.isChecked = true;
-                            showNotification((json && json.message) || 'Failed to remove follow-up tag.', false);
+                            if (alpineComponent) alpineComponent.isChecked = !isChecked;
+                            showNotification((json && json.message) || 'Failed to toggle follow-up.', false);
                         }
                     }).catch(err => {
-                        // Errors here were already handled above in non-ok case, but catch any other issues
-                        console.error('Follow-up toggle (remove) error', err);
-                        // Ensure checkbox is reverted
-                        e.target.checked = true;
-                        const alpineComponent = Alpine.$data(e.target.closest('[x-data]'));
-                        if (alpineComponent) alpineComponent.isChecked = true;
-                        if (!err || err.message === 'remove_tag failed') {
-                            // already notified above
-                        } else {
-                            showNotification('An error occurred while removing the follow-up tag.', false);
-                        }
+                        console.error('Follow-up toggle exception', err);
                     });
                 });
             }
-            // --- *** END MODIFICATION *** ---
 
 
              window.addEventListener('beforeunload', () => {
