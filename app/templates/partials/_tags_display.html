@@ -2,7 +2,7 @@
 {%- if current_tags -%}
     {%- for tag in current_tags -%}
         {%- if tag -%}
-        <div class="flex items-center space-x-1 px-2 py-0.5 text-xs font-semibold rounded-full
+        <div class="inline-flex items-center justify-start space-x-1 px-2 py-0.5 text-xs font-semibold rounded-full text-left
             {%- if tag == 'Approved' -%} bg-green-100 text-green-800
             {%- elif tag == 'Declined' -%} bg-red-100 text-red-800
             {%- elif tag == 'Go-back' -%} bg-blue-100 text-blue-800

@@ -353,6 +353,97 @@
                 navigator.serviceWorker.ready.then(reg => doSubscribe(reg)).catch(err => console.error('DEBUG SUB JS: navigator.serviceWorker.ready promise FAILED:', err));
             }
         }
+
+        // Client-side helper to render tag badges consistently from a comma-separated string or array
+        function renderTags(tags) {
+            if (!tags) return '';
+            // normalize to array
+            let arr = Array.isArray(tags) ? tags : String(tags).split(',').map(t => t.trim()).filter(Boolean);
+            return arr.map(tag => {
+                let classes = 'inline-flex items-center justify-start px-2 py-0.5 text-xs font-semibold rounded-full mr-2 ';
+                if (['Approved','Completed'].includes(tag)) classes += 'bg-green-100 text-green-800';
+                else if (['Declined','Quote Declined'].includes(tag)) classes += 'bg-red-100 text-red-800';
+                else if (tag === 'Go-back') classes += 'bg-blue-100 text-blue-800';
+                else if (tag === 'Follow-up needed') classes += 'bg-purple-100 text-purple-800';
+                else classes += 'bg-yellow-100 text-yellow-800';
+                return `<span class="${classes}">${tag}</span>`;
+            }).join('');
+        }
+        // Global toast helper
+        function showToast(message, type='success', timeout=4000) {
+            const toast = document.getElementById('notification-toast');
+            const toastText = document.getElementById('notification-toast-text');
+            toastText.textContent = message || '';
+            // set background based on type
+            toast.classList.remove('bg-green-500','bg-blue-500','bg-red-500');
+            if (type === 'success') toast.classList.add('bg-green-500');
+            else if (type === 'info') toast.classList.add('bg-blue-500');
+            else toast.classList.add('bg-red-500');
+            toast.classList.remove('hidden');
+            clearTimeout(toast._hideTimer);
+            toast._hideTimer = setTimeout(() => toast.classList.add('hidden'), timeout);
+        }
+
+        // Universal AJAX handler: intercept forms and links with data-ajax="true"
+        document.addEventListener('DOMContentLoaded', () => {
+            // Intercept forms
+            document.body.addEventListener('submit', async (ev) => {
+                const form = ev.target;
+                if (!(form instanceof HTMLFormElement)) return;
+                if (form.dataset.ajax !== 'true') return;
+                ev.preventDefault();
+                try {
+                    const action = form.action || window.location.href;
+                    const method = (form.method || 'POST').toUpperCase();
+                    const formData = new FormData(form);
+                    const headers = {};
+                    // If this is not a multipart form, send as URLSearchParams for convenience
+                    let body = formData;
+                    if (!form.enctype || form.enctype === 'application/x-www-form-urlencoded') {
+                        body = new URLSearchParams();
+                        for (const [k,v] of formData.entries()) body.append(k, v);
+                    }
+                    const resp = await fetch(action, { method, body, credentials: 'same-origin', headers });
+                    const text = await resp.text();
+                    let json;
+                    try { json = JSON.parse(text || '{}'); } catch (e) { json = null; }
+                    if (json && json.message) showToast(json.message, json.success ? 'success' : 'info');
+                    if (json && json.tags) {
+                        const container = document.getElementById('tags-container');
+                        if (container) container.innerHTML = json.tags;
+                    }
+                    // allow non-json response fallback: show text in toast if present
+                    if (!json && text) showToast(text.slice(0, 300), 'info');
+                } catch (err) {
+                    console.error('AJAX form submit failed', err);
+                    showToast('Request failed', 'error');
+                }
+            });
+
+            // Intercept clicks on elements with data-ajax="true" and data-method
+            document.body.addEventListener('click', async (ev) => {
+                const el = ev.target.closest('[data-ajax="true"]');
+                if (!el) return;
+                ev.preventDefault();
+                const href = el.getAttribute('href') || el.dataset.href || el.action;
+                const method = (el.dataset.method || 'GET').toUpperCase();
+                try {
+                    const opts = { method, credentials: 'same-origin' };
+                    const resp = await fetch(href, opts);
+                    const text = await resp.text();
+                    let json;
+                    try { json = JSON.parse(text || '{}'); } catch (_) { json = null; }
+                    if (json && json.message) showToast(json.message, json.success ? 'success' : 'info');
+                    if (json && json.tags) {
+                        const container = document.getElementById('tags-container');
+                        if (container) container.innerHTML = json.tags;
+                    }
+                } catch (err) {
+                    console.error('AJAX link failed', err);
+                    showToast('Request failed', 'error');
+                }
+            });
+        });
     </script>
 </body>
 </html>                     

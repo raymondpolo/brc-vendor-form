@@ -21,7 +21,7 @@
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">Request ID</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('date_created')">Date</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('wo_number')">Work Order #</th>
-                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('status')">Status</th>
+                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100 text-left" @click="sortBy('status')">Status</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('request_type')">Request Type</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('property')">Property</th>
                     <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-gray-100" @click="sortBy('unit')">Unit</th>
@@ -39,8 +39,8 @@
                         </td>
                         <td class="px-6 py-4" x-text="req.date_created"></td>
                         <td class="px-6 py-4" x-text="req.wo_number || 'N/A'"></td>
-                        <td class="px-6 py-4">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                        <td class="px-6 py-4 text-left align-top">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full text-left"
                                   :class="{
                                       'bg-blue-100 text-blue-800': ['New', 'Open'].includes(req.status),
                                       'bg-green-100 text-green-800': ['Completed', 'Approved'].includes(req.status),
