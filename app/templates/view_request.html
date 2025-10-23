@@ -256,18 +256,20 @@
                         {# Approve/Decline Buttons (PM & Super User) #}
                         {% if current_user.role == 'Property Manager' and current_user.name == work_order.property_manager or current_user.role == 'Super User' %}
                             {# Always show approve/decline options (two choices only). Clear button only when a status exists. #}
-                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='approve') }}" class="inline">
+                            {# Approve button - hidden if quote is already approved #}
+                            <form method="POST" data-ajax="true" data-action="approve" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='approve') }}" class="inline" {% if quote.status == 'Approved' %} style="display:none;" {% endif %}>
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
-                                <button type="submit" class="text-green-500 hover:text-green-700" title="Approve">✓</button>
+                                <button type="submit" class="quote-approve-btn text-green-500 hover:text-green-700" title="Approve">✓</button>
                             </form>
-                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='decline') }}" class="inline">
+                            {# Decline button - hidden if quote is already declined #}
+                            <form method="POST" data-ajax="true" data-action="decline" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='decline') }}" class="inline" {% if quote.status == 'Declined' %} style="display:none;" {% endif %}>
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
-                                <button type="submit" class="text-red-500 hover:text-red-700" title="Decline">✗</button>
+                                <button type="submit" class="quote-decline-btn text-red-500 hover:text-red-700" title="Decline">✗</button>
                             </form>
                             {# Clear button appears only when quote has a status that can be cleared #}
-                            <form method="POST" data-ajax="true" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline" {% if not quote.status %} style="display: none;" {% endif %} > {# Hide if no status #}
+                            <form method="POST" data-ajax="true" data-action="clear" data-quote-id="{{ quote.id }}" action="{{ url_for('main.quote_action', request_id=work_order.id, quote_id=quote.id, action='clear') }}" class="inline" {% if not quote.status %} style="display: none;" {% endif %} > {# Hide if no status #}
                                 {{ delete_form.hidden_tag() }} {# CSRF #}
-                                <button type="submit" class="text-gray-400 hover:text-gray-600" title="Clear Status">↺</button>
+                                <button type="submit" class="quote-clear-btn text-gray-400 hover:text-gray-600" title="Clear Status">↺</button>
                             </form>
                         {% endif %}
 
@@ -1053,13 +1055,28 @@
                             const listItem = form.closest('li'); // Find parent li
                             if (listItem) {
                                 // Match form whose action ends with /clear or contains '/clear' robustly
-                                const clearButtonForm = Array.from(listItem.querySelectorAll('form')).find(f => (f.action || '').includes('/clear'));
-                                if (clearButtonForm) {
-                                    if (!json.new_status) {
-                                        clearButtonForm.style.display = 'none'; // Hide if status cleared
-                                    } else {
-                                        clearButtonForm.style.display = 'inline'; // Show if status exists
-                                    }
+                                const approveForm = listItem.querySelector('form[data-action="approve"]');
+                                const declineForm = listItem.querySelector('form[data-action="decline"]');
+                                const clearForm = listItem.querySelector('form[data-action="clear"]');
+
+                                // Based on the new status, toggle visibility:
+                                // - Approved: hide approve, show clear, hide decline
+                                // - Declined: hide decline, show clear, hide approve
+                                // - Cleared/null: show approve & decline, hide clear
+                                const status = json.new_status; // Could be 'Approved', 'Declined', or null/empty
+                                if (status === 'Approved') {
+                                    if (approveForm) approveForm.style.display = 'none';
+                                    if (declineForm) declineForm.style.display = 'none';
+                                    if (clearForm) clearForm.style.display = 'inline';
+                                } else if (status === 'Declined') {
+                                    if (approveForm) approveForm.style.display = 'none';
+                                    if (declineForm) declineForm.style.display = 'none';
+                                    if (clearForm) clearForm.style.display = 'inline';
+                                } else {
+                                    // Cleared or no status
+                                    if (approveForm) approveForm.style.display = 'inline';
+                                    if (declineForm) declineForm.style.display = 'inline';
+                                    if (clearForm) clearForm.style.display = 'none';
                                 }
                             }
                             // --- End Refresh Clear Button ---
