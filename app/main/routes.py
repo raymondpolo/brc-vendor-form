@@ -541,13 +541,21 @@ def view_request(request_id):
                 # If S3 is configured, check for the object there as well
                 s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
                 if s3_bucket and filename:
-                    try:
-                        import boto3
-                        s3 = boto3.client('s3')
-                        s3.head_object(Bucket=s3_bucket, Key=filename)
-                        s3_exists = True
-                    except Exception:
-                        s3_exists = False
+                        try:
+                            import boto3
+                            s3 = boto3.client('s3')
+                            # Try the filename directly, then fallback to 'uploads/filename'
+                            try:
+                                s3.head_object(Bucket=s3_bucket, Key=filename)
+                                s3_exists = True
+                            except Exception:
+                                try:
+                                    s3.head_object(Bucket=s3_bucket, Key=f"uploads/{filename}")
+                                    s3_exists = True
+                                except Exception:
+                                    s3_exists = False
+                        except Exception:
+                            s3_exists = False
             attachment.file_exists = local_exists or s3_exists
 
         # Attachments referenced by quotes
@@ -562,8 +570,15 @@ def view_request(request_id):
                         try:
                             import boto3
                             s3 = boto3.client('s3')
-                            s3.head_object(Bucket=s3_bucket, Key=qfn)
-                            s3_exists = True
+                            try:
+                                s3.head_object(Bucket=s3_bucket, Key=qfn)
+                                s3_exists = True
+                            except Exception:
+                                try:
+                                    s3.head_object(Bucket=s3_bucket, Key=f"uploads/{qfn}")
+                                    s3_exists = True
+                                except Exception:
+                                    s3_exists = False
                         except Exception:
                             s3_exists = False
                 quote.attachment.file_exists = local_exists or s3_exists
@@ -2596,8 +2611,8 @@ def add_quote(request_id):
                 quote = Quote(
                     work_order_id=work_order.id,
                     vendor_id=vendor.id,
-                    attachment_id=attachment_obj.id,
-                    status='Pending' # Initial status
+                    attachment_id=attachment_obj.id
+                    # Intentionally leave status as NULL/None to indicate no explicit state
                 )
                 db.session.add(quote)
                 # Log the quote upload

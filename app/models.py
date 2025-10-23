@@ -188,9 +188,9 @@ class MessageAttachment(db.Model):
 class Quote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_sent = db.Column(db.DateTime, nullable=False, default=get_denver_now) # <-- Use Denver time default
-    # *** MODIFICATION: Make status nullable ***
-    status = db.Column(db.String(50), nullable=True, default='Pending')
-    # *** END MODIFICATION ***
+    # Make status nullable and do not default to 'Pending'
+    # A NULL (None) status represents no explicit approval/decline state.
+    status = db.Column(db.String(50), nullable=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=False)
     attachment_id = db.Column(db.Integer, db.ForeignKey('attachment.id'), nullable=False, unique=True)
