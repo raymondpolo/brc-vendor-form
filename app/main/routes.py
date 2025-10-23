@@ -64,17 +64,24 @@ def save_attachment(file, work_order_id, file_type='Attachment'):
                 s3 = boto3.client('s3')
                 # Reset file stream position
                 file.stream.seek(0)
-                s3.upload_fileobj(file.stream, s3_bucket, unique_filename)
-                current_app.logger.info(f"Uploaded attachment to S3: s3://{s3_bucket}/{unique_filename}")
+                s3_prefix = current_app.config.get('AWS_S3_PREFIX') or ''
+                s3_key = f"{s3_prefix.rstrip('/')}/{unique_filename}" if s3_prefix else unique_filename
+                s3_key = s3_key.lstrip('/')
+                s3.upload_fileobj(file.stream, s3_bucket, s3_key)
+                current_app.logger.info(f"Uploaded attachment to S3: s3://{s3_bucket}/{s3_key}")
             except Exception as s3e:
                 current_app.logger.error(f"S3 upload failed for {filename}: {s3e}", exc_info=True)
                 raise
         else:
             file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
 
-        # Create and save the Attachment record
+        # Create and save the Attachment record. Store original filename and binary data
+        file.stream.seek(0)
+        file_bytes = file.stream.read()
         attachment = Attachment(
             filename=unique_filename,
+            original_filename=filename,
+            data=file_bytes if not s3_bucket else None,
             user_id=current_user.id,
             work_order_id=work_order_id,
             file_type=file_type
@@ -1939,18 +1946,42 @@ def download_attachment(attachment_id):
 
     # If not present locally, check S3 if configured and return a presigned URL redirect
     s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
+    s3_prefix = current_app.config.get('AWS_S3_PREFIX') or ''
     if s3_bucket:
         try:
             import boto3
             s3 = boto3.client('s3')
-            presigned = s3.generate_presigned_url('get_object', Params={'Bucket': s3_bucket, 'Key': safe_unique_filename}, ExpiresIn=300)
-            current_app.logger.info(f"Redirecting to presigned S3 URL for attachment id={attachment_id}")
-            return redirect(presigned)
+            # Try with prefix-aware key first, then fallback to filename
+            s3_key_candidates = [safe_unique_filename]
+            if s3_prefix:
+                p = s3_prefix.rstrip('/') + '/' + safe_unique_filename
+                s3_key_candidates.insert(0, p)
+            presigned = None
+            for key in s3_key_candidates:
+                try:
+                    # Ensure object exists before generating URL
+                    s3.head_object(Bucket=s3_bucket, Key=key)
+                    presigned = s3.generate_presigned_url('get_object', Params={'Bucket': s3_bucket, 'Key': key}, ExpiresIn=300)
+                    break
+                except Exception:
+                    continue
+            if presigned:
+                current_app.logger.info(f"Redirecting to presigned S3 URL for attachment id={attachment_id}")
+                return redirect(presigned)
+            # If no presigned URL found, fall through to error path
         except Exception as e:
             current_app.logger.error(f"Error generating presigned S3 URL for {safe_unique_filename}: {e}", exc_info=True)
 
     # Not found locally or in S3 (or S3 failed). Log and redirect back to request with flash.
     current_app.logger.warning(f"Download requested for attachment id={attachment_id} but file not found locally or on S3: {file_path}")
+    # If file data is stored in DB, serve it directly
+    if getattr(attachment, 'data', None):
+        from io import BytesIO
+        buf = BytesIO(attachment.data)
+        return Response(buf.getvalue(), mimetype=mimetypes.guess_type(attachment.original_filename or attachment.filename)[0] or 'application/octet-stream', headers={
+            'Content-Disposition': f'attachment; filename="{sensible_download_name}"'
+        })
+
     flash('The requested file is not available on the server. It may have been removed.', 'warning')
     if work_order:
         return redirect(url_for('main.view_request', request_id=work_order.id))
@@ -1990,13 +2021,48 @@ def view_attachment(attachment_id):
     if not mimetype: # Provide a default if guess fails
         mimetype = 'application/octet-stream' # Browser will likely download if unknown
 
-    # Serve the file inline
-    return send_from_directory(
-        current_app.config['UPLOAD_FOLDER'],
-        safe_unique_filename,
-        as_attachment=False, # Important: Serve inline
-        mimetype=mimetype
-    )
+    # If file exists locally serve it inline, otherwise try S3 using prefix-aware key
+    local_path = os.path.join(current_app.config.get('UPLOAD_FOLDER') or 'uploads', safe_unique_filename)
+    if os.path.exists(local_path):
+        return send_from_directory(
+            current_app.config['UPLOAD_FOLDER'],
+            safe_unique_filename,
+            as_attachment=False,
+            mimetype=mimetype
+        )
+
+    s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
+    s3_prefix = current_app.config.get('AWS_S3_PREFIX') or ''
+    if s3_bucket:
+        try:
+            import boto3
+            s3 = boto3.client('s3')
+            # Try prefix-aware key then filename
+            keys = [safe_unique_filename]
+            if s3_prefix:
+                keys.insert(0, f"{s3_prefix.rstrip('/')}/{safe_unique_filename}")
+            for key in keys:
+                try:
+                    s3.head_object(Bucket=s3_bucket, Key=key)
+                    presigned = s3.generate_presigned_url('get_object', Params={'Bucket': s3_bucket, 'Key': key}, ExpiresIn=300)
+                    return redirect(presigned)
+                except Exception:
+                    continue
+        except Exception as e:
+            current_app.logger.error(f"Error checking S3 for {safe_unique_filename}: {e}", exc_info=True)
+    # If file data is stored in DB, serve it inline
+    if getattr(attachment, 'data', None):
+        from io import BytesIO
+        buf = BytesIO(attachment.data)
+        return Response(buf.getvalue(), mimetype=mimetype, headers={
+            'Content-Disposition': f'inline; filename="{attachment.original_filename or attachment.filename}"'
+        })
+
+    current_app.logger.warning(f"Attachment id={attachment_id} not found locally or on S3: {safe_unique_filename}")
+    flash('The requested file is not available on the server. It may have been removed.', 'warning')
+    if work_order:
+        return redirect(url_for('main.view_request', request_id=work_order.id))
+    abort(404)
 
 
 # --- DELETE ATTACHMENT ---

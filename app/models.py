@@ -161,6 +161,10 @@ class AuditLog(db.Model):
 class Attachment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False)
+    # Original filename as uploaded by user (for download/display)
+    original_filename = db.Column(db.String(255), nullable=True)
+    # Optional binary data storage so files persist even if local disk is ephemeral
+    data = db.Column(db.LargeBinary, nullable=True)
     file_type = db.Column(db.String(50), nullable=False, default='Attachment')
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_order.id'), nullable=False)

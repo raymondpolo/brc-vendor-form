@@ -105,6 +105,26 @@ def create_app(config_class=Config):
             from app.main.routes import send_reminders
             send_reminders()
 
+        @app.cli.command('migrate-uploads-to-s3')
+        def migrate_uploads_to_s3_cmd():
+            """Upload files from local UPLOAD_FOLDER to configured S3 bucket.
+
+            Usage: flask migrate-uploads-to-s3
+            Make sure AWS credentials and AWS_S3_BUCKET are set in the environment.
+            """
+            from scripts.migrate_uploads_to_s3 import main as migrate_main
+            # Build args: --bucket <bucket> --prefix <prefix> --delete-local
+            bucket = app.config.get('AWS_S3_BUCKET')
+            prefix = app.config.get('AWS_S3_PREFIX') or ''
+            if not bucket:
+                app.logger.error('AWS_S3_BUCKET not configured; aborting migration.')
+                return
+            import sys
+            sys.argv = [sys.argv[0], '--bucket', bucket]
+            if prefix:
+                sys.argv += ['--prefix', prefix]
+            migrate_main()
+
     # CORRECTED: Use a relative import to load the event handlers
     from . import events
 

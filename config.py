@@ -43,5 +43,9 @@ class Config:
     PREFERRED_URL_SCHEME = 'https'
     # Application timezone (default to Denver). Use TZ database name like 'America/Denver'.
     TIMEZONE = _strip_quotes(os.environ.get('TIMEZONE')) or 'America/Denver'
+    # Optional S3 configuration for persistent storage of attachments
+    AWS_S3_BUCKET = _strip_quotes(os.environ.get('AWS_S3_BUCKET'))
+    # Optional prefix to store objects under (e.g. 'uploads/') - no leading/trailing slash required
+    AWS_S3_PREFIX = _strip_quotes(os.environ.get('AWS_S3_PREFIX')) or ''
     # NOTE: All database DateTime fields default to the app timezone via app.utils.get_denver_now()
     # and templates should use the 'local_dt' Jinja filter to render times in the application timezone.
