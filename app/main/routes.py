@@ -535,13 +535,38 @@ def view_request(request_id):
         # General attachments on the work order
         for attachment in getattr(work_order, 'attachments', []) or []:
             filename = getattr(attachment, 'filename', None)
-            attachment.file_exists = bool(filename and os.path.exists(os.path.join(upload_folder, filename)))
+            local_exists = bool(filename and os.path.exists(os.path.join(upload_folder, filename)))
+            s3_exists = False
+            if not local_exists:
+                # If S3 is configured, check for the object there as well
+                s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
+                if s3_bucket and filename:
+                    try:
+                        import boto3
+                        s3 = boto3.client('s3')
+                        s3.head_object(Bucket=s3_bucket, Key=filename)
+                        s3_exists = True
+                    except Exception:
+                        s3_exists = False
+            attachment.file_exists = local_exists or s3_exists
 
         # Attachments referenced by quotes
         for quote in quotes or []:
             if getattr(quote, 'attachment', None):
                 qfn = getattr(quote.attachment, 'filename', None)
-                quote.attachment.file_exists = bool(qfn and os.path.exists(os.path.join(upload_folder, qfn)))
+                local_exists = bool(qfn and os.path.exists(os.path.join(upload_folder, qfn)))
+                s3_exists = False
+                if not local_exists and qfn:
+                    s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
+                    if s3_bucket:
+                        try:
+                            import boto3
+                            s3 = boto3.client('s3')
+                            s3.head_object(Bucket=s3_bucket, Key=qfn)
+                            s3_exists = True
+                        except Exception:
+                            s3_exists = False
+                quote.attachment.file_exists = local_exists or s3_exists
     except Exception as e:
         # Don't let a filesystem check break the page; log and continue.
         current_app.logger.error(f"Error checking attachment file existence: {e}", exc_info=True)
