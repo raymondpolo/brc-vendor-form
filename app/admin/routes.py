@@ -95,7 +95,7 @@ def manage_users():
     return render_template(
         'manage_users.html', title='User Management',
         invite_form=invite_form, add_user_form=add_user_form, 
-        users_json=json.dumps(users_list)
+        users_json=users_list
     )
 
 @admin.route('/user/<int:user_id>/resend-invite', methods=['POST'])
@@ -256,7 +256,7 @@ def manage_properties():
     
     return render_template('manage_properties.html', title='Property Management',
                            property_form=property_form, upload_form=upload_form, 
-                           properties_json=json.dumps(properties_list))
+                           properties_json=properties_list)
 
 @admin.route('/upload_properties_csv', methods=['POST'])
 @role_required('Super User')
@@ -398,7 +398,7 @@ def manage_vendors():
     
     return render_template('manage_vendors.html', title='Vendor Management',
                            vendor_form=vendor_form, upload_form=upload_form, 
-                           vendors_json=json.dumps(vendors_list))
+                           vendors_json=vendors_list)
 
 @admin.route('/add_vendor', methods=['POST'])
 @admin_required

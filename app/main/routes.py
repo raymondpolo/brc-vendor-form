@@ -411,7 +411,7 @@ def all_requests():
     # Convert work orders to dictionary format for JSON serialization
     requests_list = [work_order_to_dict(req) for req in requests_data]
     return render_template('all_requests.html', title='All Requests',
-                           requests_json=json.dumps(requests_list)) # Pass as JSON for Alpine.js
+                           requests_json=requests_list) # Pass as list for Alpine.js (tojson in template)
 
 @main.route('/my-requests')
 @login_required
@@ -434,7 +434,7 @@ def my_requests():
     user_requests = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in user_requests]
     return render_template('my_requests.html', title='My Requests',
-                           requests_json=json.dumps(requests_list))
+                           requests_json=requests_list)
 
 
 @main.route('/shared-with-me')
@@ -445,7 +445,7 @@ def shared_requests():
     requests_data = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in requests_data]
     return render_template('shared_requests.html', title='Shared With Me',
-                           requests_json=json.dumps(requests_list))
+                           requests_json=requests_list)
 
 @main.route('/requests/status/<status>')
 @login_required
@@ -455,7 +455,7 @@ def requests_by_status(status):
     filtered_requests = WorkOrder.query.filter_by(is_deleted=False, status=status).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in filtered_requests]
     return render_template('requests_by_status.html', title=f'Requests: {status}',
-                           requests_json=json.dumps(requests_list), status=status)
+                           requests_json=requests_list, status=status)
 
 @main.route('/requests/tag/<tag_name>')
 @login_required
@@ -465,7 +465,7 @@ def requests_by_tag(tag_name):
     tagged_requests = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.tag.like(f'%{tag_name}%')).order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in tagged_requests]
     return render_template('requests_by_tag.html', title=f'Requests Tagged: {tag_name}',
-                           requests_json=json.dumps(requests_list), tag_name=tag_name)
+                           requests_json=requests_list, tag_name=tag_name)
 
 # --- VIEW REQUEST (MAIN DETAIL PAGE) ---
 @main.route('/request/<int:request_id>', methods=['GET'])
