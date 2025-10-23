@@ -429,8 +429,13 @@
 
             // Intercept clicks on elements with data-ajax="true" and data-method
             document.body.addEventListener('click', async (ev) => {
+                // If the click originates from within a form element, let the form's submit handler handle it.
+                if (ev.target.closest && ev.target.closest('form')) return; // do not intercept clicks inside forms
                 const el = ev.target.closest('[data-ajax="true"]');
                 if (!el) return;
+                // Only intercept anchor-like elements; prevent interfering with buttons that submit forms
+                const isAnchorLike = el.tagName === 'A' || el.hasAttribute('data-href') || el.hasAttribute('href');
+                if (!isAnchorLike) return;
                 ev.preventDefault();
                 const href = el.getAttribute('href') || el.dataset.href || el.action;
                 const method = (el.dataset.method || 'GET').toUpperCase();
