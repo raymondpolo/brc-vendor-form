@@ -243,8 +243,8 @@
                                      {% if quote.attachment %}
                                      <a href="#" class="view-attachment-btn text-brand hover:underline inline-block break-words"
                                          data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}"
-                                         data-filename="{{ quote.attachment.filename }}"
-                                         title="{{ quote.attachment.filename }}">{{ quote.attachment.filename }}</a>
+                                         data-filename="{{ quote.attachment.original_filename or quote.attachment.filename }}"
+                                         title="{{ quote.attachment.original_filename or quote.attachment.filename }}">{{ quote.attachment.original_filename or quote.attachment.filename }}</a>
                                      {% else %}
                                      <span class="text-text-secondary">(no file)</span>
                                      {% endif %}
@@ -622,9 +622,9 @@
                             <div class="flex items-center min-w-0">
                                 <a href="#" class="view-attachment-btn text-brand hover:underline truncate"
                                     data-url="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}"
-                                    data-filename="{{ attachment.filename }}"
-                                    title="{{ attachment.filename }}">
-                                    {{ attachment.filename }}
+                                    data-filename="{{ attachment.original_filename or attachment.filename }}"
+                                    title="{{ attachment.original_filename or attachment.filename }}">
+                                    {{ attachment.original_filename or attachment.filename }}
                                 </a>
                             </div>
                             <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
@@ -1294,6 +1294,25 @@
                     }
                     // *** END ADDED ***
 
+                    // Also update Go-back checkbox state and rebind its handler if necessary
+                    const goBackCheckboxNew = document.getElementById('go_back_checkbox');
+                    if (goBackCheckboxNew) {
+                        const hasGoBackTag = container.textContent.includes('Go-back');
+                        // Update Alpine state if present
+                        try {
+                            const alpineComp = Alpine.$data(goBackCheckboxNew.closest('[x-data]'));
+                            if (alpineComp) alpineComp.isChecked = hasGoBackTag;
+                        } catch (err) {
+                            /* ignore */
+                        }
+                        goBackCheckboxNew.checked = hasGoBackTag;
+                        // Ensure change handler is attached (use named handler defined below)
+                        try {
+                            goBackCheckboxNew.removeEventListener('change', handleGoBackChange);
+                        } catch (e) {}
+                        goBackCheckboxNew.addEventListener('change', handleGoBackChange);
+                    }
+
                 } else {
                      console.error("Tags container not found for update.");
                 }
@@ -1301,34 +1320,44 @@
 
 
             // --- Keep Go-back logic ---
+            // Named handler so we can rebind after partial tag re-renders
+            function handleGoBackChange(e) {
+                const checkbox = e.currentTarget;
+                const form = document.getElementById('goback-form');
+                if (!form) return;
+
+                // Send explicit desired state to server as form data (checked=true/false)
+                const desired_state = checkbox.checked ? '1' : '0';
+
+                fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': csrfToken,
+                        'Accept': 'application/json'
+                    },
+                    body: new URLSearchParams({ 'csrf_token': form.querySelector('[name=csrf_token]').value, 'state': desired_state })
+                }).then(resp => {
+                    if (!resp.ok) throw new Error('Go-back toggle failed ' + resp.status);
+                    return resp.json().catch(() => null);
+                }).then(json => {
+                    if (json && json.success && json.tags !== undefined) {
+                        updateTagsContainer(json.tags); // Update tags from response
+                    } else {
+                        console.error('Go-back toggle failed or invalid response', json);
+                        location.reload(); // Fallback reload
+                    }
+                }).catch(err => {
+                    console.error('Go-back toggle error', err);
+                    location.reload(); // Fallback reload
+                });
+            }
+
+            // Attach handler initially
             const goBackCheckbox = document.getElementById('go_back_checkbox');
             if (goBackCheckbox) {
-                goBackCheckbox.addEventListener('change', (e) => {
-                    const form = document.getElementById('goback-form');
-                    if (!form) return;
-                    fetch(form.action, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken,
-                            'Accept': 'application/json'
-                        },
-                        body: new URLSearchParams({'csrf_token': form.querySelector('[name=csrf_token]').value })
-                    }).then(resp => {
-                        if (!resp.ok) throw new Error('Go-back toggle failed ' + resp.status);
-                        return resp.json().catch(() => null);
-                    }).then(json => {
-                        if (json && json.success && json.tags !== undefined) {
-                            updateTagsContainer(json.tags); // Update tags from response
-                        } else {
-                            console.error('Go-back toggle failed or invalid response', json);
-                            location.reload(); // Fallback reload
-                        }
-                    }).catch(err => {
-                        console.error('Go-back toggle error', err);
-                        location.reload(); // Fallback reload
-                    });
-                });
+                try { goBackCheckbox.removeEventListener('change', handleGoBackChange); } catch (e) {}
+                goBackCheckbox.addEventListener('change', handleGoBackChange);
             }
 
             // --- Simplified Follow-up checkbox toggle ---
