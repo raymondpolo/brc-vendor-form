@@ -56,7 +56,22 @@ def save_attachment(file, work_order_id, file_type='Attachment'):
     # Generate a unique filename using UUID to prevent collisions and obscure original names
     unique_filename = f"{uuid.uuid4().hex}.{ext}"
     try:
-        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
+        # If S3 is configured, upload to S3 and store unique filename as key. Otherwise, save locally.
+        s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
+        if s3_bucket:
+            try:
+                import boto3
+                s3 = boto3.client('s3')
+                # Reset file stream position
+                file.stream.seek(0)
+                s3.upload_fileobj(file.stream, s3_bucket, unique_filename)
+                current_app.logger.info(f"Uploaded attachment to S3: s3://{s3_bucket}/{unique_filename}")
+            except Exception as s3e:
+                current_app.logger.error(f"S3 upload failed for {filename}: {s3e}", exc_info=True)
+                raise
+        else:
+            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
+
         # Create and save the Attachment record
         attachment = Attachment(
             filename=unique_filename,
@@ -1881,22 +1896,32 @@ def download_attachment(attachment_id):
     # Ensure the physical file exists before attempting to serve it
     upload_folder = current_app.config.get('UPLOAD_FOLDER') or 'uploads'
     file_path = os.path.join(upload_folder, safe_unique_filename)
-    if not os.path.exists(file_path):
-        # Log detailed context for diagnostics
-        current_app.logger.warning(f"Download requested for attachment id={attachment_id} but file not found at {file_path}")
-        # If the DB record exists but file missing, inform the user and redirect back to request view
-        flash('The requested file is not available on the server. It may have been removed.', 'warning')
-        # Prefer redirecting back to the work order view if we have it
-        if work_order:
-            return redirect(url_for('main.view_request', request_id=work_order.id))
-        abort(404)
+    if os.path.exists(file_path):
+        return send_from_directory(
+             upload_folder,
+             safe_unique_filename, # Serve the unique filename from storage
+             as_attachment=True,
+             download_name=sensible_download_name # Suggest a user-friendly name
+         )
 
-    return send_from_directory(
-         upload_folder,
-         safe_unique_filename, # Serve the unique filename from storage
-         as_attachment=True,
-         download_name=sensible_download_name # Suggest a user-friendly name
-     )
+    # If not present locally, check S3 if configured and return a presigned URL redirect
+    s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
+    if s3_bucket:
+        try:
+            import boto3
+            s3 = boto3.client('s3')
+            presigned = s3.generate_presigned_url('get_object', Params={'Bucket': s3_bucket, 'Key': safe_unique_filename}, ExpiresIn=300)
+            current_app.logger.info(f"Redirecting to presigned S3 URL for attachment id={attachment_id}")
+            return redirect(presigned)
+        except Exception as e:
+            current_app.logger.error(f"Error generating presigned S3 URL for {safe_unique_filename}: {e}", exc_info=True)
+
+    # Not found locally or in S3 (or S3 failed). Log and redirect back to request with flash.
+    current_app.logger.warning(f"Download requested for attachment id={attachment_id} but file not found locally or on S3: {file_path}")
+    flash('The requested file is not available on the server. It may have been removed.', 'warning')
+    if work_order:
+        return redirect(url_for('main.view_request', request_id=work_order.id))
+    abort(404)
 
 
 # --- VIEW ATTACHMENT (IN BROWSER) ---

@@ -22,3 +22,4 @@ sendgrid
 redis
 pywebpush
 pytz
+boto3
