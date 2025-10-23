@@ -1060,16 +1060,16 @@
                                 const clearForm = listItem.querySelector('form[data-action="clear"]');
 
                                 // Based on the new status, toggle visibility:
-                                // - Approved: hide approve, show clear, hide decline
-                                // - Declined: hide decline, show clear, hide approve
-                                // - Cleared/null: show approve & decline, hide clear
-                                const status = json.new_status; // Could be 'Approved', 'Declined', or null/empty
+                                // - Approved: hide only the approve button, keep decline visible, show clear
+                                // - Declined: hide only the decline button, keep approve visible, show clear
+                                // - Cleared/null: show both approve & decline, hide clear
+                                const status = json.new_status; // 'Approved', 'Declined', or null
                                 if (status === 'Approved') {
                                     if (approveForm) approveForm.style.display = 'none';
-                                    if (declineForm) declineForm.style.display = 'none';
+                                    if (declineForm) declineForm.style.display = 'inline';
                                     if (clearForm) clearForm.style.display = 'inline';
                                 } else if (status === 'Declined') {
-                                    if (approveForm) approveForm.style.display = 'none';
+                                    if (approveForm) approveForm.style.display = 'inline';
                                     if (declineForm) declineForm.style.display = 'none';
                                     if (clearForm) clearForm.style.display = 'inline';
                                 } else {
