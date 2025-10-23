@@ -1935,6 +1935,11 @@ def download_attachment(attachment_id):
     # A simple approach if original name isn't stored: use file type and truncated unique name
     sensible_download_name = f"{download_name_prefix}{attachment.file_type}_{safe_unique_filename[:15]}{os.path.splitext(safe_unique_filename)[1]}"
 
+    # Prefer the originally uploaded filename for downloads when available; fall back to sensible name
+    download_name_raw = getattr(attachment, 'original_filename', None) or sensible_download_name
+    # Ensure only basename to avoid path traversal in headers
+    download_name = os.path.basename(download_name_raw)
+
 
     # Ensure the physical file exists before attempting to serve it
     upload_folder = current_app.config.get('UPLOAD_FOLDER') or 'uploads'
@@ -1944,7 +1949,7 @@ def download_attachment(attachment_id):
              upload_folder,
              safe_unique_filename, # Serve the unique filename from storage
              as_attachment=True,
-             download_name=sensible_download_name # Suggest a user-friendly name
+             download_name=download_name # Suggest the original filename when available
          )
 
     # If not present locally, check S3 if configured and return a presigned URL redirect
@@ -1964,7 +1969,16 @@ def download_attachment(attachment_id):
                 try:
                     # Ensure object exists before generating URL
                     s3.head_object(Bucket=s3_bucket, Key=key)
-                    presigned = s3.generate_presigned_url('get_object', Params={'Bucket': s3_bucket, 'Key': key}, ExpiresIn=300)
+                    # Include response Content-Disposition so browser suggests original filename
+                    presigned = s3.generate_presigned_url(
+                        'get_object',
+                        Params={
+                            'Bucket': s3_bucket,
+                            'Key': key,
+                            'ResponseContentDisposition': f'attachment; filename="{download_name}"'
+                        },
+                        ExpiresIn=300
+                    )
                     break
                 except Exception:
                     continue
@@ -1981,8 +1995,9 @@ def download_attachment(attachment_id):
     if getattr(attachment, 'data', None):
         from io import BytesIO
         buf = BytesIO(attachment.data)
-        return Response(buf.getvalue(), mimetype=mimetypes.guess_type(attachment.original_filename or attachment.filename)[0] or 'application/octet-stream', headers={
-            'Content-Disposition': f'attachment; filename="{sensible_download_name}"'
+        out_mime = mimetypes.guess_type(attachment.original_filename or attachment.filename)[0] or 'application/octet-stream'
+        return Response(buf.getvalue(), mimetype=out_mime, headers={
+            'Content-Disposition': f'attachment; filename="{download_name}"'
         })
 
     flash('The requested file is not available on the server. It may have been removed.', 'warning')
@@ -2024,6 +2039,10 @@ def view_attachment(attachment_id):
     if not mimetype: # Provide a default if guess fails
         mimetype = 'application/octet-stream' # Browser will likely download if unknown
 
+    # Prefer original filename for inline suggestion when available
+    view_name_raw = getattr(attachment, 'original_filename', None) or safe_unique_filename
+    view_filename = os.path.basename(view_name_raw)
+
     # If file exists locally serve it inline, otherwise try S3 using prefix-aware key
     local_path = os.path.join(current_app.config.get('UPLOAD_FOLDER') or 'uploads', safe_unique_filename)
     if os.path.exists(local_path):
@@ -2047,7 +2066,16 @@ def view_attachment(attachment_id):
             for key in keys:
                 try:
                     s3.head_object(Bucket=s3_bucket, Key=key)
-                    presigned = s3.generate_presigned_url('get_object', Params={'Bucket': s3_bucket, 'Key': key}, ExpiresIn=300)
+                    # Include Content-Disposition so inline view suggests filename
+                    presigned = s3.generate_presigned_url(
+                        'get_object',
+                        Params={
+                            'Bucket': s3_bucket,
+                            'Key': key,
+                            'ResponseContentDisposition': f'inline; filename="{view_filename}"'
+                        },
+                        ExpiresIn=300
+                    )
                     return redirect(presigned)
                 except Exception:
                     continue
@@ -2057,8 +2085,10 @@ def view_attachment(attachment_id):
     if getattr(attachment, 'data', None):
         from io import BytesIO
         buf = BytesIO(attachment.data)
+        # Use sanitized filename for inline Content-Disposition
+        inline_name = os.path.basename(attachment.original_filename or attachment.filename)
         return Response(buf.getvalue(), mimetype=mimetype, headers={
-            'Content-Disposition': f'inline; filename="{attachment.original_filename or attachment.filename}"'
+            'Content-Disposition': f'inline; filename="{inline_name}"'
         })
 
     current_app.logger.warning(f"Attachment id={attachment_id} not found locally or on S3: {safe_unique_filename}")
