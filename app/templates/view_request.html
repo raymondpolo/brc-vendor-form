@@ -240,10 +240,14 @@
                     <div class="min-w-0">
                         <div class="font-medium text-gray-600 truncate">{{ quote.vendor.company_name }}</div>
                         <div class="text-sm text-text-secondary truncate">
-                            <a href="#" class="view-attachment-btn text-brand hover:underline inline-block break-words"
-                               data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}"
-                               data-filename="{{ quote.attachment.filename }}"
-                               title="{{ quote.attachment.filename }}">{{ quote.attachment.filename }}</a>
+                                     {% if quote.attachment %}
+                                     <a href="#" class="view-attachment-btn text-brand hover:underline inline-block break-words"
+                                         data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}"
+                                         data-filename="{{ quote.attachment.filename }}"
+                                         title="{{ quote.attachment.filename }}">{{ quote.attachment.filename }}</a>
+                                     {% else %}
+                                     <span class="text-text-secondary">(no file)</span>
+                                     {% endif %}
                             <span class="text-xs text-gray-400 ml-2">({{ quote.date_sent | local_dt('%m/%d/%Y') }})</span>
                             <span id="quote-status-{{ quote.id }}" class="ml-2 {% if quote.status == 'Approved' %} quote-status-approved {% elif quote.status == 'Declined' %} quote-status-declined {% elif quote.status %} quote-status-pending {% endif %}">{% if quote.status %}({{ quote.status }}){% endif %}</span>
                         </div>
@@ -267,9 +271,11 @@
                             </form>
                         {% endif %}
 
+                        {% if quote.attachment %}
                         <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-400 hover:text-brand" title="Download">
                             <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                         </a>
+                        {% endif %}
                         {# Delete Quote (Admin, Scheduler, Super User) #}
                         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
                         <form action="{{ url_for('main.delete_quote', quote_id=quote.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this quote?');" class="inline">
@@ -988,14 +994,18 @@
                 // Check if the submitted element is a form and has the data-ajax attribute
                 if (form && form.tagName === 'FORM' && form.getAttribute('data-ajax') === 'true') {
                     e.preventDefault(); // Prevent default form submission
+                    // Stop other submit handlers (like the universal handler) from also running
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
                     const quoteId = form.getAttribute('data-quote-id');
                     const actionUrl = form.action;
                     const formData = new FormData(form);
                     // Convert FormData to URLSearchParams for x-www-form-urlencoded
                     const body = new URLSearchParams(formData).toString();
 
+                    // Include credentials so session cookie and CSRF linkage are sent
                     fetch(actionUrl, {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded', // Correct content type
                             'X-CSRFToken': csrfToken,
@@ -1033,10 +1043,11 @@
                             showNotification(json.message || 'Quote action completed.', true);
 
                             // --- Refresh Clear Button Visibility ---
-                            // Find the clear button form within the same list item
+                            // Find the clear button form within the same list item and toggle visibility
                             const listItem = form.closest('li'); // Find parent li
                             if (listItem) {
-                                const clearButtonForm = listItem.querySelector(`form[action*="/clear"]`);
+                                // Match form whose action ends with /clear or contains '/clear' robustly
+                                const clearButtonForm = Array.from(listItem.querySelectorAll('form')).find(f => (f.action || '').includes('/clear'));
                                 if (clearButtonForm) {
                                     if (!json.new_status) {
                                         clearButtonForm.style.display = 'none'; // Hide if status cleared

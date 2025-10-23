@@ -404,7 +404,13 @@
                         body = new URLSearchParams();
                         for (const [k,v] of formData.entries()) body.append(k, v);
                     }
-                    const resp = await fetch(action, { method, body, credentials: 'same-origin', headers });
+                    // Ensure cookies (session) and CSRF token are sent for same-origin requests
+                    const headersWithCsrf = Object.assign({}, headers);
+                    try {
+                        const meta = document.querySelector('meta[name="csrf-token"]');
+                        if (meta && !headersWithCsrf['X-CSRFToken']) headersWithCsrf['X-CSRFToken'] = meta.getAttribute('content');
+                    } catch (e) { /* ignore */ }
+                    const resp = await fetch(action, { method, body, credentials: 'same-origin', headers: headersWithCsrf });
                     const text = await resp.text();
                     let json;
                     try { json = JSON.parse(text || '{}'); } catch (e) { json = null; }
@@ -430,6 +436,11 @@
                 const method = (el.dataset.method || 'GET').toUpperCase();
                 try {
                     const opts = { method, credentials: 'same-origin' };
+                    // Ensure CSRF token header included for same-origin fetches
+                    try {
+                        const meta = document.querySelector('meta[name="csrf-token"]');
+                        if (meta) opts.headers = Object.assign({}, opts.headers || {}, { 'X-CSRFToken': meta.getAttribute('content') });
+                    } catch (e) { /* ignore */ }
                     const resp = await fetch(href, opts);
                     const text = await resp.text();
                     let json;
