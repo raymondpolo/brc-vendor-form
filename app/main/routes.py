@@ -537,6 +537,7 @@ def view_request(request_id):
             filename = getattr(attachment, 'filename', None)
             local_exists = bool(filename and os.path.exists(os.path.join(upload_folder, filename)))
             s3_exists = False
+            db_has_data = bool(getattr(attachment, 'data', None))
             if not local_exists:
                 # If S3 is configured, check for the object there as well
                 s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
@@ -556,7 +557,8 @@ def view_request(request_id):
                                     s3_exists = False
                         except Exception:
                             s3_exists = False
-            attachment.file_exists = local_exists or s3_exists
+            # Consider DB-stored blobs as existing as well
+            attachment.file_exists = local_exists or s3_exists or db_has_data
 
         # Attachments referenced by quotes
         for quote in quotes or []:
@@ -564,6 +566,7 @@ def view_request(request_id):
                 qfn = getattr(quote.attachment, 'filename', None)
                 local_exists = bool(qfn and os.path.exists(os.path.join(upload_folder, qfn)))
                 s3_exists = False
+                db_has_data = bool(getattr(quote.attachment, 'data', None))
                 if not local_exists and qfn:
                     s3_bucket = os.environ.get('AWS_S3_BUCKET') or current_app.config.get('AWS_S3_BUCKET')
                     if s3_bucket:
@@ -581,7 +584,7 @@ def view_request(request_id):
                                     s3_exists = False
                         except Exception:
                             s3_exists = False
-                quote.attachment.file_exists = local_exists or s3_exists
+                quote.attachment.file_exists = local_exists or s3_exists or db_has_data
     except Exception as e:
         # Don't let a filesystem check break the page; log and continue.
         current_app.logger.error(f"Error checking attachment file existence: {e}", exc_info=True)
