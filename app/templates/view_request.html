@@ -810,13 +810,16 @@
     </div>
 </div>
 
-<div id="attachmentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col overflow-hidden">
+<div id="attachmentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95 z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col overflow-hidden z-60">
         <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
             <h3 id="attachmentModalTitle" class="text-xl font-semibold">View Attachment</h3>
             <button id="closeAttachmentModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
         </div>
-        <div class="flex-grow relative">
+        <div class="flex-grow relative bg-gray-50">
+            <!-- Image viewer (for images) -->
+            <img id="attachmentImg" class="hidden absolute inset-0 w-full h-full object-contain" style="max-width:100%; max-height:100%; margin:auto; display:block;" alt="Attachment image">
+            <!-- Fallback iframe (for PDFs and others) -->
             <iframe id="attachmentFrame" class="absolute inset-0 w-full h-full" frameborder="0"></iframe>
         </div>
     </div>
@@ -1147,10 +1150,32 @@
              button.addEventListener('click', function(e) {
                  e.preventDefault();
                  const url = this.dataset.url;
-                 const filename = this.dataset.filename;
+                 const filename = this.dataset.filename || '';
                  attachmentModalTitle.textContent = `View: ${filename}`;
-                 attachmentFrame.src = url; // Set iframe source
-                 attachmentModal.classList.remove('hidden', 'opacity-0', 'scale-95'); // Show modal
+
+                 // Determine file type by extension
+                 const ext = (filename.split('.').pop() || '').toLowerCase();
+                 const imgEl = document.getElementById('attachmentImg');
+                 const iframeEl = document.getElementById('attachmentFrame');
+
+                 // Supported image extensions
+                 const imageExts = ['png','jpg','jpeg','gif','webp','bmp','svg'];
+                 if (imageExts.includes(ext)) {
+                     // Show image viewer and hide iframe
+                     iframeEl.classList.add('hidden');
+                     iframeEl.src = 'about:blank';
+                     imgEl.src = url;
+                     imgEl.classList.remove('hidden');
+                 } else {
+                     // Use iframe for PDFs and other types
+                     imgEl.classList.add('hidden');
+                     imgEl.src = '';
+                     iframeEl.classList.remove('hidden');
+                     iframeEl.src = url;
+                 }
+
+                 // Ensure modal is above any sidebar (z-index already set) and show
+                 attachmentModal.classList.remove('hidden', 'opacity-0', 'scale-95');
              });
          });
 
@@ -1158,7 +1183,11 @@
              attachmentModal.classList.add('opacity-0', 'scale-95');
              setTimeout(() => {
                  attachmentModal.classList.add('hidden');
-                 attachmentFrame.src = 'about:blank'; // Clear iframe content to stop loading/prevent memory leaks
+                 // Clear both viewers
+                 const iframeEl = document.getElementById('attachmentFrame');
+                 const imgEl = document.getElementById('attachmentImg');
+                 try { iframeEl.src = 'about:blank'; } catch(e) {}
+                 try { imgEl.src = ''; imgEl.classList.add('hidden'); } catch(e) {}
              }, 150); // Match CSS transition duration
          }
 
