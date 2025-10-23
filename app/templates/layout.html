@@ -471,35 +471,79 @@
         }
         
         // Ensure CSRF token is present in dynamic/admin user forms that may be generated client-side
-        document.addEventListener('DOMContentLoaded', function () {
-            try {
+        (function() {
+            function injectCsrf(csrfValue, form) {
+                if (!csrfValue || !form) return false;
+                try {
+                    if (form.querySelector('input[name="csrf_token"]')) return true;
+                    const inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = 'csrf_token';
+                    inp.value = csrfValue;
+                    form.appendChild(inp);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function shouldTargetForm(form) {
+                if (!form || form.method.toUpperCase() !== 'POST') return false;
+                const action = form.getAttribute('action') || '';
+                // Some templates bind the action attribute via data-binding; also inspect dataset.action
+                const dataAction = form.dataset && form.dataset.action ? form.dataset.action : '';
+                return action.includes('/admin/user/') || dataAction.includes('/admin/user/');
+            }
+
+            function scanAndInject(csrfValue) {
+                const forms = Array.from(document.querySelectorAll('form'));
+                forms.forEach(f => {
+                    try {
+                        if (shouldTargetForm(f)) injectCsrf(csrfValue, f);
+                    } catch (e) { /* ignore */ }
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
                 const csrfMeta = document.querySelector('meta[name="csrf-token"]');
                 const csrfValue = csrfMeta ? csrfMeta.getAttribute('content') : null;
                 if (!csrfValue) return;
-                // Select all forms whose action begins with /admin/user and are method POST
-                const forms = Array.from(document.querySelectorAll('form[method="POST"]'));
-                forms.forEach(f => {
-                    try {
-                        const action = f.getAttribute('action') || '';
-                        // Some forms may set action via data-binding or be relative URLs; check contains '/admin/user/'
-                        if (action.includes('/admin/user/') || (f.dataset && f.dataset.action && f.dataset.action.includes('/admin/user/'))) {
-                            // If a csrf field is absent, inject one
-                            if (!f.querySelector('input[name="csrf_token"]')) {
-                                const inp = document.createElement('input');
-                                inp.type = 'hidden';
-                                inp.name = 'csrf_token';
-                                inp.value = csrfValue;
-                                f.appendChild(inp);
-                            }
+
+                // Initial pass
+                scanAndInject(csrfValue);
+
+                // Observe for dynamically added forms (Alpine x-for, etc.) and inject as they appear
+                const observer = new MutationObserver((mutations) => {
+                    for (const m of mutations) {
+                        if (m.type === 'childList' && m.addedNodes && m.addedNodes.length) {
+                            m.addedNodes.forEach(node => {
+                                try {
+                                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+                                    if (node.tagName === 'FORM' && shouldTargetForm(node)) {
+                                        injectCsrf(csrfValue, node);
+                                    } else if (node.querySelectorAll) {
+                                        const nested = node.querySelectorAll('form');
+                                        nested.forEach(f => { if (shouldTargetForm(f)) injectCsrf(csrfValue, f); });
+                                    }
+                                } catch (e) { /* ignore individual failures */ }
+                            });
                         }
-                    } catch (e) {
-                        console.warn('Could not inject CSRF into form', e);
                     }
                 });
-            } catch (e) {
-                console.warn('CSRF injection helper failed', e);
-            }
-        });
+
+                observer.observe(document.body, { childList: true, subtree: true });
+
+                // Also inject before form submit as a last-resort safety in case injection missed timing
+                document.body.addEventListener('submit', function (ev) {
+                    try {
+                        const form = ev.target;
+                        if (shouldTargetForm(form) && !form.querySelector('input[name="csrf_token"]')) {
+                            injectCsrf(csrfValue, form);
+                        }
+                    } catch (e) { /* ignore */ }
+                }, true);
+            });
+        })();
     </script>
 </body>
 </html>                     
