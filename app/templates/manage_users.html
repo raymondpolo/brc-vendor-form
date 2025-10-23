@@ -71,12 +71,14 @@
                             <td class="px-6 py-4 flex items-center space-x-4">
                                 <template x-if="!user.is_active">
                                     <form :action="`/admin/user/${user.id}/resend-invite`" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="font-medium text-blue-600 hover:text-blue-900">Resend Invite</button>
                                     </form>
                                 </template>
 
                                 <template x-if="user.id !== {{ current_user.id }} && !('{{ current_user.role }}' === 'Admin' && user.role === 'Super User')">
                                     <form :action="`/admin/user/${user.id}/toggle-active`" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="font-medium"
                                                 :class="user.is_active ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'">
                                             <span x-text="user.is_active ? 'Disable' : 'Enable'"></span>
@@ -95,6 +97,7 @@
                                 {% if current_user.role == 'Super User' %}
                                     <template x-if="user.id !== {{ current_user.id }}">
                                         <form :action="`/admin/user/${user.id}/delete`" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete this user? This cannot be undone.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="font-medium text-red-600 hover:text-red-900">Delete</button>
                                         </form>
                                     </template>
@@ -121,12 +124,14 @@
                     <div class="mt-4 pt-4 border-t flex items-center space-x-4">
                         <template x-if="!user.is_active">
                             <form :action="`/admin/user/${user.id}/resend-invite`" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="font-medium text-blue-600 hover:text-blue-900">Resend</button>
                             </form>
                         </template>
 
                         <template x-if="user.id !== {{ current_user.id }} && !('{{ current_user.role }}' === 'Admin' && user.role === 'Super User')">
                             <form :action="`/admin/user/${user.id}/toggle-active`" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="font-medium"
                                         :class="user.is_active ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'">
                                     <span x-text="user.is_active ? 'Disable' : 'Enable'"></span>
@@ -145,6 +150,7 @@
                         {% if current_user.role == 'Super User' %}
                             <template x-if="user.id !== {{ current_user.id }}">
                                 <form :action="`/admin/user/${user.id}/delete`" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete this user? This cannot be undone.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="font-medium text-red-600 hover:text-red-900">Delete</button>
                                 </form>
                             </template>

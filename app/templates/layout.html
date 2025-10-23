@@ -469,6 +469,37 @@
             // Final fallback: go to All Requests
             window.location.href = '{{ url_for("main.all_requests") }}';
         }
+        
+        // Ensure CSRF token is present in dynamic/admin user forms that may be generated client-side
+        document.addEventListener('DOMContentLoaded', function () {
+            try {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const csrfValue = csrfMeta ? csrfMeta.getAttribute('content') : null;
+                if (!csrfValue) return;
+                // Select all forms whose action begins with /admin/user and are method POST
+                const forms = Array.from(document.querySelectorAll('form[method="POST"]'));
+                forms.forEach(f => {
+                    try {
+                        const action = f.getAttribute('action') || '';
+                        // Some forms may set action via data-binding or be relative URLs; check contains '/admin/user/'
+                        if (action.includes('/admin/user/') || (f.dataset && f.dataset.action && f.dataset.action.includes('/admin/user/'))) {
+                            // If a csrf field is absent, inject one
+                            if (!f.querySelector('input[name="csrf_token"]')) {
+                                const inp = document.createElement('input');
+                                inp.type = 'hidden';
+                                inp.name = 'csrf_token';
+                                inp.value = csrfValue;
+                                f.appendChild(inp);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Could not inject CSRF into form', e);
+                    }
+                });
+            } catch (e) {
+                console.warn('CSRF injection helper failed', e);
+            }
+        });
     </script>
 </body>
 </html>                     
