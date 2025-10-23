@@ -416,20 +416,13 @@ def all_requests():
 @main.route('/my-requests')
 @login_required
 def my_requests():
-    query = WorkOrder.query.filter_by(is_deleted=False)
-    # Filter based on user role
+    # Show only requests relevant to the current user:
+    # - Property Managers: requests where they are assigned
+    # - All other roles: requests they authored
     if current_user.role == 'Property Manager':
-        # Property Managers see requests where they are assigned
-        query = query.filter(WorkOrder.property_manager == current_user.name)
-    elif current_user.role == 'Requester':
-        # Requesters see requests they created
-        query = query.filter_by(author=current_user)
-    # Admin/Scheduler/SuperUser would typically use /requests or /dashboard,
-    # but if they land here, this will show requests they authored (adjust if needed)
-    elif current_user.role not in ['Admin', 'Scheduler', 'Super User']:
-         # Fallback for unexpected roles? Or maybe just use the author filter.
-         query = query.filter_by(author=current_user)
-
+        query = WorkOrder.query.filter_by(is_deleted=False).filter(WorkOrder.property_manager == current_user.name)
+    else:
+        query = WorkOrder.query.filter_by(is_deleted=False).filter_by(author=current_user)
 
     user_requests = query.order_by(WorkOrder.date_created.desc()).all()
     requests_list = [work_order_to_dict(req) for req in user_requests]
