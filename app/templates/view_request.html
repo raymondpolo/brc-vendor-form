@@ -271,10 +271,12 @@
                             </form>
                         {% endif %}
 
-                        {% if quote.attachment %}
+                        {% if quote.attachment and quote.attachment.file_exists %}
                         <a href="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}" class="text-gray-400 hover:text-brand" title="Download">
                             <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                         </a>
+                        {% elif quote.attachment and not quote.attachment.file_exists %}
+                        <span class="text-xs text-red-500 ml-2">(file missing)</span>
                         {% endif %}
                         {# Delete Quote (Admin, Scheduler, Super User) #}
                         {% if current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
@@ -624,9 +626,13 @@
                                 </a>
                             </div>
                             <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
+                                {% if attachment.file_exists %}
                                 <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="text-gray-400 hover:text-brand" title="Download">
                                     <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                                 </a>
+                                {% else %}
+                                <span class="text-xs text-red-500 ml-2">(file missing)</span>
+                                {% endif %}
                                 {% if current_user.id == attachment.user_id or current_user.role in ['Admin', 'Scheduler', 'Super User'] %}
                                 <form action="{{ url_for('main.delete_attachment', attachment_id=attachment.id) }}" method="POST" onsubmit="return confirm('Are you sure?');">
                                     {{ delete_form.hidden_tag() }}

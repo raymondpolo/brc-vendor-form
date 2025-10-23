@@ -514,6 +514,22 @@ def view_request(request_id):
     # Get initials for avatar placeholder
     requester_initials = get_requester_initials(work_order.requester_name)
 
+    # Annotate attachments and quote attachments with a file_exists flag so templates can avoid rendering broken links.
+    upload_folder = current_app.config.get('UPLOAD_FOLDER') or 'uploads'
+    try:
+        # General attachments on the work order
+        for attachment in getattr(work_order, 'attachments', []) or []:
+            filename = getattr(attachment, 'filename', None)
+            attachment.file_exists = bool(filename and os.path.exists(os.path.join(upload_folder, filename)))
+
+        # Attachments referenced by quotes
+        for quote in quotes or []:
+            if getattr(quote, 'attachment', None):
+                qfn = getattr(quote.attachment, 'filename', None)
+                quote.attachment.file_exists = bool(qfn and os.path.exists(os.path.join(upload_folder, qfn)))
+    except Exception as e:
+        # Don't let a filesystem check break the page; log and continue.
+        current_app.logger.error(f"Error checking attachment file existence: {e}", exc_info=True)
 
     return render_template('view_request.html', title=f'Request #{work_order.id}', work_order=work_order, notes=notes,
                            note_form=note_form, status_form=status_form, audit_logs=audit_logs,
@@ -1862,8 +1878,21 @@ def download_attachment(attachment_id):
     sensible_download_name = f"{download_name_prefix}{attachment.file_type}_{safe_unique_filename[:15]}{os.path.splitext(safe_unique_filename)[1]}"
 
 
+    # Ensure the physical file exists before attempting to serve it
+    upload_folder = current_app.config.get('UPLOAD_FOLDER') or 'uploads'
+    file_path = os.path.join(upload_folder, safe_unique_filename)
+    if not os.path.exists(file_path):
+        # Log detailed context for diagnostics
+        current_app.logger.warning(f"Download requested for attachment id={attachment_id} but file not found at {file_path}")
+        # If the DB record exists but file missing, inform the user and redirect back to request view
+        flash('The requested file is not available on the server. It may have been removed.', 'warning')
+        # Prefer redirecting back to the work order view if we have it
+        if work_order:
+            return redirect(url_for('main.view_request', request_id=work_order.id))
+        abort(404)
+
     return send_from_directory(
-         current_app.config['UPLOAD_FOLDER'],
+         upload_folder,
          safe_unique_filename, # Serve the unique filename from storage
          as_attachment=True,
          download_name=sensible_download_name # Suggest a user-friendly name
