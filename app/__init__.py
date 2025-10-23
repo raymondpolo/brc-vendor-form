@@ -125,6 +125,18 @@ def create_app(config_class=Config):
                 sys.argv += ['--prefix', prefix]
             migrate_main()
 
+        @app.cli.command('migrate-uploads-to-db')
+        def migrate_uploads_to_db_cmd():
+            """Import local uploads into Attachment.data in the database.
+
+            Usage: flask migrate-uploads-to-db [--dry-run] [--delete-local]
+            """
+            from scripts.migrate_uploads_to_db import main as migrate_db_main
+            import sys
+            # Preserve CLI args passed through flask by not overriding if already present
+            # sys.argv will include the 'flask' and command pieces; pass-through is acceptable
+            migrate_db_main()
+
     # CORRECTED: Use a relative import to load the event handlers
     from . import events
 
