@@ -110,7 +110,15 @@
     function propertyManager() {
         return {
             search: '',
-            properties: JSON.parse(this.$el.getAttribute('data-properties') || '[]'),
+            properties: [],
+
+            init() {
+                try {
+                    const raw = this.$el.getAttribute('data-properties');
+                    if (raw) this.properties = JSON.parse(raw || '[]');
+                } catch (e) { console.error('Failed to parse properties data', e); }
+            },
+
             get filteredProperties() {
                 const searchLower = this.search.toLowerCase();
                 if (!searchLower) {

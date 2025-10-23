@@ -206,7 +206,15 @@
     function userManager() {
         return {
             search: '',
-            users: JSON.parse(this.$el.getAttribute('data-users') || '[]'),
+            users: [],
+
+            init() {
+                try {
+                    const raw = this.$el.getAttribute('data-users');
+                    if (raw) this.users = JSON.parse(raw || '[]');
+                } catch (e) { console.error('Failed to parse users data', e); }
+            },
+
             get filteredUsers() {
                 const searchLower = this.search.toLowerCase();
                 if (!searchLower) {

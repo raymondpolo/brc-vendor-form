@@ -104,11 +104,16 @@
     function requestManager() {
         return {
             search: '',
-            requests: JSON.parse(this.$el.getAttribute('data-requests') || '[]'),
+            requests: [],
             sortColumn: 'id',
             sortDirection: 'desc',
 
             init() {
+                // Load server-provided data from data-attributes (this.$el is available here)
+                try {
+                    const raw = this.$el.getAttribute('data-requests');
+                    if (raw) this.requests = JSON.parse(raw || '[]');
+                } catch (e) { console.error('Failed to parse requests data', e); }
                 // Restore saved state if present
                 try {
                     const key = 'listState:' + window.location.pathname;

@@ -108,9 +108,16 @@
     function requestManager() {
         return {
             search: '',
-            requests: JSON.parse(this.$el.getAttribute('data-requests') || '[]'),
+            requests: [],
             sortColumn: 'id',
             sortDirection: 'desc',
+
+            init() {
+                try {
+                    const raw = this.$el.getAttribute('data-requests');
+                    if (raw) this.requests = JSON.parse(raw || '[]');
+                } catch (e) { console.error('Failed to parse requests data', e); }
+            },
 
             sortBy(column) {
                 if (this.sortColumn === column) {

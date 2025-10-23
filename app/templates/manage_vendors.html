@@ -103,7 +103,15 @@
     function vendorManager() {
         return {
             search: '',
-            vendors: JSON.parse(this.$el.getAttribute('data-vendors') || '[]'),
+            vendors: [],
+
+            init() {
+                try {
+                    const raw = this.$el.getAttribute('data-vendors');
+                    if (raw) this.vendors = JSON.parse(raw || '[]');
+                } catch (e) { console.error('Failed to parse vendors data', e); }
+            },
+
             get filteredVendors() {
                 const searchLower = this.search.toLowerCase();
                 if (!searchLower) {
