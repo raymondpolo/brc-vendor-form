@@ -81,6 +81,22 @@
         max-height: 100px; /* Adjust if needed */
         opacity: 1;
     }
+
+    /* Attachment modal toolbar and viewer helpers */
+    #attachmentToolbar button { background: transparent; border: none; cursor: pointer }
+    #attachmentToolbar svg { display: block }
+    /* Rotation helper: will be applied to the viewer element */
+    .rotate-0 { transform: rotate(0deg); }
+    .rotate-90 { transform: rotate(90deg); }
+    .rotate-180 { transform: rotate(180deg); }
+    .rotate-270 { transform: rotate(270deg); }
+    /* When rotated, ensure the image fits inside modal */
+    .viewer-rotated { object-fit: contain; }
+
+    /* Fullscreen modal overrides */
+    .attachment-fullscreen { position: fixed !important; inset: 0 !important; z-index: 99999 !important; padding: 0.5rem !important; }
+    .attachment-fullscreen .bg-white { background: transparent !important; }
+    .attachment-fullscreen img, .attachment-fullscreen iframe { max-height: 100vh; height: 100vh; width: 100vw; }
 </style>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -243,6 +259,7 @@
                                      {% if quote.attachment %}
                                      <a href="#" class="view-attachment-btn text-brand hover:underline inline-block break-words"
                                          data-url="{{ url_for('main.view_attachment', attachment_id=quote.attachment_id) }}"
+                                         data-download-url="{{ url_for('main.download_attachment', attachment_id=quote.attachment_id) }}"
                                          data-filename="{{ quote.attachment.original_filename or quote.attachment.filename }}"
                                          title="{{ quote.attachment.original_filename or quote.attachment.filename }}">{{ quote.attachment.original_filename or quote.attachment.filename }}</a>
                                      {% else %}
@@ -622,6 +639,7 @@
                             <div class="flex items-center min-w-0">
                                 <a href="#" class="view-attachment-btn text-brand hover:underline truncate"
                                     data-url="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}"
+                                    data-download-url="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}"
                                     data-filename="{{ attachment.original_filename or attachment.filename }}"
                                     title="{{ attachment.original_filename or attachment.filename }}">
                                     {{ attachment.original_filename or attachment.filename }}
@@ -812,14 +830,57 @@
 
 <div id="attachmentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden modal-transition opacity-0 transform scale-95 z-50">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] transform flex flex-col overflow-hidden z-60">
-        <div class="flex justify-between items-center p-4 border-b flex-shrink-0">
-            <h3 id="attachmentModalTitle" class="text-xl font-semibold">View Attachment</h3>
-            <button id="closeAttachmentModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        <div class="flex justify-between items-center p-3 border-b flex-shrink-0 space-x-3">
+            <div class="flex items-center gap-3">
+                <h3 id="attachmentModalTitle" class="text-lg md:text-xl font-semibold">View Attachment</h3>
+                <!-- Toolbar for attachment actions -->
+                <div id="attachmentToolbar" class="ml-2 flex items-center space-x-1 bg-gray-100 rounded-md p-1" role="toolbar" aria-label="Attachment viewer toolbar">
+                    <!-- Accessible shortcuts: R = rotate right, L = rotate left, 0 = reset, F = fullscreen, ←/→ = prev/next page, +/- = zoom -->
+                    <button id="rotateLeftAttachmentBtn" type="button" title="Rotate left" class="p-1 text-gray-600 hover:text-gray-900" aria-label="Rotate left (L)" tabindex="0" role="button" aria-controls="pdfCanvas attachmentFrame attachmentImg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7v6h6"/></svg>
+                    </button>
+                    <button id="rotateAttachmentBtn" type="button" title="Rotate right" class="p-1 text-gray-600 hover:text-gray-900" aria-label="Rotate right (R)" tabindex="0" role="button" aria-controls="pdfCanvas attachmentFrame attachmentImg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6"/></svg>
+                    </button>
+                    <button id="resetRotationAttachmentBtn" type="button" title="Reset rotation" class="p-1 text-gray-600 hover:text-gray-900" aria-label="Reset rotation (0)" tabindex="0" role="button" aria-controls="pdfCanvas attachmentFrame attachmentImg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9V7h2v6z"/></svg>
+                    </button>
+                    <!-- PDF viewer controls -->
+                    <button id="pdfPrevBtn" type="button" title="Previous page" class="p-1 text-gray-600 hover:text-gray-900 hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M11 17l-5-5 5-5v10z"/></svg>
+                    </button>
+                    <div id="pdfPageIndicator" class="text-xs text-gray-600 px-2 hidden">1 / 1</div>
+                    <button id="pdfNextBtn" type="button" title="Next page" class="p-1 text-gray-600 hover:text-gray-900 hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 17l5-5-5-5v10z"/></svg>
+                    </button>
+                    <button id="pdfZoomOutBtn" type="button" title="Zoom out" class="p-1 text-gray-600 hover:text-gray-900 hidden">-</button>
+                    <button id="pdfZoomInBtn" type="button" title="Zoom in" class="p-1 text-gray-600 hover:text-gray-900 hidden">+</button>
+                    <button id="pdfFitBtn" type="button" title="Toggle fit" class="p-1 text-gray-600 hover:text-gray-900 hidden">Fit</button>
+                    <button id="fullscreenAttachmentBtn" type="button" title="Toggle fullscreen" class="p-1 text-gray-600 hover:text-gray-900" aria-label="Toggle fullscreen (F)" tabindex="0" role="button" aria-controls="pdfCanvas attachmentFrame attachmentImg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h3a1 1 0 010 2H5v2a1 1 0 11-2 0V4zM17 16a1 1 0 01-1 1h-3a1 1 0 110-2h2v-2a1 1 0 112 0v3zM4 16a1 1 0 001 1h3a1 1 0 110 2H5a3 3 0 01-3-3v-1a1 1 0 112 0v1zM16 4a1 1 0 011-1h.5A3.5 3.5 0 0121 6.5V7a1 1 0 11-2 0v-.5A1.5 1.5 0 0018.5 5H17a1 1 0 01-1-1z"/></svg>
+                    </button>
+                    <button id="downloadAttachmentBtn" type="button" title="Download" class="p-1 text-gray-600 hover:text-gray-900" aria-label="Download attachment" tabindex="0" role="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12v8m0-8l-4 4m4-4l4 4"/></svg>
+                    </button>
+                    <button id="openNewTabAttachmentBtn" type="button" title="Open in new tab" class="p-1 text-gray-600 hover:text-gray-900" aria-label="Open in new tab" tabindex="0" role="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7h4a1 1 0 011 1v8a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h4V5H5a3 3 0 00-3 3v8a3 3 0 003 3h12a3 3 0 003-3V7a3 3 0 00-3-3h-4v2z"/><path d="M9 3h2v4H9z"/></svg>
+                    </button>
+                    <!-- Hidden accessible instructions for screen readers -->
+                    <div id="attachmentShortcutsHelp" class="sr-only" aria-hidden="false">Keyboard shortcuts: R rotate right, L rotate left, 0 reset rotation, F fullscreen, Left/Right or PageUp/PageDown navigate PDF, + zoom in, - zoom out, Esc close modal.</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="closeAttachmentModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
         </div>
-        <div class="flex-grow relative bg-gray-50">
+            <div class="flex-grow relative bg-gray-50">
             <!-- Image viewer (for images) -->
             <img id="attachmentImg" class="hidden absolute inset-0 w-full h-full object-contain" style="max-width:100%; max-height:100%; margin:auto; display:block;" alt="Attachment image">
-            <!-- Fallback iframe (for PDFs and others) -->
+            <!-- PDF.js canvas viewer -->
+            <div id="pdfViewerWrapper" class="hidden absolute inset-0 w-full h-full flex items-center justify-center bg-gray-50">
+                <canvas id="pdfCanvas" class="max-w-full max-h-full"></canvas>
+            </div>
+            <!-- Fallback iframe (for non-PDFs or if PDF.js isn't available) -->
             <iframe id="attachmentFrame" class="absolute inset-0 w-full h-full" frameborder="0"></iframe>
         </div>
     </div>
@@ -831,6 +892,22 @@
 {% endif %}
 
 <script>
+        // Load PDF.js from CDN (worker) - using official CDN
+        // Note: This will create a global `pdfjsLib` object when loaded.
+        (function loadPdfJs() {
+            const scriptUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js';
+            if (!window.pdfjsLib) {
+                const s = document.createElement('script');
+                s.src = scriptUrl;
+                s.onload = () => {
+                    if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+                        // Use CDN workerSrc (match version where possible)
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
+                    }
+                };
+                document.head.appendChild(s);
+            }
+        })();
     document.addEventListener('DOMContentLoaded', function () {
         // --- Keep flatpickr setup for scheduled_date ---
         flatpickr("input[name='scheduled_date']", { dateFormat: "m/d/Y" });
@@ -849,9 +926,15 @@
         const openFollowUpBtn = document.getElementById('sendFollowUpBtn');
         const closeFollowUpModalBtn = document.getElementById('closeFollowUpModalBtn');
         const cancelFollowUpBtn = document.getElementById('cancelFollowUpBtn');
-        const attachmentModal = document.getElementById('attachmentModal');
-        const closeAttachmentModalBtn = document.getElementById('closeAttachmentModalBtn');
+    const attachmentModal = document.getElementById('attachmentModal');
+    const closeAttachmentModalBtn = document.getElementById('closeAttachmentModalBtn');
+    // Focus management: remember where focus was before opening the modal
+    let previousFocusedElement = null;
         const attachmentFrame = document.getElementById('attachmentFrame');
+    const rotateAttachmentBtn = document.getElementById('rotateAttachmentBtn');
+    const fullscreenAttachmentBtn = document.getElementById('fullscreenAttachmentBtn');
+    const downloadAttachmentBtn = document.getElementById('downloadAttachmentBtn');
+    const openNewTabAttachmentBtn = document.getElementById('openNewTabAttachmentBtn');
         const attachmentModalTitle = document.getElementById('attachmentModalTitle');
         const notificationToast = document.getElementById('notification-toast');
         const notificationToastText = document.getElementById('notification-toast-text'); // Added
@@ -1150,6 +1233,8 @@
              button.addEventListener('click', function(e) {
                  e.preventDefault();
                  const url = this.dataset.url;
+                 // Prefer explicit download URL when provided (may point to different endpoint)
+                 const downloadUrl = this.dataset.downloadUrl || this.dataset.url;
                  const filename = this.dataset.filename || '';
                  attachmentModalTitle.textContent = `View: ${filename}`;
 
@@ -1166,18 +1251,223 @@
                      iframeEl.src = 'about:blank';
                      imgEl.src = url;
                      imgEl.classList.remove('hidden');
+                    // Ensure no residual transforms
+                    imgEl.style.transform = '';
+                    imgEl.dataset.rotation = '0';
+                    imgEl.classList.remove('viewer-rotated');
+                    // Attach download/open URLs to toolbar buttons
+                    downloadAttachmentBtn.dataset.url = downloadUrl || url;
+                    downloadAttachmentBtn.dataset.filename = filename;
+                    openNewTabAttachmentBtn.dataset.url = downloadUrl || url;
+                    openNewTabAttachmentBtn.dataset.filename = filename;
                  } else {
-                     // Use iframe for PDFs and other types
-                     imgEl.classList.add('hidden');
-                     imgEl.src = '';
-                     iframeEl.classList.remove('hidden');
-                     iframeEl.src = url;
+                    // Use PDF.js for PDFs when available; otherwise fallback to iframe
+                    const isPdf = ext === 'pdf';
+                    imgEl.classList.add('hidden');
+                    imgEl.src = '';
+                    const pdfWrapper = document.getElementById('pdfViewerWrapper');
+                    const canvas = document.getElementById('pdfCanvas');
+                    if (isPdf && window.pdfjsLib && pdfWrapper && canvas) {
+                        // show PDF canvas and hide iframe
+                        pdfWrapper.classList.remove('hidden');
+                        iframeEl.classList.add('hidden');
+                        // reset PDF rotation/scale state and render
+                        window._pdfRotation = 0;
+                        window._pdfScale = 1.0;
+                        // use downloadUrl when available (may point to streaming/download endpoint)
+                        const pdfUrl = downloadUrl || url;
+                        loadAndRenderPDF(pdfUrl, canvas);
+                        // Attach download/open URLs to toolbar buttons
+                        downloadAttachmentBtn.dataset.url = downloadUrl || url;
+                        downloadAttachmentBtn.dataset.filename = filename;
+                        openNewTabAttachmentBtn.dataset.url = downloadUrl || url;
+                        openNewTabAttachmentBtn.dataset.filename = filename;
+                    } else {
+                        // fallback to iframe
+                        if (pdfWrapper) pdfWrapper.classList.add('hidden');
+                        iframeEl.classList.remove('hidden');
+                        iframeEl.src = url;
+                        iframeEl.dataset.rotation = '0';
+                        iframeEl.style.transform = '';
+                        // Attach download/open URLs to toolbar buttons
+                        downloadAttachmentBtn.dataset.url = downloadUrl || url;
+                        downloadAttachmentBtn.dataset.filename = filename;
+                        openNewTabAttachmentBtn.dataset.url = downloadUrl || url;
+                        openNewTabAttachmentBtn.dataset.filename = filename;
+                    }
                  }
 
                  // Ensure modal is above any sidebar (z-index already set) and show
+                 // store previous focused element and move focus into the modal
+                 try { previousFocusedElement = document.activeElement; } catch(e) { previousFocusedElement = null; }
                  attachmentModal.classList.remove('hidden', 'opacity-0', 'scale-95');
+                 // Focus the close button so keyboard users are inside the modal
+                 setTimeout(() => { try { if (closeAttachmentModalBtn) closeAttachmentModalBtn.focus({ preventScroll: true }); } catch(e) {} }, 50);
              });
          });
+
+         // Rotation state helper
+         function applyRotationToElement(el, rotationDeg) {
+             if (!el) return;
+             el.style.transform = `rotate(${rotationDeg}deg)`;
+             // For images, toggle a helper class to keep object-fit behavior
+             if (el.tagName && el.tagName.toLowerCase() === 'img') {
+                 if (rotationDeg % 180 !== 0) el.classList.add('viewer-rotated');
+                 else el.classList.remove('viewer-rotated');
+             }
+             // If canvas (PDF), re-render page at new rotation
+             if (el.tagName && el.tagName.toLowerCase() === 'canvas') {
+                 // Update global pdf rotation state and re-render
+                 const newRot = rotationDeg || 0;
+                 window._pdfRotation = newRot;
+                 if (window._pdfCurrentUrl) loadAndRenderPDF(window._pdfCurrentUrl, el, newRot);
+             }
+         }
+
+         // PDF.js rendering helpers and state
+         window._pdfDoc = null;
+         window._pdfCurrentUrl = null;
+         window._pdfScale = 1.0;
+         window._pdfRotation = 0; // degrees
+    window._pdfPageNumber = 1;
+    window._pdfNumPages = 0;
+    window._pdfFitTo = 'width'; // 'width' or 'page'
+
+    // toolbar controls
+    const pdfPrevBtn = document.getElementById('pdfPrevBtn');
+    const pdfNextBtn = document.getElementById('pdfNextBtn');
+    const pdfPageIndicator = document.getElementById('pdfPageIndicator');
+    const pdfZoomInBtn = document.getElementById('pdfZoomInBtn');
+    const pdfZoomOutBtn = document.getElementById('pdfZoomOutBtn');
+    const pdfFitBtn = document.getElementById('pdfFitBtn');
+
+         async function loadAndRenderPDF(url, canvasEl, forcedRotation) {
+             if (!window.pdfjsLib) {
+                 console.warn('PDF.js not loaded');
+                 // fallback: set iframe src if possible
+                 const iframeEl = document.getElementById('attachmentFrame');
+                 if (iframeEl) { iframeEl.classList.remove('hidden'); iframeEl.src = url; }
+                 return;
+             }
+             try {
+                 window._pdfCurrentUrl = url;
+                 // Fetch PDF as array buffer
+                 const resp = await fetch(url, { credentials: 'same-origin' });
+                 const data = await resp.arrayBuffer();
+                 // Load PDF document
+                 const loadingTask = pdfjsLib.getDocument({ data });
+                 const pdf = await loadingTask.promise;
+                 window._pdfDoc = pdf;
+                 // store total pages
+                 window._pdfNumPages = pdf.numPages || 1;
+                 // if no page requested, render current page number
+                 const pageNumber = window._pdfPageNumber || 1;
+                 await renderPdfPage(pdf, pageNumber, canvasEl, forcedRotation);
+                 // show PDF controls
+                 if (pdfPageIndicator) {
+                     pdfPageIndicator.textContent = `${window._pdfPageNumber} / ${window._pdfNumPages}`;
+                 }
+                 [pdfPrevBtn, pdfNextBtn, pdfPageIndicator, pdfZoomInBtn, pdfZoomOutBtn, pdfFitBtn].forEach(el => { if (el) el.classList.remove('hidden'); });
+             } catch (err) {
+                 console.error('Error rendering PDF:', err);
+                 // Fallback to iframe
+                 const pdfWrapper = document.getElementById('pdfViewerWrapper');
+                 const iframeEl = document.getElementById('attachmentFrame');
+                 if (pdfWrapper) pdfWrapper.classList.add('hidden');
+                 if (iframeEl) { iframeEl.classList.remove('hidden'); iframeEl.src = url; }
+             }
+         }
+
+         // Toolbar: rotate right
+         if (rotateAttachmentBtn) {
+             rotateAttachmentBtn.addEventListener('click', function () {
+                 const imgEl = document.getElementById('attachmentImg');
+                 const iframeEl = document.getElementById('attachmentFrame');
+                 const viewer = imgEl && !imgEl.classList.contains('hidden') ? imgEl : iframeEl;
+                 if (!viewer) return;
+                 const current = parseInt(viewer.dataset.rotation || '0', 10);
+                 const next = (current + 90) % 360;
+                 viewer.dataset.rotation = String(next);
+                 applyRotationToElement(viewer, next);
+             });
+         }
+
+         // Toolbar: rotate left
+         const rotateLeftAttachmentBtn = document.getElementById('rotateLeftAttachmentBtn');
+         if (rotateLeftAttachmentBtn) {
+             rotateLeftAttachmentBtn.addEventListener('click', function () {
+                 const imgEl = document.getElementById('attachmentImg');
+                 const iframeEl = document.getElementById('attachmentFrame');
+                 const viewer = imgEl && !imgEl.classList.contains('hidden') ? imgEl : iframeEl;
+                 if (!viewer) return;
+                 const current = parseInt(viewer.dataset.rotation || '0', 10);
+                 const next = (current - 90 + 360) % 360;
+                 viewer.dataset.rotation = String(next);
+                 applyRotationToElement(viewer, next);
+             });
+         }
+
+         // Toolbar: reset rotation
+         const resetRotationAttachmentBtn = document.getElementById('resetRotationAttachmentBtn');
+         if (resetRotationAttachmentBtn) {
+             resetRotationAttachmentBtn.addEventListener('click', function () {
+                 const imgEl = document.getElementById('attachmentImg');
+                 const iframeEl = document.getElementById('attachmentFrame');
+                 const viewer = imgEl && !imgEl.classList.contains('hidden') ? imgEl : iframeEl;
+                 if (!viewer) return;
+                 viewer.dataset.rotation = '0';
+                 applyRotationToElement(viewer, 0);
+             });
+         }
+
+         // Toolbar: fullscreen toggle
+         let isAttachmentFullscreen = false;
+         function toggleAttachmentFullscreen() {
+             if (!attachmentModal) return;
+             isAttachmentFullscreen = !isAttachmentFullscreen;
+             if (isAttachmentFullscreen) {
+                 attachmentModal.classList.add('attachment-fullscreen');
+                 // Use Fullscreen API when available
+                 const el = attachmentModal;
+                 if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+             } else {
+                 attachmentModal.classList.remove('attachment-fullscreen');
+                 if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+             }
+         }
+         if (fullscreenAttachmentBtn) fullscreenAttachmentBtn.addEventListener('click', toggleAttachmentFullscreen);
+
+         // Toolbar: download
+         if (downloadAttachmentBtn) {
+             downloadAttachmentBtn.addEventListener('click', function () {
+                 const url = this.dataset.url;
+                 const filename = this.dataset.filename || '';
+                 if (!url) return;
+                 // Try to fetch blob then download to preserve filename when cross-origin
+                 fetch(url, { credentials: 'same-origin' }).then(resp => resp.blob()).then(blob => {
+                     const blobUrl = URL.createObjectURL(blob);
+                     const a = document.createElement('a');
+                     a.href = blobUrl;
+                     a.download = filename || '';
+                     document.body.appendChild(a);
+                     a.click();
+                     a.remove();
+                     setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                 }).catch(err => {
+                     // Fallback: open raw URL
+                     window.open(url, '_blank');
+                 });
+             });
+         }
+
+         // Toolbar: open in new tab
+         if (openNewTabAttachmentBtn) {
+             openNewTabAttachmentBtn.addEventListener('click', function () {
+                 const url = this.dataset.url;
+                 if (!url) return;
+                 window.open(url, '_blank');
+             });
+         }
 
          function hideAttachmentModal() {
              attachmentModal.classList.add('opacity-0', 'scale-95');
@@ -1186,8 +1476,21 @@
                  // Clear both viewers
                  const iframeEl = document.getElementById('attachmentFrame');
                  const imgEl = document.getElementById('attachmentImg');
+                 const pdfWrapper = document.getElementById('pdfViewerWrapper');
+                 const pdfCanvas = document.getElementById('pdfCanvas');
                  try { iframeEl.src = 'about:blank'; } catch(e) {}
                  try { imgEl.src = ''; imgEl.classList.add('hidden'); } catch(e) {}
+                try { if (pdfCanvas && pdfCanvas.getContext) { const ctx = pdfCanvas.getContext('2d'); ctx && ctx.clearRect(0,0,pdfCanvas.width || 0, pdfCanvas.height || 0); } if (pdfWrapper) pdfWrapper.classList.add('hidden'); window._pdfDoc = null; window._pdfCurrentUrl = null; window._pdfRotation = 0; window._pdfScale = 1.0; } catch (e) { /* ignore */ }
+                 // Reset rotation state and fullscreen
+                 try {
+                     if (imgEl) { imgEl.style.transform = ''; imgEl.dataset.rotation = '0'; imgEl.classList.remove('viewer-rotated'); }
+                     if (iframeEl) { iframeEl.style.transform = ''; iframeEl.dataset.rotation = '0'; }
+                     if (isAttachmentFullscreen) toggleAttachmentFullscreen();
+                 } catch (e) { /* ignore */ }
+                // Hide pdf controls
+                try { [pdfPrevBtn, pdfNextBtn, pdfPageIndicator, pdfZoomInBtn, pdfZoomOutBtn, pdfFitBtn].forEach(el => { if (el) el.classList.add('hidden'); }); window._pdfPageNumber = 1; window._pdfNumPages = 0; } catch(e) {}
+                // Restore focus to previous element if possible
+                try { if (previousFocusedElement && typeof previousFocusedElement.focus === 'function') previousFocusedElement.focus({ preventScroll: true }); previousFocusedElement = null; } catch (e) { previousFocusedElement = null; }
              }, 150); // Match CSS transition duration
          }
 
@@ -1198,6 +1501,53 @@
                  hideAttachmentModal();
              }
          });
+
+        // Keyboard shortcuts for attachment modal
+        window.addEventListener('keydown', function (event) {
+            // Only handle when modal is visible
+            if (!attachmentModal || attachmentModal.classList.contains('hidden')) return;
+            // Ignore when focus is in an input, textarea, select or contenteditable
+            const tag = document.activeElement && document.activeElement.tagName ? document.activeElement.tagName.toLowerCase() : null;
+            const isEditable = document.activeElement && (document.activeElement.isContentEditable || ['input','textarea','select'].includes(tag));
+            if (isEditable) return;
+
+            const key = event.key;
+            switch (key) {
+                case 'r': case 'R':
+                    // rotate right
+                    if (rotateAttachmentBtn) rotateAttachmentBtn.click();
+                    event.preventDefault();
+                    break;
+                case 'l': case 'L':
+                    if (typeof rotateLeftAttachmentBtn !== 'undefined' && rotateLeftAttachmentBtn) rotateLeftAttachmentBtn.click();
+                    event.preventDefault();
+                    break;
+                case '0':
+                    if (typeof resetRotationAttachmentBtn !== 'undefined' && resetRotationAttachmentBtn) resetRotationAttachmentBtn.click();
+                    event.preventDefault();
+                    break;
+                case 'f': case 'F':
+                    if (typeof fullscreenAttachmentBtn !== 'undefined' && fullscreenAttachmentBtn) fullscreenAttachmentBtn.click();
+                    event.preventDefault();
+                    break;
+                case 'ArrowLeft': case 'PageUp':
+                    if (typeof pdfPrevBtn !== 'undefined' && pdfPrevBtn && !pdfPrevBtn.classList.contains('hidden')) pdfPrevBtn.click();
+                    event.preventDefault();
+                    break;
+                case 'ArrowRight': case 'PageDown':
+                    if (typeof pdfNextBtn !== 'undefined' && pdfNextBtn && !pdfNextBtn.classList.contains('hidden')) pdfNextBtn.click();
+                    event.preventDefault();
+                    break;
+                case '+': case '=':
+                    if (typeof pdfZoomInBtn !== 'undefined' && pdfZoomInBtn && !pdfZoomInBtn.classList.contains('hidden')) pdfZoomInBtn.click();
+                    event.preventDefault();
+                    break;
+                case '-': case '_':
+                    if (typeof pdfZoomOutBtn !== 'undefined' && pdfZoomOutBtn && !pdfZoomOutBtn.classList.contains('hidden')) pdfZoomOutBtn.click();
+                    event.preventDefault();
+                    break;
+            }
+        });
         // --- End Attachment Modal Logic ---
 
 
@@ -1232,6 +1582,88 @@
             console.log("DEBUG JS: Tribute attached to note textarea.");
         } else {
              console.error("DEBUG JS: Could not find note textarea element for Tribute.");
+        }
+
+        async function renderPdfPage(pdfDoc, pageNumber, canvasEl, forcedRotation) {
+            try {
+                const page = await pdfDoc.getPage(pageNumber);
+                const rotation = typeof forcedRotation === 'number' ? forcedRotation : window._pdfRotation || 0;
+                window._pdfRotation = rotation;
+                if (canvasEl) canvasEl.dataset.rotation = String(window._pdfRotation || 0);
+
+                // compute scale based on fit mode
+                let scale = window._pdfScale || 1.0;
+                const viewportForScale = page.getViewport({ scale: 1, rotation: rotation });
+                const wrapper = document.getElementById('pdfViewerWrapper');
+                const maxWidth = wrapper ? wrapper.clientWidth * 0.95 : viewportForScale.width;
+                const maxHeight = wrapper ? wrapper.clientHeight * 0.95 : viewportForScale.height;
+                if (window._pdfFitTo === 'width') {
+                    scale = maxWidth / viewportForScale.width;
+                } else if (window._pdfFitTo === 'page') {
+                    // fit to both width and height
+                    const scaleW = maxWidth / viewportForScale.width;
+                    const scaleH = maxHeight / viewportForScale.height;
+                    scale = Math.min(scaleW, scaleH);
+                }
+                // apply zoom multiplier
+                scale = scale * (window._pdfScale || 1.0);
+
+                const viewport = page.getViewport({ scale: scale, rotation: rotation });
+                const outputScale = window.devicePixelRatio || 1;
+                const context = canvasEl.getContext('2d');
+                canvasEl.width = Math.floor(viewport.width * outputScale);
+                canvasEl.height = Math.floor(viewport.height * outputScale);
+                canvasEl.style.width = Math.floor(viewport.width) + 'px';
+                canvasEl.style.height = Math.floor(viewport.height) + 'px';
+                const renderContext = { canvasContext: context, viewport: viewport };
+                await page.render(renderContext).promise;
+                // update page indicator
+                if (pdfPageIndicator) pdfPageIndicator.textContent = `${pageNumber} / ${window._pdfNumPages}`;
+            } catch (err) {
+                console.error('Error rendering PDF page:', err);
+                throw err;
+            }
+        }
+
+        // navigation handlers
+        if (pdfPrevBtn) {
+            pdfPrevBtn.addEventListener('click', async () => {
+                if (!window._pdfDoc) return;
+                if (window._pdfPageNumber <= 1) return;
+                window._pdfPageNumber = Math.max(1, window._pdfPageNumber - 1);
+                const canvas = document.getElementById('pdfCanvas');
+                await renderPdfPage(window._pdfDoc, window._pdfPageNumber, canvas);
+            });
+        }
+        if (pdfNextBtn) {
+            pdfNextBtn.addEventListener('click', async () => {
+                if (!window._pdfDoc) return;
+                if (window._pdfPageNumber >= window._pdfNumPages) return;
+                window._pdfPageNumber = Math.min(window._pdfNumPages, window._pdfPageNumber + 1);
+                const canvas = document.getElementById('pdfCanvas');
+                await renderPdfPage(window._pdfDoc, window._pdfPageNumber, canvas);
+            });
+        }
+        if (pdfZoomInBtn) {
+            pdfZoomInBtn.addEventListener('click', async () => {
+                window._pdfScale = (window._pdfScale || 1.0) * 1.25;
+                const canvas = document.getElementById('pdfCanvas');
+                if (window._pdfDoc) await renderPdfPage(window._pdfDoc, window._pdfPageNumber, canvas);
+            });
+        }
+        if (pdfZoomOutBtn) {
+            pdfZoomOutBtn.addEventListener('click', async () => {
+                window._pdfScale = Math.max(0.1, (window._pdfScale || 1.0) / 1.25);
+                const canvas = document.getElementById('pdfCanvas');
+                if (window._pdfDoc) await renderPdfPage(window._pdfDoc, window._pdfPageNumber, canvas);
+            });
+        }
+        if (pdfFitBtn) {
+            pdfFitBtn.addEventListener('click', async () => {
+                window._pdfFitTo = window._pdfFitTo === 'width' ? 'page' : 'width';
+                const canvas = document.getElementById('pdfCanvas');
+                if (window._pdfDoc) await renderPdfPage(window._pdfDoc, window._pdfPageNumber, canvas);
+            });
         }
         // --- END CORRECTION ---
 
