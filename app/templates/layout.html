@@ -57,7 +57,7 @@
         };
     </script>
 </head>
-<body class="bg-surface-secondary">
+<body class="bg-surface-secondary" data-auth="{{ 1 if current_user.is_authenticated else 0 }}">
     <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:px-4 focus:py-2 focus:bg-white focus:text-brand-dark focus:shadow-lg">
         Skip to main content
     </a>
@@ -142,24 +142,24 @@
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
         });
 
-        // --- Keep PUSH NOTIFICATION SCRIPT ---
-        {% if current_user.is_authenticated %}
-        if ('serviceWorker' in navigator && 'PushManager' in window) {
-            window.addEventListener('load', () => {
-                // Incremented version to v=6
-                navigator.serviceWorker.register('/service-worker.js?v=6')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                        // Pass the registration to the permission/subscription flow so we can subscribe even
-                        // when the service worker's scope doesn't control the page.
-                        askPermissionAndSubscribe(registration);
-                    })
-                    .catch(err => {
-                        console.log('ServiceWorker registration failed: ', err);
-                    });
-            });
+        // --- Keep PUSH NOTIFICATION SCRIPT (runs only for authenticated users) ---
+        if (document.body && document.body.dataset && document.body.dataset.auth === '1') {
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                window.addEventListener('load', () => {
+                    // Incremented version to v=6
+                    navigator.serviceWorker.register('/service-worker.js?v=6')
+                        .then(registration => {
+                            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                            // Pass the registration to the permission/subscription flow so we can subscribe even
+                            // when the service worker's scope doesn't control the page.
+                            askPermissionAndSubscribe(registration);
+                        })
+                        .catch(err => {
+                            console.log('ServiceWorker registration failed: ', err);
+                        });
+                });
+            }
         }
-        {% endif %}
 
         // --- Keep Push Helper Functions ---
         function urlBase64ToUint8Array(base64String) {

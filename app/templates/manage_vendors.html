@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="space-y-8">
-    <div class="bg-white p-6 rounded-lg shadow-md" x-data="vendorManager()">
+    <div class="bg-white p-6 rounded-lg shadow-md" x-data="vendorManager()" data-vendors='{{ vendors_json|tojson }}'>
 
         <h3 class="text-lg font-semibold text-gray-700 mb-4">Manage Vendors</h3>
 
@@ -103,7 +103,7 @@
     function vendorManager() {
         return {
             search: '',
-            vendors: {{ vendors_json|safe }},
+            vendors: JSON.parse(this.$el.getAttribute('data-vendors') || '[]'),
             get filteredVendors() {
                 const searchLower = this.search.toLowerCase();
                 if (!searchLower) {

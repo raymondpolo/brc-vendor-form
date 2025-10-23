@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()">
+<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()" data-requests='{{ requests_json|tojson }}'>
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-semibold text-gray-700">My Submitted Requests</h3>
         <a href="{{ url_for('main.new_request') }}" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
@@ -108,7 +108,7 @@
     function requestManager() {
         return {
             search: '',
-            requests: {{ requests_json|safe }},
+            requests: JSON.parse(this.$el.getAttribute('data-requests') || '[]'),
             sortColumn: 'id',
             sortDirection: 'desc',
 

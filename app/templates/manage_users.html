@@ -30,7 +30,7 @@
         </form>
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-md" x-data="userManager()">
+    <div class="bg-white p-6 rounded-lg shadow-md" x-data="userManager()" data-users='{{ users_json|tojson }}'>
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-700">Manage Users</h3>
             {% if current_user.role == 'Super User' %}
@@ -206,7 +206,7 @@
     function userManager() {
         return {
             search: '',
-            users: {{ users_json|safe }},
+            users: JSON.parse(this.$el.getAttribute('data-users') || '[]'),
             get filteredUsers() {
                 const searchLower = this.search.toLowerCase();
                 if (!searchLower) {

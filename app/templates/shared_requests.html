@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()">
+<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()" data-requests='{{ requests_json|tojson }}'>
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-semibold text-gray-700">Requests Shared With Me</h3>
     </div>
@@ -105,7 +105,7 @@
     function requestManager() {
         return {
             search: '',
-            requests: {{ requests_json|safe }},
+            requests: JSON.parse(this.$el.getAttribute('data-requests') || '[]'),
             sortColumn: 'id',
             sortDirection: 'desc',
 

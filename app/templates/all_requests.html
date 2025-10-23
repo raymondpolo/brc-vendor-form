@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()">
+<div class="bg-white p-6 rounded-lg shadow-md" x-data="requestManager()" data-requests='{{ requests_json|tojson }}'>
 
     <h3 class="text-lg font-semibold text-gray-700 mb-4">All Work Requests</h3>
 
@@ -104,7 +104,7 @@
     function requestManager() {
         return {
             search: '',
-            requests: {{ requests_json|safe }},
+            requests: JSON.parse(this.$el.getAttribute('data-requests') || '[]'),
             sortColumn: 'id',
             sortDirection: 'desc',
 
