@@ -14,7 +14,9 @@
             <span id="current-time"></span>
         </div>
         
-        <div x-data="{ notifOpen: false }" class="relative">
+        <div x-data="{ notifOpen: false, dismiss(id, e){ e && e.preventDefault(); fetch(`/notifications/read/${id}?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' }).then(() => {
+                            const el = document.querySelector('[data-notif-id=notif-'+id+']'); if (el) el.remove();
+                        }).catch(()=>{}); } }" class="relative">
             <button @click="notifOpen = !notifOpen" class="relative p-2 text-text-secondary rounded-full hover:bg-surface-subtle hover:text-text">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                 {% if unread_notifications %}
@@ -22,14 +24,22 @@
                 {% endif %}
             </button>
             <div x-show="notifOpen" @click.away="notifOpen = false" class="absolute right-0 mt-2 w-72 md:w-80 bg-surface rounded-md shadow-lg py-1 z-10" style="display: none;">
-                <div class="px-4 py-2 text-sm font-semibold text-text border-b">Notifications</div>
+                <div class="px-4 py-2 text-sm font-semibold text-text border-b flex items-center justify-between">
+                    <span>Notifications</span>
+                    <button @click="notifOpen=false" class="text-xs text-text-secondary hover:underline">Close</button>
+                </div>
+                <div class="max-h-60 sm:max-h-72 md:max-h-96 overflow-auto">
                 {% for notification in unread_notifications %}
-                    <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-subtle">
-                        {{ notification.text }}
-                    </a>
+                    <div data-notif-id="notif-{{ notification.id }}" class="flex items-start justify-between px-2 py-2 hover:bg-surface-subtle">
+                        <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="text-sm text-text-secondary pr-2 truncate flex-1">
+                            {{ notification.text }}
+                        </a>
+                        <button @click.prevent="dismiss({{ notification.id }}, $event)" aria-label="Dismiss notification" class="ml-2 text-text-secondary hover:text-text p-1 rounded focus:outline-none">&times;</button>
+                    </div>
                 {% else %}
                     <p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>
                 {% endfor %}
+                </div>
             </div>
         </div>
         <div x-data="{ dropdownOpen: false }" class="relative">
