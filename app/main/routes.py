@@ -33,7 +33,7 @@ from app.forms import (NoteForm, ChangeStatusForm, AttachmentForm, NewRequestFor
 from app.email import send_notification_email
 from werkzeug.utils import secure_filename
 from app.decorators import admin_required, role_required
-from app.events import broadcast_new_note
+from app.events import broadcast_new_note, notify_user
 from app.utils import get_denver_now, convert_to_denver, make_denver_aware_start_of_day, make_denver_aware_end_of_day, format_app_dt # Import helpers
 
 
@@ -203,6 +203,11 @@ def send_push_notification(user_id, title, body, link):
         subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
         if not subscriptions:
             current_app.logger.info(f"DEBUG PUSH: No push subscriptions found for user {user.name}. Exiting function.")
+            # Still notify via WebSocket so the UI updates even without push subscriptions
+            try:
+                notify_user(user.id, {'text': body, 'link': link})
+            except Exception:
+                current_app.logger.debug('DEBUG PUSH: notify_user via socket failed (no subscriptions).')
             return
 
         current_app.logger.info(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
@@ -239,6 +244,11 @@ def send_push_notification(user_id, title, body, link):
                 )
 
                 current_app.logger.info(f"DEBUG PUSH: Successfully sent push notification to endpoint starting with {endpoint}.")
+                # Also emit a live in-page notification via Socket.IO so clients update immediately
+                try:
+                    notify_user(user.id, {'text': body, 'link': link})
+                except Exception as notify_exc:
+                    current_app.logger.debug(f'DEBUG PUSH: notify_user emit failed: {notify_exc}')
             except WebPushException as ex:
                 # Handle common push exceptions (like expired subscriptions)
                 current_app.logger.error(f"DEBUG PUSH: Web push failed for endpoint starting with {endpoint}. Exception: {ex}")

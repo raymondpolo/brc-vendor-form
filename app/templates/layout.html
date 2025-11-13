@@ -181,6 +181,51 @@
                     else html = summary;
                 }
                 showToast(html, true, 5000);
+
+                // Also update the notifications dropdown live (prepend new item and mark as unread)
+                try {
+                    const notifList = document.getElementById('notif-list');
+                    if (notifList) {
+                        const entry = document.createElement('div');
+                        entry.className = 'flex items-start justify-between px-2 py-2 unread bg-surface-subtle';
+                        entry.setAttribute('data-is-read', 'false');
+                        // Use a temporary data-notif-id until server commit broadcasts an id
+                        entry.setAttribute('data-notif-id', 'temp-' + Date.now());
+
+                        const a = document.createElement('a');
+                        a.className = 'notif-entry text-sm text-text-secondary pr-2 truncate flex-1';
+                        a.href = href;
+                        a.setAttribute('data-full-text', text);
+                        a.setAttribute('data-link', href);
+                        // Reuse concise HTML from toast for the dropdown entry
+                        if (reqMatch) {
+                            a.innerHTML = `<span class="block truncate">${summary}</span><span class="ml-2 text-xs text-text-subtle">Req #${reqMatch[1]}</span>`;
+                        } else {
+                            a.textContent = summary;
+                        }
+
+                        const btn = document.createElement('button');
+                        btn.className = 'ml-2 text-text-secondary hover:text-text p-1 rounded focus:outline-none';
+                        btn.setAttribute('aria-label', 'Dismiss notification');
+                        btn.innerHTML = '&times;';
+                        btn.addEventListener('click', function (e) { e.preventDefault(); entry.remove(); });
+
+                        entry.appendChild(a);
+                        entry.appendChild(btn);
+
+                        // Prepend to the list
+                        if (notifList.firstChild) notifList.insertBefore(entry, notifList.firstChild);
+                        else notifList.appendChild(entry);
+
+                        // Ensure bell shows unread dot
+                        const bell = document.getElementById('notif-bell-btn');
+                        if (bell && !bell.querySelector('.header-notif-dot')) {
+                            const dot = document.createElement('span');
+                            dot.className = 'header-notif-dot absolute top-0 right-0 h-2 w-2 mt-1 mr-2 bg-red-500 rounded-full';
+                            bell.appendChild(dot);
+                        }
+                    }
+                } catch (e) { console.error('Notification dropdown update failed', e); }
             });
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
         });
