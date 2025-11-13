@@ -20,6 +20,7 @@ from app.forms import (
 from app.decorators import admin_required, role_required
 from app.email import send_notification_email
 from app.extensions import db
+from flask import jsonify
 
 @admin.route('/')
 @admin_required
@@ -569,3 +570,69 @@ def delete_request_type(request_type_id):
         db.session.commit()
         flash('Request type deleted.', 'success')
     return redirect(url_for('admin.manage_request_types'))
+
+
+# --- API endpoints for frontend dynamic features ---
+@admin.route('/api/request-types', methods=['GET'])
+@admin_required
+def api_request_types():
+    types = RequestType.query.order_by(RequestType.name).all()
+    data = [{'id': t.id, 'name': t.name} for t in types]
+    return jsonify({'success': True, 'request_types': data})
+
+
+@admin.route('/api/vendors', methods=['POST'])
+@admin_required
+def api_add_vendor():
+    """Create a new vendor via JSON API. Expects JSON payload with keys:
+    company_name (required), contact_name, email, phone, website, specialties (list of request_type ids)
+    """
+    payload = request.get_json(force=True, silent=True)
+    if not payload:
+        return jsonify({'success': False, 'message': 'Invalid JSON payload.'}), 400
+
+    company_name = payload.get('company_name', '').strip()
+    if not company_name:
+        return jsonify({'success': False, 'message': 'Company name is required.'}), 400
+
+    # Check uniqueness by company_name
+    if Vendor.query.filter_by(company_name=company_name).first():
+        return jsonify({'success': False, 'message': 'A vendor with that company name already exists.'}), 400
+
+    contact_name = payload.get('contact_name')
+    email = payload.get('email')
+    phone = payload.get('phone')
+    website = payload.get('website')
+
+    specialties = payload.get('specialties') or []
+    specialty_names = []
+    if isinstance(specialties, list) and specialties:
+        # Convert ids to names where possible
+        qtypes = RequestType.query.filter(RequestType.id.in_(specialties)).all()
+        specialty_names = [qt.name for qt in qtypes]
+
+    specialty_str = ', '.join(specialty_names) if specialty_names else payload.get('specialty')
+
+    new_vendor = Vendor(
+        company_name=company_name,
+        contact_name=contact_name,
+        email=email,
+        phone=phone,
+        specialty=specialty_str,
+        website=website
+    )
+    db.session.add(new_vendor)
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'vendor': {
+            'id': new_vendor.id,
+            'company_name': new_vendor.company_name,
+            'contact_name': new_vendor.contact_name,
+            'email': new_vendor.email,
+            'phone': new_vendor.phone,
+            'specialty': new_vendor.specialty,
+            'website': new_vendor.website
+        }}), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'A vendor with that company name already exists.'}), 400
