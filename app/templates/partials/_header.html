@@ -27,11 +27,15 @@
                     fetch(`/notifications/mark_all_read?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' })
                         .then(r => r.json())
                         .then(j => {
-                            // remove all notification nodes and replace with 'No new notifications.' row
-                            document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
-                            const list = document.getElementById('notif-list');
-                            if (list) list.innerHTML = '<p class=&quot;px-4 py-2 text-sm text-text-subtle&quot;>No new notifications.</p>';
-                            // remove unread dot if present
+                            // Remove the unread visual indication but keep notifications visible in the list
+                            document.querySelectorAll('[data-notif-id]').forEach(n => {
+                                try {
+                                    n.dataset.isRead = 'true';
+                                    n.classList.remove('unread');
+                                    n.classList.remove('bg-surface-subtle');
+                                } catch (e) { /* ignore individual errors */ }
+                            });
+                            // remove unread dot on bell if present
                             const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
                         }).catch(()=>{});
                 },
@@ -39,13 +43,14 @@
                     e && e.preventDefault();
                     if (!confirm('Clear all notifications? This cannot be undone.')) return;
                     fetch(`/notifications/clear_all?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' })
-                        .then(r => r.json())
-                        .then(j => {
-                            document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
-                            const list = document.getElementById('notif-list');
-                            if (list) list.innerHTML = '<p class=&quot;px-4 py-2 text-sm text-text-subtle&quot;>No new notifications.</p>';
-                            const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
-                        }).catch(()=>{});
+                            .then(r => r.json())
+                            .then(j => {
+                                // Remove all notification nodes from the list (clear history)
+                                document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
+                                const list = document.getElementById('notif-list');
+                                if (list) list.innerHTML = '<p class=&quot;px-4 py-2 text-sm text-text-subtle&quot;>No notifications.</p>';
+                                const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
+                            }).catch(()=>{});
                 }
             }" class="relative">
             <button @click="notifOpen = !notifOpen" class="relative p-2 text-text-secondary rounded-full hover:bg-surface-subtle hover:text-text">
@@ -66,15 +71,16 @@
                     </div>
                 </div>
                 <div id="notif-list" class="max-h-60 sm:max-h-72 md:max-h-96 overflow-auto">
-                {% for notification in unread_notifications %}
-                    <div data-notif-id="notif-{{ notification.id }}" class="flex items-start justify-between px-2 py-2 hover:bg-surface-subtle">
-                        <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="notif-entry text-sm text-text-secondary pr-2 truncate flex-1" data-full-text="{{ notification.text|e }}" data-link="{{ notification.link }}">
+                {% for notification in notifications %}
+                    {# mark unread entries with the 'unread' class so they remain visible but highlighted #}
+                    <div data-notif-id="notif-{{ notification.id }}" data-is-read="{{ 'true' if notification.is_read else 'false' }}" class="flex items-start justify-between px-2 py-2 {% if not notification.is_read %}unread bg-surface-subtle{% endif %}">
+                        <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="notif-entry text-sm text-text-secondary pr-2 truncate flex-1" data-full-text="{{ notification.text|e }}" data-link="{{ notification.link }}" data-notif-id="{{ notification.id }}">
                             {{ notification.text }}
                         </a>
                         <button @click.prevent="dismiss({{ notification.id }}, $event)" aria-label="Dismiss notification" class="ml-2 text-text-secondary hover:text-text p-1 rounded focus:outline-none">&times;</button>
                     </div>
                 {% else %}
-                    <p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>
+                    <p class="px-4 py-2 text-sm text-text-subtle">No notifications.</p>
                 {% endfor %}
                 </div>
             </div>

@@ -8,6 +8,8 @@ from sqlalchemy import or_
 def inject_notifications():
     if current_user.is_authenticated:
         unread_notifications = Notification.query.filter_by(user_id=current_user.id, is_read=False).order_by(Notification.timestamp.desc()).all()
+        # Also inject a recent full notifications list (both read and unread) so the UI can show history
+        notifications = Notification.query.filter_by(user_id=current_user.id).order_by(Notification.timestamp.desc()).limit(50).all()
         
         shared_email = current_app.config.get('SHARED_MAIL_USERNAME')
         if current_user.role in ['Admin', 'Scheduler', 'Super User'] and shared_email:
@@ -18,7 +20,7 @@ def inject_notifications():
         else:
             unread_messages_count = Message.query.filter_by(recipient=current_user, is_read=False).count()
             
-        return dict(unread_notifications=unread_notifications, unread_messages_count=unread_messages_count)
+    return dict(unread_notifications=unread_notifications, notifications=notifications, unread_messages_count=unread_messages_count)
     
     return dict(unread_notifications=[], unread_messages_count=0)
 
