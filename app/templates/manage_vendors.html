@@ -185,9 +185,20 @@
                     specialties: this.form.specialties || []
                 };
 
+                // Read CSRF token from meta (layout.html sets it)
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : null;
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (csrfToken) {
+                    headers['X-CSRFToken'] = csrfToken;
+                    headers['X-CSRF-Token'] = csrfToken;
+                }
+
                 fetch('/admin/api/vendors', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
+                    credentials: 'same-origin',
                     body: JSON.stringify(payload)
                 }).then(async res => {
                     // Try to parse JSON response for useful error messages
