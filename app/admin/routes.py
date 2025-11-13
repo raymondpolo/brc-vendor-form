@@ -587,9 +587,37 @@ def api_add_vendor():
     """Create a new vendor via JSON API. Expects JSON payload with keys:
     company_name (required), contact_name, email, phone, website, specialties (list of request_type ids)
     """
-    payload = request.get_json(force=True, silent=True)
+    # Robustly parse incoming payload: prefer JSON, but accept form-encoded as fallback.
+    payload = None
+    try:
+        if request.is_json:
+            payload = request.get_json(silent=True)
+        else:
+            # Try to parse raw body as JSON (some clients send without proper content-type)
+            raw = request.get_data(as_text=True)
+            if raw:
+                try:
+                    import json as _json
+                    payload = _json.loads(raw)
+                except Exception:
+                    # Fallback to form data
+                    if request.form:
+                        payload = request.form.to_dict(flat=False)
+                        # normalize single-value lists
+                        for k, v in payload.items():
+                            if isinstance(v, list) and len(v) == 1:
+                                payload[k] = v[0]
+                    else:
+                        payload = None
+            else:
+                payload = None
+    except Exception as e:
+        current_app.logger.error(f"api_add_vendor: error parsing payload: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Error parsing request payload.'}), 400
+
     if not payload:
-        return jsonify({'success': False, 'message': 'Invalid JSON payload.'}), 400
+        current_app.logger.debug(f"api_add_vendor: no payload; content_type={request.content_type}")
+        return jsonify({'success': False, 'message': 'Invalid or missing JSON payload.'}), 400
 
     company_name = payload.get('company_name', '').strip()
     if not company_name:
