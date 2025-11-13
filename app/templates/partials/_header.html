@@ -30,7 +30,7 @@
                             // remove all notification nodes and replace with 'No new notifications.' row
                             document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
                             const list = document.getElementById('notif-list');
-                            if (list) list.innerHTML = '<p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>';
+                            if (list) list.innerHTML = '<p class=&quot;px-4 py-2 text-sm text-text-subtle&quot;>No new notifications.</p>';
                             // remove unread dot if present
                             const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
                         }).catch(()=>{});
@@ -43,7 +43,7 @@
                         .then(j => {
                             document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
                             const list = document.getElementById('notif-list');
-                            if (list) list.innerHTML = '<p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>';
+                            if (list) list.innerHTML = '<p class=&quot;px-4 py-2 text-sm text-text-subtle&quot;>No new notifications.</p>';
                             const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
                         }).catch(()=>{});
                 }
