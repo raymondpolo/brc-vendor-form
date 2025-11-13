@@ -99,9 +99,9 @@
         </div>
     </div>
 
-    <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white p-3 rounded-lg shadow-lg hidden w-72 sm:w-80 md:w-96 max-w-xs sm:max-w-sm md:max-w-md max-h-40 sm:max-h-56 md:max-h-72 overflow-auto relative" role="status" aria-live="polite" tabindex="-1">
-        <button id="notification-toast-close" aria-label="Dismiss notification" class="absolute top-1 right-1 text-white/90 hover:text-white text-lg leading-none p-1 rounded-full focus:outline-none">&times;</button>
-        <p id="notification-toast-text" class="text-sm break-words whitespace-normal pr-6"></p>
+    <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white p-3 rounded-lg shadow-lg hidden w-11/12 max-w-xs sm:max-w-sm md:max-w-md max-h-[20vh] sm:max-h-[30vh] md:max-h-[40vh] overflow-auto relative z-40" role="status" aria-live="polite" tabindex="-1">
+        <button id="notification-toast-close" aria-label="Dismiss notification" class="absolute top-2 right-2 bg-white/90 text-gray-800 hover:bg-white focus:ring-2 focus:ring-offset-2 focus:ring-white rounded-full p-1.5 z-50">&times;</button>
+        <p id="notification-toast-text" class="text-sm break-words whitespace-normal pr-8 pl-1"></p>
     </div>
 
     <script>
@@ -147,6 +147,8 @@
                 if (toastTimeoutId) { clearTimeout(toastTimeoutId); toastTimeoutId = null; }
                 toastText.innerHTML = html;
                 toast.classList.remove('hidden');
+                // ensure the top of the toast (and close button) is visible if content is scrolled
+                try { toast.scrollTop = 0; } catch (e) {}
                 // move focus for screen reader users
                 try { toast.focus({ preventScroll: true }); } catch (e) {}
                 if (autoHide) toastTimeoutId = setTimeout(hideToast, ms);
