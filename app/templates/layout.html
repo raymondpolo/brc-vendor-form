@@ -99,8 +99,9 @@
         </div>
     </div>
 
-    <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white p-4 rounded-lg shadow-lg hidden">
-        <p id="notification-toast-text"></p>
+    <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white p-3 rounded-lg shadow-lg hidden w-72 sm:w-80 md:w-96 max-w-xs sm:max-w-sm md:max-w-md max-h-40 sm:max-h-56 md:max-h-72 overflow-auto relative" role="status" aria-live="polite" tabindex="-1">
+        <button id="notification-toast-close" aria-label="Dismiss notification" class="absolute top-1 right-1 text-white/90 hover:text-white text-lg leading-none p-1 rounded-full focus:outline-none">&times;</button>
+        <p id="notification-toast-text" class="text-sm break-words whitespace-normal pr-6"></p>
     </div>
 
     <script>
@@ -131,13 +132,36 @@
         // --- Keep Socket.IO Connection ---
         document.addEventListener('DOMContentLoaded', function () {
             const socket = io({ transports: ['websocket'] });
+            const toast = document.getElementById('notification-toast');
+            const toastText = document.getElementById('notification-toast-text');
+            const toastClose = document.getElementById('notification-toast-close');
+            let toastTimeoutId = null;
+
+            function hideToast() {
+                try { toast.classList.add('hidden'); } catch (e) {}
+                if (toastTimeoutId) { clearTimeout(toastTimeoutId); toastTimeoutId = null; }
+            }
+
+            function showToast(html, autoHide = true, ms = 5000) {
+                if (!toast) return;
+                if (toastTimeoutId) { clearTimeout(toastTimeoutId); toastTimeoutId = null; }
+                toastText.innerHTML = html;
+                toast.classList.remove('hidden');
+                // move focus for screen reader users
+                try { toast.focus({ preventScroll: true }); } catch (e) {}
+                if (autoHide) toastTimeoutId = setTimeout(hideToast, ms);
+            }
+
+            if (toastClose) {
+                toastClose.addEventListener('click', function (e) { e.preventDefault(); hideToast(); });
+            }
+
             socket.on('connect', () => console.log('Connected to WebSocket server.'));
             socket.on('notification', function(data) {
-                const toast = document.getElementById('notification-toast');
-                const toastText = document.getElementById('notification-toast-text');
-                toastText.innerHTML = `<a href="${data.link}" class="hover:underline">${data.text}</a>`;
-                toast.classList.remove('hidden');
-                setTimeout(() => toast.classList.add('hidden'), 5000);
+                const href = data && data.link ? data.link : '#';
+                const text = data && data.text ? data.text : '';
+                const html = href && href !== '#' ? `<a href="${href}" class="hover:underline">${text}</a>` : `${text}`;
+                showToast(html, true, 5000);
             });
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
         });
