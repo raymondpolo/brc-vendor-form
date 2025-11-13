@@ -15,7 +15,7 @@ from collections import Counter
 from datetime import datetime, time, timedelta, date
 
 from flask import (render_template, request, redirect, url_for, flash,
-                   abort, send_from_directory, jsonify, current_app, Response)
+                   abort, send_from_directory, jsonify, current_app, Response, g)
 from flask_login import login_required, current_user
 from sqlalchemy import or_, func, case
 import bleach
@@ -203,11 +203,9 @@ def send_push_notification(user_id, title, body, link):
         subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
         if not subscriptions:
             current_app.logger.info(f"DEBUG PUSH: No push subscriptions found for user {user.name}. Exiting function.")
-            # Still notify via WebSocket so the UI updates even without push subscriptions
-            try:
-                notify_user(user.id, {'text': body, 'link': link})
-            except Exception:
-                current_app.logger.debug('DEBUG PUSH: notify_user via socket failed (no subscriptions).')
+            # No subscriptions to send web push to; return without emitting socket events here.
+            # Caller is responsible for emitting Socket.IO notifications after DB commit so
+            # clients receive a single, authoritative event containing the Notification.id.
             return
 
         current_app.logger.info(f"DEBUG PUSH: Found {len(subscriptions)} subscriptions for user {user.name}.")
@@ -221,6 +219,7 @@ def send_push_notification(user_id, title, body, link):
             return
 
         # Iterate through each subscription and attempt to send the notification
+        push_sent = False
         for sub in subscriptions:
             try:
                 try:
@@ -244,11 +243,7 @@ def send_push_notification(user_id, title, body, link):
                 )
 
                 current_app.logger.info(f"DEBUG PUSH: Successfully sent push notification to endpoint starting with {endpoint}.")
-                # Also emit a live in-page notification via Socket.IO so clients update immediately
-                try:
-                    notify_user(user.id, {'text': body, 'link': link})
-                except Exception as notify_exc:
-                    current_app.logger.debug(f'DEBUG PUSH: notify_user emit failed: {notify_exc}')
+                push_sent = True
             except WebPushException as ex:
                 # Handle common push exceptions (like expired subscriptions)
                 current_app.logger.error(f"DEBUG PUSH: Web push failed for endpoint starting with {endpoint}. Exception: {ex}")
@@ -264,6 +259,11 @@ def send_push_notification(user_id, title, body, link):
                 # Catch unexpected errors during the webpush call
                 current_app.logger.error(f"DEBUG PUSH: An unexpected error occurred sending to endpoint starting with {endpoint}: {e}", exc_info=True)
 
+        # Do not emit Socket.IO events from here. Sending webpush is separate from the
+        # in-page Socket.IO notification (which should be emitted after the Notification
+        # DB row is committed so the client receives the real Notification.id). The caller
+        # will handle calling notify_user(...) after commit.
+        return
 
 # Serve the root-level service worker so browsers can fetch it at '/service-worker.js'
 # Some hosting setups don't serve files from the repository root as static files, so
@@ -669,51 +669,76 @@ def post_note(request_id):
             broadcast_new_note(work_order.id, note)
             current_app.logger.info("Broadcast complete.")
 
-            # Send email and push notifications to the identified users
+            # Create DB notifications for the identified users first (but don't send
+            # webpush/socket/email yet). We'll commit so Notification.id is available,
+            # then send push/email and emit a single Socket.IO event per notification.
             current_app.logger.info(f"Users to notify via Push/Email: {[user.name for user in notified_users]}")
+            notifications_to_process = []
             for user in notified_users:
-                current_app.logger.info(f"Processing PUSH/EMAIL for user: {user.name} (ID: {user.id})")
+                current_app.logger.info(f"Creating DB Notification for user: {user.name} (ID: {user.id})")
                 notification_text = f'{current_user.name} mentioned you in a note on Request #{work_order.id}'
-                notification_link = url_for('main.view_request', request_id=work_order.id, _external=True)
+                notification_link_internal = url_for('main.view_request', request_id=work_order.id)
+                notification_link_external = url_for('main.view_request', request_id=work_order.id, _external=True)
 
                 # Create DB notification (timestamp defaults to Denver time)
                 notification = Notification(
                     text=notification_text,
-                    link=url_for('main.view_request', request_id=work_order.id), # Internal link for DB
+                    link=notification_link_internal, # Internal link for DB
                     user_id=user.id
                 )
                 db.session.add(notification)
-                current_app.logger.info(f"Added Notification object for user {user.id} to session.")
-
-                # Send Push Notification
-                current_app.logger.info(f"DEBUG PUSH (Pre-call): Preparing push for user {user.id} ({user.name})")
-                send_push_notification(user.id, 'New Mention', notification_text, notification_link)
-                current_app.logger.info(f"DEBUG PUSH (Post-call): Returned from send_push_notification for user {user.id}")
-
-                # Send Email Notification
-                current_app.logger.info(f"DEBUG EMAIL (Pre-call): Preparing email for user {user.id} ({user.name})")
-                email_body = f"""
-                <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
-                <p><b>Note:</b></p>
-                <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
-                """
-                send_notification_email(
-                    subject=f"New Note on Request #{work_order.id}",
-                    recipients=[user.email],
-                    text_body=notification_text,
-                    html_body=render_template(
-                        'email/notification_email.html',
-                        title="New Note on Request",
-                        user=user,
-                        body_content=email_body,
-                        link=notification_link # Use external link for email
-                    )
-                )
-                current_app.logger.info(f"DEBUG EMAIL (Post-call): Returned from send_notification_email for user {user.id}")
+                notifications_to_process.append({
+                    'user': user,
+                    'notification': notification,
+                    'text': notification_text,
+                    'link_external': notification_link_external
+                })
 
             current_app.logger.info("Committing notifications...")
-            db.session.commit() # Commit notifications
-            current_app.logger.info("Notifications commit successful. Returning success JSON.")
+            db.session.commit() # Commit notifications so .id is populated
+            current_app.logger.info("Notifications commit successful. Now sending push/email and emitting socket events.")
+
+            # After commit, send push/email and emit a single Socket.IO event containing the real Notification.id
+            for item in notifications_to_process:
+                user = item['user']
+                notification = item['notification']
+                notification_text = item['text']
+                notification_link_external = item['link_external']
+
+                current_app.logger.info(f"DEBUG PUSH (Post-commit): Preparing push for user {user.id} ({user.name})")
+                try:
+                    send_push_notification(user.id, 'New Mention', notification_text, notification_link_external)
+                except Exception as e:
+                    current_app.logger.error(f"Error sending webpush post-commit for user {user.id}: {e}", exc_info=True)
+
+                current_app.logger.info(f"DEBUG EMAIL (Post-commit): Preparing email for user {user.id} ({user.name})")
+                try:
+                    email_body = f"""
+                    <p><b>{current_user.name}</b> mentioned you in a note on Request #{work_order.id} for property <b>{work_order.property}</b>.</p>
+                    <p><b>Note:</b></p>
+                    <p style="padding-left: 20px; border-left: 3px solid #eee;">{note.text}</p>
+                    """
+                    send_notification_email(
+                        subject=f"New Note on Request #{work_order.id}",
+                        recipients=[user.email],
+                        text_body=notification_text,
+                        html_body=render_template(
+                            'email/notification_email.html',
+                            title="New Note on Request",
+                            user=user,
+                            body_content=email_body,
+                            link=notification_link_external # Use external link for email
+                        )
+                    )
+                except Exception as e:
+                    current_app.logger.error(f"Error sending email post-commit for user {user.id}: {e}", exc_info=True)
+
+                # Emit Socket.IO notification with the committed Notification.id so clients can wire per-item actions
+                try:
+                    notify_user(user.id, {'id': notification.id, 'text': notification_text, 'link': notification.link})
+                except Exception as e:
+                    current_app.logger.debug(f"notify_user failed for user {user.id} after commit: {e}")
+
             return jsonify({'success': True})
         except Exception as e:
             db.session.rollback() # Rollback all changes from this request on error
@@ -1002,16 +1027,27 @@ def change_status(request_id):
             notification_link_internal = url_for('main.view_request', request_id=work_order.id)
             notification_link_external = url_for('main.view_request', request_id=work_order.id, _external=True)
 
+            # Create DB notification and commit so client receives Notification.id
             notification = Notification(text=notification_text, link=notification_link_internal, user_id=work_order.user_id)
             db.session.add(notification)
-            send_push_notification(work_order.user_id, 'Request Status Updated', notification_text, notification_link_external)
 
-            email_body = f"<p>The status of your Request #{work_order.id} for property <b>{work_order.property}</b> was changed from <b>{old_status}</b> to <b>{new_status}</b>.</p>"
-            send_notification_email(
-                subject=f"Status Update for Request #{work_order.id}", recipients=[work_order.author.email],
-                text_body=notification_text,
-                html_body=render_template('email/notification_email.html', title="Request Status Updated", user=work_order.author, body_content=email_body, link=notification_link_external)
-            )
+            # We'll commit below with other changes and then send push/email and emit socket events
+            # Store processing info on the request object for post-commit work
+            post_commit_notifications = getattr(g, '_post_commit_notifications', [])
+            post_commit_notifications.append({
+                'user_id': work_order.user_id,
+                'notification_obj': notification,
+                'title': 'Request Status Updated',
+                'body': notification_text,
+                'link_external': notification_link_external,
+                'email_recipients': [work_order.author.email],
+                'email_context': {
+                    'subject': f"Status Update for Request #{work_order.id}",
+                    'html_body': render_template('email/notification_email.html', title="Request Status Updated", user=work_order.author, body_content=f"<p>The status of your Request #{work_order.id} for property <b>{work_order.property}</b> was changed from <b>{old_status}</b> to <b>{new_status}</b>.</p>", link=notification_link_external)
+                }
+            })
+            # Save back to flask.g so the post-commit processor can find these
+            g._post_commit_notifications = post_commit_notifications
 
         # Notify PM if Quote Sent
         if new_status == 'Quote Sent' and work_order.property_manager:
@@ -1023,16 +1059,58 @@ def change_status(request_id):
 
                 manager_notification = Notification(text=notification_text_pm, link=notification_link_internal_pm, user_id=manager.id)
                 db.session.add(manager_notification)
-                send_push_notification(manager.id, 'Quote Approval Needed', notification_text_pm, notification_link_external_pm)
-
-                email_body_pm = f"<p>A quote has been sent and requires your approval for Request #{work_order.id} at property <b>{work_order.property}</b>.</p>"
-                send_notification_email(
-                    subject=f"Quote Approval Needed for Request #{work_order.id}", recipients=[manager.email],
-                    text_body=f"A quote requires your approval for Request #{work_order.id}.",
-                    html_body=render_template('email/notification_email.html', title="Quote Approval Needed", user=manager, body_content=email_body_pm, link=notification_link_external_pm)
-                )
+                # Defer sending push/email/socket until after commit
+                post_commit_notifications = getattr(g, '_post_commit_notifications', [])
+                post_commit_notifications.append({
+                    'user_id': manager.id,
+                    'notification_obj': manager_notification,
+                    'title': 'Quote Approval Needed',
+                    'body': notification_text_pm,
+                    'link_external': notification_link_external_pm,
+                    'email_recipients': [manager.email],
+                    'email_context': {
+                        'subject': f"Quote Approval Needed for Request #{work_order.id}",
+                        'html_body': render_template('email/notification_email.html', title="Quote Approval Needed", user=manager, body_content=f"<p>A quote has been sent and requires your approval for Request #{work_order.id} at property <b>{work_order.property}</b>.</p>", link=notification_link_external_pm)
+                    }
+                })
+                g._post_commit_notifications = post_commit_notifications
 
         db.session.commit()
+
+        # Process any deferred post-commit notifications that were collected above
+        post_commit_notifications = getattr(g, '_post_commit_notifications', [])
+        if post_commit_notifications:
+            for item in post_commit_notifications:
+                try:
+                    user_id = item.get('user_id')
+                    notification_obj = item.get('notification_obj')
+                    title = item.get('title')
+                    body = item.get('body')
+                    link_external = item.get('link_external')
+
+                    # Send webpush (no socket emit from send_push_notification)
+                    try:
+                        send_push_notification(user_id, title, body, link_external)
+                    except Exception as e:
+                        current_app.logger.error(f"Post-commit webpush error for user {user_id}: {e}", exc_info=True)
+
+                    # Send email if provided
+                    email_ctx = item.get('email_context')
+                    if email_ctx and item.get('email_recipients'):
+                        try:
+                            send_notification_email(subject=email_ctx.get('subject'), recipients=item.get('email_recipients'), text_body=body, html_body=email_ctx.get('html_body'))
+                        except Exception as e:
+                            current_app.logger.error(f"Post-commit email error for user {user_id}: {e}", exc_info=True)
+
+                    # Emit single Socket.IO event containing the committed Notification.id
+                    try:
+                        if notification_obj and notification_obj.id:
+                            notify_user(user_id, {'id': notification_obj.id, 'text': body, 'link': notification_obj.link})
+                    except Exception as e:
+                        current_app.logger.debug(f"notify_user post-commit failed for user {user_id}: {e}")
+                except Exception as e:
+                    current_app.logger.error(f"Error processing post-commit notification item: {e}", exc_info=True)
+
         flash(f'Status updated to {new_status}.', 'success')
     else:
         # Log form errors for debugging
@@ -1696,12 +1774,34 @@ def new_request():
             notification_link_internal = url_for('main.view_request', request_id=new_order.id)
             notification_link_external = url_for('main.view_request', request_id=new_order.id, _external=True)
 
+            notifications_to_process = []
             for user in admins_and_schedulers:
-                if user != current_user: # Don't notify self
-                    notification = Notification(text=notification_text, link=notification_link_internal, user_id=user.id)
-                    db.session.add(notification)
-                    send_push_notification(user.id, 'New Work Request', notification_text, notification_link_external)
-            db.session.commit() # Commit notifications
+                if user == current_user:
+                    continue
+                notification = Notification(text=notification_text, link=notification_link_internal, user_id=user.id)
+                db.session.add(notification)
+                notifications_to_process.append({
+                    'user': user,
+                    'notification': notification,
+                    'text': notification_text,
+                    'link_external': notification_link_external,
+                    'title': 'New Work Request'
+                })
+            db.session.commit() # Commit notifications so IDs are set
+
+            # Post-commit: send push/email and emit socket events
+            for item in notifications_to_process:
+                try:
+                    user = item['user']
+                    notification = item['notification']
+                    send_push_notification(user.id, item['title'], item['text'], item['link_external'])
+                    # Emails to admins/schedulers can be added here if desired
+                    try:
+                        notify_user(user.id, {'id': notification.id, 'text': item['text'], 'link': notification.link})
+                    except Exception:
+                        current_app.logger.debug(f"notify_user failed for user {user.id} during new request post-commit.")
+                except Exception as e:
+                    current_app.logger.error(f"Error processing new-request notification post-commit for user {user.id}: {e}", exc_info=True)
 
             flash('Your request has been created successfully!', 'success')
             return redirect(url_for('main.my_requests')) # Redirect user to their list
@@ -2871,23 +2971,46 @@ def send_reminders():
             notification_link_internal = url_for('main.view_request', request_id=wo.id)
             notification_link_external = url_for('main.view_request', request_id=wo.id, _external=True)
 
-            # Send notifications to each admin/scheduler/super user
+            # Create DB notifications for each admin/scheduler/super user and defer sending
+            notifications_to_process = []
             for user in admins_and_schedulers:
-                # Create DB Notification
                 notification = Notification(text=notification_text, link=notification_link_internal, user_id=user.id)
                 db.session.add(notification)
                 current_app.logger.info(f"SCHEDULER: Added DB notification for user {user.id} for WO #{wo.id}")
+                notifications_to_process.append({
+                    'user': user,
+                    'notification': notification,
+                    'text': notification_text,
+                    'link_external': notification_link_external,
+                    'title': 'Follow-up Reminder'
+                })
 
-                # Send Push Notification
-                send_push_notification(user.id, 'Follow-up Reminder', notification_text, notification_link_external)
+            # Commit notifications so they have real IDs
+            db.session.commit()
 
-                # Send Email Notification
-                email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
-                send_notification_email(
-                    subject=f"Follow-up Reminder for Request #{wo.id}", recipients=[user.email],
-                    text_body=notification_text,
-                    html_body=render_template('email/notification_email.html', title="Follow-up Reminder", user=user, body_content=email_body, link=notification_link_external)
-                )
+            # Post-commit: send push/email and emit socket events for each notification
+            for item in notifications_to_process:
+                user = item['user']
+                notification = item['notification']
+                try:
+                    send_push_notification(user.id, item['title'], item['text'], item['link_external'])
+                except Exception as e:
+                    current_app.logger.error(f"SCHEDULER: Error sending webpush for user {user.id}: {e}", exc_info=True)
+
+                try:
+                    email_body = f"<p>This is a reminder to follow-up on Request #{wo.id} for property <b>{wo.property}</b>.</p>"
+                    send_notification_email(
+                        subject=f"Follow-up Reminder for Request #{wo.id}", recipients=[user.email],
+                        text_body=item['text'],
+                        html_body=render_template('email/notification_email.html', title="Follow-up Reminder", user=user, body_content=email_body, link=item['link_external'])
+                    )
+                except Exception as e:
+                    current_app.logger.error(f"SCHEDULER: Error sending email for user {user.id}: {e}", exc_info=True)
+
+                try:
+                    notify_user(user.id, {'id': notification.id, 'text': item['text'], 'link': notification.link})
+                except Exception as e:
+                    current_app.logger.debug(f"SCHEDULER: notify_user failed for user {user.id}: {e}")
 
             # --- Update the Work Order: Remove tag and clear date ---
             current_tags = set(wo.tag.split(',') if wo.tag and wo.tag.strip() else [])
