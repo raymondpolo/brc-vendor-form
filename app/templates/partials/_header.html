@@ -14,9 +14,40 @@
             <span id="current-time"></span>
         </div>
         
-        <div x-data="{ notifOpen: false, dismiss(id, e){ e && e.preventDefault(); fetch(`/notifications/read/${id}?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' }).then(() => {
-                            const el = document.querySelector('[data-notif-id=notif-'+id+']'); if (el) el.remove();
-                        }).catch(()=>{}); } }" class="relative">
+        <div x-data="{ 
+                notifOpen: false, 
+                dismiss(id, e){ 
+                    e && e.preventDefault();
+                    fetch(`/notifications/read/${id}?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' })
+                        .then(() => { const el = document.querySelector('[data-notif-id=notif-'+id+']'); if (el) el.remove(); })
+                        .catch(()=>{});
+                },
+                markAll(e){
+                    e && e.preventDefault();
+                    fetch(`/notifications/mark_all_read?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' })
+                        .then(r => r.json())
+                        .then(j => {
+                            // remove all notification nodes and replace with 'No new notifications.' row
+                            document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
+                            const list = document.getElementById('notif-list');
+                            if (list) list.innerHTML = '<p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>';
+                            // remove unread dot if present
+                            const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
+                        }).catch(()=>{});
+                },
+                clearAll(e){
+                    e && e.preventDefault();
+                    if (!confirm('Clear all notifications? This cannot be undone.')) return;
+                    fetch(`/notifications/clear_all?_=${Date.now()}`, { method: 'GET', credentials: 'same-origin' })
+                        .then(r => r.json())
+                        .then(j => {
+                            document.querySelectorAll('[data-notif-id]').forEach(n => n.remove());
+                            const list = document.getElementById('notif-list');
+                            if (list) list.innerHTML = '<p class="px-4 py-2 text-sm text-text-subtle">No new notifications.</p>';
+                            const dot = document.querySelector('button > span.absolute'); if (dot) dot.remove();
+                        }).catch(()=>{});
+                }
+            }" class="relative">
             <button @click="notifOpen = !notifOpen" class="relative p-2 text-text-secondary rounded-full hover:bg-surface-subtle hover:text-text">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                 {% if unread_notifications %}
@@ -24,14 +55,20 @@
                 {% endif %}
             </button>
             <div x-show="notifOpen" @click.away="notifOpen = false" class="absolute right-0 mt-2 w-72 md:w-80 bg-surface rounded-md shadow-lg py-1 z-10" style="display: none;">
-                <div class="px-4 py-2 text-sm font-semibold text-text border-b flex items-center justify-between">
-                    <span>Notifications</span>
-                    <button @click="notifOpen=false" class="text-xs text-text-secondary hover:underline">Close</button>
+                <div class="px-4 py-2 text-sm font-semibold text-text border-b">
+                    <div class="flex items-center justify-between">
+                        <span>Notifications</span>
+                        <div class="flex items-center space-x-2">
+                            <button @click.prevent="markAll($event)" class="text-xs text-text-secondary hover:underline">Mark all as read</button>
+                            <button @click.prevent="clearAll($event)" class="text-xs text-text-secondary hover:underline">Clear all</button>
+                            <button @click="notifOpen=false" class="text-xs text-text-secondary hover:underline">Close</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="max-h-60 sm:max-h-72 md:max-h-96 overflow-auto">
+                <div id="notif-list" class="max-h-60 sm:max-h-72 md:max-h-96 overflow-auto">
                 {% for notification in unread_notifications %}
                     <div data-notif-id="notif-{{ notification.id }}" class="flex items-start justify-between px-2 py-2 hover:bg-surface-subtle">
-                        <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="text-sm text-text-secondary pr-2 truncate flex-1">
+                        <a href="{{ url_for('main.mark_notification_read', notification_id=notification.id) }}" class="notif-entry text-sm text-text-secondary pr-2 truncate flex-1" data-full-text="{{ notification.text|e }}" data-link="{{ notification.link }}">
                             {{ notification.text }}
                         </a>
                         <button @click.prevent="dismiss({{ notification.id }}, $event)" aria-label="Dismiss notification" class="ml-2 text-text-secondary hover:text-text p-1 rounded focus:outline-none">&times;</button>
@@ -42,6 +79,34 @@
                 </div>
             </div>
         </div>
+        <script>
+            // Make notifications concise and surface request number as a badge
+            document.addEventListener('DOMContentLoaded', function () {
+                document.querySelectorAll('.notif-entry').forEach(el => {
+                    try {
+                        const full = el.dataset.fullText || el.textContent || '';
+                        const link = el.dataset.link || '';
+                        // Try to extract request number from text or link
+                        let reqMatch = full.match(/Request\s*#\s*(\d+)/i) || full.match(/#(\d+)/);
+                        if (!reqMatch && link) {
+                            const m = link.split('?')[0].split('/').filter(Boolean).pop();
+                            if (m && /\d+/.test(m)) reqMatch = [m, m];
+                        }
+                        const reqNum = reqMatch ? reqMatch[1] : null;
+                        // Shorten the message body (remove trailing "on Request ...")
+                        let summary = full.replace(/\bon\s+Request.*$/i, '').trim();
+                        if (!summary) summary = full;
+                        if (summary.length > 60) summary = summary.slice(0,57).trim() + '...';
+                        // Build concise inner HTML
+                        if (reqNum) {
+                            el.innerHTML = `<span class="block truncate">${summary}</span><span class="ml-2 text-xs text-text-subtle">Req #${reqNum}</span>`;
+                        } else {
+                            el.innerHTML = `<span class="block truncate">${summary}</span>`;
+                        }
+                    } catch (e) { /* ignore formatting errors */ }
+                });
+            });
+        </script>
         <div x-data="{ dropdownOpen: false }" class="relative">
             <button @click="dropdownOpen = !dropdownOpen" class="flex items-center space-x-2">
                 <img class="h-9 w-9 rounded-full object-cover" src="https://placehold.co/100x100/E2E8F0/4A5568?text={{ current_user.name[0].upper() }}" alt="User Avatar" />

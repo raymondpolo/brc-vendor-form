@@ -1583,6 +1583,31 @@ def mark_notification_read(notification_id):
     return redirect(notification.link)
 
 
+# --- MARK ALL NOTIFICATIONS AS READ ---
+@main.route('/notifications/mark_all_read')
+@login_required
+def mark_all_notifications_read():
+    # Mark all unread notifications for the current user as read
+    unread_q = Notification.query.filter_by(user_id=current_user.id, is_read=False)
+    count = unread_q.count()
+    if count:
+        unread_q.update({"is_read": True}, synchronize_session=False)
+        db.session.commit()
+    return jsonify(success=True, marked=count)
+
+
+# --- CLEAR ALL NOTIFICATIONS ---
+@main.route('/notifications/clear_all')
+@login_required
+def clear_all_notifications():
+    # Delete all notifications belonging to the current user
+    total = Notification.query.filter_by(user_id=current_user.id).count()
+    if total:
+        Notification.query.filter_by(user_id=current_user.id).delete(synchronize_session=False)
+        db.session.commit()
+    return jsonify(success=True, cleared=total)
+
+
 # --- CREATE NEW REQUEST ---
 @main.route('/new-request', methods=['GET', 'POST'])
 @login_required

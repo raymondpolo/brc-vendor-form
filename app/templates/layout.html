@@ -162,7 +162,24 @@
             socket.on('notification', function(data) {
                 const href = data && data.link ? data.link : '#';
                 const text = data && data.text ? data.text : '';
-                const html = href && href !== '#' ? `<a href="${href}" class="hover:underline">${text}</a>` : `${text}`;
+                // Build concise summary and extract request number if present
+                let reqMatch = text.match(/Request\s*#\s*(\d+)/i) || text.match(/#(\d+)/);
+                if (!reqMatch && href) {
+                    const parts = href.split('?')[0].split('/').filter(Boolean);
+                    const last = parts.pop();
+                    if (last && /\d+/.test(last)) reqMatch = [last, last];
+                }
+                let summary = text.replace(/\bon\s+Request.*$/i, '').trim();
+                if (!summary) summary = text;
+                if (summary.length > 80) summary = summary.slice(0,77).trim() + '...';
+                let html;
+                if (href && href !== '#') {
+                    if (reqMatch) html = `<a href="${href}" class="hover:underline"><span class='block'>${summary}</span><span class='ml-2 text-xs text-white/90'>Req #${reqMatch[1]}</span></a>`;
+                    else html = `<a href="${href}" class="hover:underline">${summary}</a>`;
+                } else {
+                    if (reqMatch) html = `<span class='block'>${summary}</span><span class='ml-2 text-xs text-white/90'>Req #${reqMatch[1]}</span>`;
+                    else html = summary;
+                }
                 showToast(html, true, 5000);
             });
             socket.on('connect_error', (err) => console.error('Connection Error:', err));
