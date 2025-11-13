@@ -21,7 +21,7 @@
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Vendor Name</label>
+                        <label class="block text-sm font-medium text-gray-700">Vendor Name <span class="text-red-600">*</span></label>
                         <input type="text" x-model="form.company_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
                     </div>
 
@@ -42,7 +42,7 @@
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Specialty</label>
+                        <label class="block text-sm font-medium text-gray-700">Specialty <span class="text-red-600">*</span></label>
                         <div class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-auto border rounded p-2">
                             <template x-for="stype in specialties" :key="stype.id">
                                 <label class="flex items-center space-x-2">
@@ -163,9 +163,13 @@
             },
 
             submitAddVendor() {
-                // basic validation
+                // basic validation: company name and at least one specialty required
                 if (!this.form.company_name || this.form.company_name.trim().length < 2) {
                     alert('Company name is required.');
+                    return;
+                }
+                if (!this.form.specialties || this.form.specialties.length === 0) {
+                    alert('Please select at least one specialty.');
                     return;
                 }
 

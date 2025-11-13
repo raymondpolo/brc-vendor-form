@@ -605,13 +605,15 @@ def api_add_vendor():
     website = payload.get('website')
 
     specialties = payload.get('specialties') or []
-    specialty_names = []
-    if isinstance(specialties, list) and specialties:
-        # Convert ids to names where possible
-        qtypes = RequestType.query.filter(RequestType.id.in_(specialties)).all()
-        specialty_names = [qt.name for qt in qtypes]
+    if not isinstance(specialties, list) or len(specialties) == 0:
+        return jsonify({'success': False, 'message': 'Please select at least one specialty.'}), 400
 
-    specialty_str = ', '.join(specialty_names) if specialty_names else payload.get('specialty')
+    specialty_names = []
+    # Convert ids to names where possible
+    qtypes = RequestType.query.filter(RequestType.id.in_(specialties)).all()
+    specialty_names = [qt.name for qt in qtypes]
+
+    specialty_str = ', '.join(specialty_names) if specialty_names else None
 
     new_vendor = Vendor(
         company_name=company_name,
