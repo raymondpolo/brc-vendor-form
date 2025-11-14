@@ -648,6 +648,67 @@
                 }, true);
             });
         })();
+
+        // --- Phone input auto-formatting (US: (XXX) XXX-XXXX) ---
+        (function() {
+            function formatPhoneDigits(digits) {
+                const d = digits.replace(/\D/g,'').slice(0,10);
+                if (!d) return '';
+                if (d.length <= 3) return '(' + d;
+                if (d.length <= 6) return '(' + d.slice(0,3) + ') ' + d.slice(3);
+                return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+            }
+
+            function onInput(e) {
+                const el = e.target;
+                const start = el.selectionStart;
+                const oldVal = el.value;
+                const formatted = formatPhoneDigits(oldVal);
+                el.value = formatted;
+                // move caret to end for simplicity
+                try { el.selectionStart = el.selectionEnd = el.value.length; } catch (ex) { /* ignore */ }
+            }
+
+            function onPaste(e) {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+                const formatted = formatPhoneDigits(text);
+                const el = e.target;
+                el.value = formatted;
+                try { el.selectionStart = el.selectionEnd = el.value.length; } catch (ex) {}
+            }
+
+            function attachTo(el) {
+                if (!el || el._phoneAttached) return;
+                el.addEventListener('input', onInput);
+                el.addEventListener('paste', onPaste);
+                el._phoneAttached = true;
+            }
+
+            function scan() {
+                const els = Array.from(document.querySelectorAll('input.phone-input'));
+                els.forEach(attachTo);
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                scan();
+                // Observe DOM for dynamically added phone inputs (Alpine, etc.)
+                const mo = new MutationObserver((mutations) => {
+                    for (const m of mutations) {
+                        if (m.type === 'childList' && m.addedNodes && m.addedNodes.length) {
+                            m.addedNodes.forEach(node => {
+                                if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+                                if (node.matches && node.matches('input.phone-input')) attachTo(node);
+                                // find nested inputs
+                                const nested = node.querySelectorAll ? node.querySelectorAll('input.phone-input') : [];
+                                nested.forEach(attachTo);
+                            });
+                        }
+                    }
+                });
+                mo.observe(document.body, { childList: true, subtree: true });
+            });
+        })();
     </script>
 </body>
 </html>                     
