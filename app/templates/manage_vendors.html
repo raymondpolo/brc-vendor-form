@@ -241,6 +241,10 @@
                     headers['X-CSRF-Token'] = csrfToken;
                 }
 
+                // Ask server for JSON response and mark request as XHR
+                headers['Accept'] = 'application/json';
+                headers['X-Requested-With'] = 'XMLHttpRequest';
+
                 fetch(`/admin/delete_vendor/${vendorId}`, {
                     method: 'POST',
                     headers,

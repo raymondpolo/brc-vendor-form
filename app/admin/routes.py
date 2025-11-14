@@ -460,13 +460,23 @@ def delete_vendor(vendor_id):
     vendor = Vendor.query.get_or_404(vendor_id)
     if vendor.work_orders.first():
         flash('Cannot delete vendor. They are associated with existing work orders.', 'danger')
+        # If the client expects JSON (AJAX), return a JSON error so the frontend can handle it
+        wants_json = ('application/json' in request.headers.get('Accept', '')) or (request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Cannot delete vendor. They are associated with existing work orders.'}), 400
         return redirect(url_for('admin.manage_vendors'))
     if vendor.quotes.first():
         flash('Cannot delete vendor. They are associated with existing quotes.', 'danger')
+        wants_json = ('application/json' in request.headers.get('Accept', '')) or (request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Cannot delete vendor. They are associated with existing quotes.'}), 400
         return redirect(url_for('admin.manage_vendors'))
     
     db.session.delete(vendor)
     db.session.commit()
+    wants_json = ('application/json' in request.headers.get('Accept', '')) or (request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+    if wants_json:
+        return jsonify({'success': True, 'message': 'Vendor deleted.'}), 200
     flash('Vendor has been deleted.', 'success')
     return redirect(url_for('admin.manage_vendors'))
 
